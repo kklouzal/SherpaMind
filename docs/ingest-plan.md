@@ -7,21 +7,27 @@ Goal:
 - populate the local store with the core SherpaDesk entities needed for analysis
 
 Expected first targets:
-- accounts / clients
-- users / contacts
-- technicians
-- tickets
-- ticket comments / notes / relevant history
+- accounts / clients ✅
+- users / contacts ✅
+- technicians ✅
+- tickets ✅
+- ticket comments / notes / relevant history ⏳
 
 ### 2. Ongoing delta sync
 Goal:
 - keep the local store current with minimal API load
 
 Expected approach:
-- track per-entity sync watermark(s)
+- track per-entity sync state locally
 - prefer modified/updated timestamps where supported
+- fall back to tiered recency rescans when the API does not offer reliable server-side dirty filtering
 - use idempotent upserts
 - record ingest runs and sync state locally
+
+Current direction:
+- hot open-ticket rescans for ~5-minute freshness
+- warm recent-history rescans every few hours
+- cold historical audit slices daily/weekly
 
 ## Principles
 

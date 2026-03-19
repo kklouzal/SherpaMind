@@ -28,9 +28,16 @@ From the public SherpaDesk API wiki, the current documented contract appears to 
 - page numbering starts at `0`
 - stated rate limit: `600 requests/hour`
 
-These notes were initially wiki-derived, but we now have first live confirmation that:
+These notes were initially wiki-derived, but we now have live confirmation that:
 - organization discovery works with token-only Basic auth against `/organizations/`
 - `GET /tickets?limit=1&page=0` returns a JSON list shape under the org/instance-scoped auth identity
+- `status=open` and `status=closed` both work as live filters on `/tickets`
+- ticket rows include useful fields for local change detection, including `created_time`, `updated_time`, `closed_time`, `is_new_tech_post`, `is_new_user_post`, and `next_step_date`
+
+We also have negative findings that matter:
+- naïve `updated_time=<date>` and `created_time=<date>` query params appear to be ignored by `/tickets`
+- the documented `Content-Range` header was not observed in our live ticket-list probes
+- page ordering looks recent-ish, but has not yet been proven to be a strict monotonic `updated_time` sort
 
 Account-specific identifiers and secrets should remain local-only and should not be committed to this public repo.
 

@@ -16,11 +16,14 @@
 - implement initial seed for core entities
 - persist sync metadata
 - verify data integrity in SQLite
+- current live slice: accounts + users + technicians + tickets
+- next seed expansions: comments/notes/history and any missing relational surfaces
 
 ## Phase 3 — Delta sync
 - implement incremental sync using verified update/change signals
 - add idempotent upsert behavior
 - verify low-noise repeated sync runs
+- first likely shape: watcher + hot open-ticket rescans + warm recent-closed reconciliation + cold rolling audit lane
 
 ## Phase 4 — Analysis surface
 - add reusable analytical queries and reporting commands

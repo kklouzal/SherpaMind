@@ -67,3 +67,18 @@ class SherpaDeskClient:
 
     def discover_organizations(self) -> Any:
         return self.get("organizations/")
+
+    def list_paginated(self, path: str, *, page_size: int = 100, max_pages: int | None = None) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        page = 0
+        while True:
+            if max_pages is not None and page >= max_pages:
+                break
+            page_items = self.get(path, params={"limit": page_size, "page": page})
+            if not isinstance(page_items, list):
+                raise TypeError(f"Expected list response from {path}, got {type(page_items).__name__}")
+            items.extend(page_items)
+            if len(page_items) < page_size:
+                break
+            page += 1
+        return items

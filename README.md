@@ -45,7 +45,13 @@ SherpaMind is designed as a Python toolkit backed by **hybrid local storage**:
 ## Planned workflows
 
 ### Seed
-Pull down all relevant SherpaDesk entities and populate the local database.
+Pull down relevant SherpaDesk entities and populate the local database.
+
+Current implemented seed slice:
+- accounts
+- users
+- technicians
+- tickets
 
 ### Sync
 Perform delta syncs based on modified timestamps or equivalent cursor state.
@@ -58,8 +64,18 @@ Poll for newly created tickets and emit actionable summaries.
 
 ## Current status
 
-Repository scaffold, caution docs, request-pacing foundations, and the first hybrid-storage direction are in place.
-Live SherpaDesk integration still needs real auth/endpoint verification.
+Repository scaffold, caution docs, request-pacing foundations, hybrid-storage direction, and a first real seed slice are now in place.
+Live auth/org discovery has been verified, and the implemented seed path currently ingests:
+- accounts
+- users
+- technicians
+- tickets
+
+Not implemented yet:
+- ticket comments/notes/history ingest
+- delta sync
+- retrieval document/index build pipeline
+- watcher polling/alerts
 
 ## Retrieval / OpenClaw access strategy
 
@@ -93,6 +109,30 @@ Environment variables are documented in `.env.example`.
 Important conservative controls include:
 - `SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS`
 - `SHERPAMIND_REQUEST_TIMEOUT_SECONDS`
+- `SHERPAMIND_SEED_PAGE_SIZE`
+- `SHERPAMIND_SEED_MAX_PAGES`
+
+## Useful current commands
+
+- `sherpamind discover-orgs`
+- `sherpamind seed`
+- `sherpamind dataset-summary`
+- `sherpamind report-ticket-counts`
+- `sherpamind report-status-counts`
+- `sherpamind report-priority-counts`
+- `sherpamind report-technician-counts`
+- `sherpamind recent-tickets`
+
+## Delta sync direction
+
+SherpaDesk currently looks better suited to **tiered recency rescans** than to a clean server-side dirty-record pull.
+
+Current documented direction:
+- new/open active slice refreshed about every 5 minutes
+- recent history reconciled every few hours
+- older closed history audited in small rolling batches
+
+See `docs/delta-sync-strategy.md` for the reasoning and proposed lane design.
 
 ## Open questions
 

@@ -17,11 +17,14 @@ class Settings:
     notify_channel: str | None
     request_min_interval_seconds: float
     request_timeout_seconds: float
+    seed_page_size: int
+    seed_max_pages: int | None
 
 
 def load_settings() -> Settings:
     db_path = Path(os.getenv("SHERPAMIND_DB_PATH", "state/sherpamind.sqlite3"))
     watch_state_path = Path(os.getenv("SHERPAMIND_WATCH_STATE_PATH", "state/watch_state.json"))
+    seed_max_pages_raw = os.getenv("SHERPAMIND_SEED_MAX_PAGES")
     return Settings(
         api_base_url=os.getenv("SHERPADESK_API_BASE_URL", "https://api.sherpadesk.com"),
         api_key=os.getenv("SHERPADESK_API_KEY"),
@@ -33,4 +36,6 @@ def load_settings() -> Settings:
         notify_channel=os.getenv("SHERPAMIND_NOTIFY_CHANNEL"),
         request_min_interval_seconds=float(os.getenv("SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS", "8.0")),
         request_timeout_seconds=float(os.getenv("SHERPAMIND_REQUEST_TIMEOUT_SECONDS", "30.0")),
+        seed_page_size=int(os.getenv("SHERPAMIND_SEED_PAGE_SIZE", "100")),
+        seed_max_pages=int(seed_max_pages_raw) if seed_max_pages_raw else None,
     )

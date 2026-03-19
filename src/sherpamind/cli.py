@@ -5,7 +5,14 @@ import json
 import typer
 from rich import print
 
-from .analysis import list_ticket_counts_by_account
+from .analysis import (
+    get_dataset_summary,
+    list_recent_tickets,
+    list_ticket_counts_by_account,
+    list_ticket_counts_by_priority,
+    list_ticket_counts_by_status,
+    list_ticket_counts_by_technician,
+)
 from .client import SherpaDeskClient
 from .ingest import seed_all, sync_delta
 from .settings import load_settings
@@ -65,10 +72,44 @@ def watch() -> None:
     print(json.dumps(result.__dict__, indent=2))
 
 
-@app.command("report-ticket-counts")
-def report_ticket_counts() -> None:
+@app.command("dataset-summary")
+def dataset_summary() -> None:
     settings = load_settings()
-    rows = list_ticket_counts_by_account(settings.db_path)
+    print(json.dumps(get_dataset_summary(settings.db_path), indent=2))
+
+
+@app.command("report-ticket-counts")
+def report_ticket_counts(limit: int = 20) -> None:
+    settings = load_settings()
+    rows = list_ticket_counts_by_account(settings.db_path, limit=limit)
+    print(json.dumps(rows, indent=2))
+
+
+@app.command("report-status-counts")
+def report_status_counts() -> None:
+    settings = load_settings()
+    rows = list_ticket_counts_by_status(settings.db_path)
+    print(json.dumps(rows, indent=2))
+
+
+@app.command("report-priority-counts")
+def report_priority_counts() -> None:
+    settings = load_settings()
+    rows = list_ticket_counts_by_priority(settings.db_path)
+    print(json.dumps(rows, indent=2))
+
+
+@app.command("report-technician-counts")
+def report_technician_counts(limit: int = 20) -> None:
+    settings = load_settings()
+    rows = list_ticket_counts_by_technician(settings.db_path, limit=limit)
+    print(json.dumps(rows, indent=2))
+
+
+@app.command("recent-tickets")
+def recent_tickets(limit: int = 20) -> None:
+    settings = load_settings()
+    rows = list_recent_tickets(settings.db_path, limit=limit)
     print(json.dumps(rows, indent=2))
 
 
