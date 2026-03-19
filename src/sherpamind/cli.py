@@ -25,6 +25,7 @@ from .analysis import (
 from .client import SherpaDeskClient
 from .documents import export_ticket_documents, materialize_ticket_documents
 from .enrichment import enrich_priority_ticket_details
+from .paths import ensure_path_layout
 from .ingest import (
     seed_all,
     sync_cold_closed_audit,
@@ -59,6 +60,23 @@ def init_db() -> None:
     settings = load_settings()
     initialize_db(settings.db_path)
     print({"status": "ok", "db": str(settings.db_path)})
+
+
+@app.command("workspace-layout")
+def workspace_layout() -> None:
+    paths = ensure_path_layout()
+    print(json.dumps({
+        "workspace_root": str(paths.workspace_root),
+        "root": str(paths.root),
+        "private_root": str(paths.private_root),
+        "public_root": str(paths.public_root),
+        "runtime_venv": str(paths.runtime_venv),
+        "db_path": str(paths.db_path),
+        "watch_state_path": str(paths.watch_state_path),
+        "exports_root": str(paths.exports_root),
+        "docs_root": str(paths.docs_root),
+        "env_file": str(paths.env_file),
+    }, indent=2))
 
 
 @app.command("discover-orgs")
@@ -223,10 +241,12 @@ def search_chunks(query: str, limit: int = 20) -> None:
 
 
 @app.command("export-ticket-docs")
-def export_ticket_docs(output_path: str = "state/exports/ticket-docs.jsonl", limit: int = 0) -> None:
+def export_ticket_docs(output_path: str = "", limit: int = 0) -> None:
     settings = load_settings()
+    paths = ensure_path_layout()
     effective_limit = None if limit <= 0 else limit
-    result = export_ticket_documents(settings.db_path, Path(output_path), limit=effective_limit)
+    resolved_output = Path(output_path) if output_path else (paths.exports_root / "ticket-docs.jsonl")
+    result = export_ticket_documents(settings.db_path, resolved_output, limit=effective_limit)
     print(json.dumps(result, indent=2))
 
 

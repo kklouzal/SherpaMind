@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 
+from .paths import ensure_path_layout
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -26,8 +28,7 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    db_path = Path(os.getenv("SHERPAMIND_DB_PATH", "state/sherpamind.sqlite3"))
-    watch_state_path = Path(os.getenv("SHERPAMIND_WATCH_STATE_PATH", "state/watch_state.json"))
+    paths = ensure_path_layout()
     seed_max_pages_raw = os.getenv("SHERPAMIND_SEED_MAX_PAGES")
     return Settings(
         api_base_url=os.getenv("SHERPADESK_API_BASE_URL", "https://api.sherpadesk.com"),
@@ -35,8 +36,8 @@ def load_settings() -> Settings:
         api_user=os.getenv("SHERPADESK_API_USER"),
         org_key=os.getenv("SHERPADESK_ORG_KEY"),
         instance_key=os.getenv("SHERPADESK_INSTANCE_KEY"),
-        db_path=db_path,
-        watch_state_path=watch_state_path,
+        db_path=paths.db_path,
+        watch_state_path=paths.watch_state_path,
         notify_channel=os.getenv("SHERPAMIND_NOTIFY_CHANNEL"),
         request_min_interval_seconds=float(os.getenv("SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS", "8.0")),
         request_timeout_seconds=float(os.getenv("SHERPAMIND_REQUEST_TIMEOUT_SECONDS", "30.0")),

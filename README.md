@@ -119,29 +119,30 @@ Important conservative controls include:
 
 ## Useful current commands
 
-- `sherpamind discover-orgs`
-- `sherpamind seed`
-- `sherpamind watch`
-- `sherpamind sync-hot-open`
-- `sherpamind sync-warm-closed`
-- `sherpamind sync-cold-closed-audit`
-- `sherpamind enrich-priority-ticket-details`
-- `sherpamind materialize-ticket-docs`
-- `sherpamind dataset-summary`
-- `sherpamind insight-snapshot`
-- `sherpamind report-ticket-counts`
-- `sherpamind report-status-counts`
-- `sherpamind report-priority-counts`
-- `sherpamind report-technician-counts`
-- `sherpamind report-ticket-log-types`
-- `sherpamind report-attachment-summary`
-- `sherpamind recent-tickets`
-- `sherpamind open-ticket-ages`
-- `sherpamind recent-account-activity`
-- `sherpamind recent-technician-load`
-- `sherpamind search-ticket-docs`
-- `sherpamind search-ticket-chunks`
-- `sherpamind export-ticket-docs`
+- `python3 scripts/run.py workspace-layout`
+- `python3 scripts/run.py discover-orgs`
+- `python3 scripts/run.py seed`
+- `python3 scripts/run.py watch`
+- `python3 scripts/run.py sync-hot-open`
+- `python3 scripts/run.py sync-warm-closed`
+- `python3 scripts/run.py sync-cold-closed-audit`
+- `python3 scripts/run.py enrich-priority-ticket-details`
+- `python3 scripts/run.py materialize-ticket-docs`
+- `python3 scripts/run.py dataset-summary`
+- `python3 scripts/run.py insight-snapshot`
+- `python3 scripts/run.py report-ticket-counts`
+- `python3 scripts/run.py report-status-counts`
+- `python3 scripts/run.py report-priority-counts`
+- `python3 scripts/run.py report-technician-counts`
+- `python3 scripts/run.py report-ticket-log-types`
+- `python3 scripts/run.py report-attachment-summary`
+- `python3 scripts/run.py recent-tickets`
+- `python3 scripts/run.py open-ticket-ages`
+- `python3 scripts/run.py recent-account-activity`
+- `python3 scripts/run.py recent-technician-load`
+- `python3 scripts/run.py search-ticket-docs`
+- `python3 scripts/run.py search-ticket-chunks`
+- `python3 scripts/run.py export-ticket-docs`
 
 ## Delta sync direction
 

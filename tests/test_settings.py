@@ -3,7 +3,8 @@ from pathlib import Path
 from sherpamind.settings import load_settings
 
 
-def test_load_settings_reads_request_controls(monkeypatch) -> None:
+def test_load_settings_reads_request_controls(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS", "3.5")
     monkeypatch.setenv("SHERPAMIND_REQUEST_TIMEOUT_SECONDS", "45")
     settings = load_settings()
@@ -11,15 +12,15 @@ def test_load_settings_reads_request_controls(monkeypatch) -> None:
     assert settings.request_timeout_seconds == 45.0
 
 
-def test_load_settings_defaults_paths(monkeypatch) -> None:
-    monkeypatch.delenv("SHERPAMIND_DB_PATH", raising=False)
-    monkeypatch.delenv("SHERPAMIND_WATCH_STATE_PATH", raising=False)
+def test_load_settings_defaults_paths(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
     settings = load_settings()
-    assert settings.db_path == Path("state/sherpamind.sqlite3")
-    assert settings.watch_state_path == Path("state/watch_state.json")
+    assert settings.db_path == tmp_path / ".SherpaMind" / "private" / "sherpamind.sqlite3"
+    assert settings.watch_state_path == tmp_path / ".SherpaMind" / "private" / "watch_state.json"
 
 
-def test_load_settings_reads_seed_controls(monkeypatch) -> None:
+def test_load_settings_reads_seed_controls(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("SHERPAMIND_SEED_PAGE_SIZE", "50")
     monkeypatch.setenv("SHERPAMIND_SEED_MAX_PAGES", "3")
     settings = load_settings()
