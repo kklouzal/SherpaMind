@@ -79,6 +79,13 @@ SherpaDesk integration should be implemented conservatively:
 - rate-limit conservatively by default
 - document live quirks in-repo
 - avoid bursty seed/sync behavior
+- keep secrets local only; do not commit API tokens or live account identifiers carelessly
+
+Current wiki-derived direction:
+- API base: `https://api.sherpadesk.com`
+- organization discovery can likely use `x:{api_token}` Basic auth against `/organizations/`
+- normal API access appears to use `{org_key}-{instance_key}:{api_token}` Basic auth
+- stated rate limit is `600 requests/hour`
 
 ## Configuration knobs
 

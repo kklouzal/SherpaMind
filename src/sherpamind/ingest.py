@@ -20,15 +20,23 @@ class DeltaSyncResult:
 
 def _missing_api_config_message() -> str:
     return (
-        "Database initialized, but live SherpaDesk ingest is still blocked until "
-        "SHERPADESK_BASE_URL and SHERPADESK_API_KEY are configured and the real auth/header contract is verified."
+        "Database initialized, but live SherpaDesk ingest is still blocked until SHERPADESK_API_KEY is configured, "
+        "organization/instance access is confirmed, and the real endpoint contract is verified."
     )
 
 
 def seed_all(settings: Settings) -> SeedResult:
     initialize_db(settings.db_path)
-    if not settings.base_url or not settings.api_key:
+    if not settings.api_key:
         return SeedResult(status="needs_config", message=_missing_api_config_message())
+    if not settings.org_key or not settings.instance_key:
+        return SeedResult(
+            status="needs_org_context",
+            message=(
+                "API token is present, but SHERPADESK_ORG_KEY and SHERPADESK_INSTANCE_KEY are still missing. "
+                "Run organization discovery first, then wire the real seed endpoints."
+            ),
+        )
     return SeedResult(
         status="stub",
         message=(
@@ -40,8 +48,16 @@ def seed_all(settings: Settings) -> SeedResult:
 
 def sync_delta(settings: Settings) -> DeltaSyncResult:
     initialize_db(settings.db_path)
-    if not settings.base_url or not settings.api_key:
+    if not settings.api_key:
         return DeltaSyncResult(status="needs_config", message=_missing_api_config_message())
+    if not settings.org_key or not settings.instance_key:
+        return DeltaSyncResult(
+            status="needs_org_context",
+            message=(
+                "API token is present, but SHERPADESK_ORG_KEY and SHERPADESK_INSTANCE_KEY are still missing. "
+                "Run organization discovery first, then verify changed-record behavior before enabling delta sync."
+            ),
+        )
     return DeltaSyncResult(
         status="stub",
         message=(

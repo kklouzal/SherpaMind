@@ -14,12 +14,20 @@ class WatchResult:
 
 def watch_new_tickets(settings: Settings) -> WatchResult:
     initialize_db(settings.db_path)
-    if not settings.base_url or not settings.api_key:
+    if not settings.api_key:
         return WatchResult(
             status="needs_config",
             message=(
-                "Watcher scaffold is ready, but live polling is blocked until SHERPADESK_BASE_URL and "
-                "SHERPADESK_API_KEY are configured and the ticket-listing contract is verified."
+                "Watcher scaffold is ready, but live polling is blocked until SHERPADESK_API_KEY is configured and "
+                "the ticket-listing contract is verified."
+            ),
+        )
+    if not settings.org_key or not settings.instance_key:
+        return WatchResult(
+            status="needs_org_context",
+            message=(
+                "Watcher scaffold is ready, but SHERPADESK_ORG_KEY and SHERPADESK_INSTANCE_KEY still need to be "
+                "discovered/configured before live ticket polling."
             ),
         )
     if not settings.notify_channel:

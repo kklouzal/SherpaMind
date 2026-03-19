@@ -17,6 +17,23 @@ SherpaDesk API work should assume:
 - delta-sync semantics may need endpoint-specific handling
 - rate limiting and server-side fragility are real risks
 
+## Current wiki-derived notes
+
+From the public SherpaDesk API wiki, the current documented contract appears to be:
+- service endpoint: `https://api.sherpadesk.com/`
+- organization discovery: Basic auth with identity `x:{api_token}` against `/organizations/`
+- regular API access: Basic auth with identity `{org_key}-{instance_key}:{api_token}`
+- many-object endpoints default to 25 records/page
+- maximum page size is 250
+- page numbering starts at `0`
+- stated rate limit: `600 requests/hour`
+
+These notes were initially wiki-derived, but we now have first live confirmation that:
+- organization discovery works with token-only Basic auth against `/organizations/`
+- `GET /tickets?limit=1&page=0` returns a JSON list shape under the org/instance-scoped auth identity
+
+Account-specific identifiers and secrets should remain local-only and should not be committed to this public repo.
+
 ## Project rule
 
 Do not hard-code assumptions about SherpaDesk API behavior without either:

@@ -43,6 +43,8 @@ Recommended discipline:
 - use retry with backoff for transient failures
 - cache known dimensions locally
 - perform delta syncs against the narrowest viable entity set
+- treat the documented `600 requests/hour` limit as real and leave safety margin below it
+- default to deliberate pacing (roughly one request every 8+ seconds) until live behavior proves a faster safe envelope
 
 ## Watcher principle
 

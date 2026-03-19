@@ -10,6 +10,7 @@
 - verify auth pattern against live SherpaDesk account
 - identify exact endpoint set required for accounts, users, technicians, tickets, comments
 - document actual endpoint behavior and quirks
+- first live milestone: token-only org discovery plus a minimal tickets-list probe
 
 ## Phase 2 — Seed pipeline
 - implement initial seed for core entities
