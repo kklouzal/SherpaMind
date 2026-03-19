@@ -38,6 +38,15 @@ The safest current assumption is:
 
 That means the right delta strategy is **tiered recency rescans**, not blind full-history rescans and not a fragile single-watermark design.
 
+## Adopted operating model
+
+This is now the intended SherpaMind direction:
+- maintain a local list/state of ticket IDs observed to be open
+- poll the hot open lane every ~5 minutes
+- when a ticket leaves the observed open set, remove it from the active-open tracking set
+- treat closed tickets newer than 7 days as **warm**
+- treat closed tickets older than 7 days as **cold** and audit them on a slow rolling cadence
+
 ## Recommended operating model
 
 ### 1. New-ticket watcher lane
@@ -62,6 +71,8 @@ Approach:
 - poll the first N pages of `status=open`
 - run every ~5 minutes
 - upsert all returned open tickets
+- maintain a local active-open ticket ID set
+- when a ticket disappears from the observed open slice, remove it from the active-open set and hand it off to warm/closed handling
 - optionally prioritize detail enrichment for rows where:
   - `updated_time` changed
   - `is_new_user_post` changed
@@ -79,11 +90,10 @@ Purpose:
 - catch edits to recent history without rescanning everything
 
 Approach:
-- rescan a larger recent slice of:
-  - `status=open`
-  - `status=closed`
+- rescan a larger recent slice of `status=closed`
+- treat closed tickets newer than **7 days** as warm by default
 - run every few hours
-- compare `updated_time` and key fields against local state
+- compare `updated_time`, `closed_time`, and key fields against local state
 
 This is the lane that protects us from:
 - recent closures

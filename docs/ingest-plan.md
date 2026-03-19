@@ -26,7 +26,8 @@ Expected approach:
 
 Current direction:
 - hot open-ticket rescans for ~5-minute freshness
-- warm recent-history rescans every few hours
+- keep a local open-ticket ID set updated from the hot lane
+- warm closed-ticket rescans every few hours for items closed within the last 7 days
 - cold historical audit slices daily/weekly
 
 ## Principles

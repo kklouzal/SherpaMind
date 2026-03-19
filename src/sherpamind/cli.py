@@ -14,7 +14,13 @@ from .analysis import (
     list_ticket_counts_by_technician,
 )
 from .client import SherpaDeskClient
-from .ingest import seed_all, sync_delta
+from .ingest import (
+    seed_all,
+    sync_cold_closed_audit,
+    sync_delta,
+    sync_hot_open_tickets,
+    sync_warm_closed_tickets,
+)
 from .settings import load_settings
 from .watch import watch_new_tickets
 from .db import initialize_db
@@ -69,6 +75,27 @@ def sync() -> None:
 def watch() -> None:
     settings = load_settings()
     result = watch_new_tickets(settings)
+    print(json.dumps(result.__dict__, indent=2))
+
+
+@app.command("sync-hot-open")
+def sync_hot_open() -> None:
+    settings = load_settings()
+    result = sync_hot_open_tickets(settings)
+    print(json.dumps(result.__dict__, indent=2))
+
+
+@app.command("sync-warm-closed")
+def sync_warm_closed() -> None:
+    settings = load_settings()
+    result = sync_warm_closed_tickets(settings)
+    print(json.dumps(result.__dict__, indent=2))
+
+
+@app.command("sync-cold-closed-audit")
+def sync_cold_closed() -> None:
+    settings = load_settings()
+    result = sync_cold_closed_audit(settings)
     print(json.dumps(result.__dict__, indent=2))
 
 

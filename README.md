@@ -129,7 +129,8 @@ SherpaDesk currently looks better suited to **tiered recency rescans** than to a
 
 Current documented direction:
 - new/open active slice refreshed about every 5 minutes
-- recent history reconciled every few hours
+- maintain a local set of currently observed open ticket IDs
+- closed tickets newer than 7 days treated as warm and reconciled every few hours
 - older closed history audited in small rolling batches
 
 See `docs/delta-sync-strategy.md` for the reasoning and proposed lane design.

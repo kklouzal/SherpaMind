@@ -19,6 +19,10 @@ class Settings:
     request_timeout_seconds: float
     seed_page_size: int
     seed_max_pages: int | None
+    hot_open_pages: int
+    warm_closed_pages: int
+    warm_closed_days: int
+    cold_closed_pages_per_run: int
 
 
 def load_settings() -> Settings:
@@ -38,4 +42,8 @@ def load_settings() -> Settings:
         request_timeout_seconds=float(os.getenv("SHERPAMIND_REQUEST_TIMEOUT_SECONDS", "30.0")),
         seed_page_size=int(os.getenv("SHERPAMIND_SEED_PAGE_SIZE", "100")),
         seed_max_pages=int(seed_max_pages_raw) if seed_max_pages_raw else None,
+        hot_open_pages=int(os.getenv("SHERPAMIND_HOT_OPEN_PAGES", "5")),
+        warm_closed_pages=int(os.getenv("SHERPAMIND_WARM_CLOSED_PAGES", "10")),
+        warm_closed_days=int(os.getenv("SHERPAMIND_WARM_CLOSED_DAYS", "7")),
+        cold_closed_pages_per_run=int(os.getenv("SHERPAMIND_COLD_CLOSED_PAGES_PER_RUN", "2")),
     )
