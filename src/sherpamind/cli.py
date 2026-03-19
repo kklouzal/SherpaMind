@@ -33,7 +33,7 @@ from .ingest import (
     sync_hot_open_tickets,
     sync_warm_closed_tickets,
 )
-from .settings import load_settings
+from .settings import load_settings, write_config_env
 from .watch import watch_new_tickets
 from .db import initialize_db
 
@@ -76,6 +76,66 @@ def workspace_layout() -> None:
         "exports_root": str(paths.exports_root),
         "docs_root": str(paths.docs_root),
         "env_file": str(paths.env_file),
+    }, indent=2))
+
+
+@app.command("configure")
+def configure(
+    api_key: str | None = None,
+    org_key: str | None = None,
+    instance_key: str | None = None,
+    api_user: str | None = None,
+    api_base_url: str | None = None,
+    notify_channel: str | None = None,
+) -> None:
+    env_file = write_config_env(
+        api_base_url=api_base_url,
+        api_key=api_key,
+        api_user=api_user,
+        org_key=org_key,
+        instance_key=instance_key,
+        notify_channel=notify_channel,
+    )
+    print(json.dumps({
+        "status": "ok",
+        "env_file": str(env_file),
+        "updated_keys": [
+            key for key, value in {
+                "SHERPADESK_API_BASE_URL": api_base_url,
+                "SHERPADESK_API_KEY": api_key,
+                "SHERPADESK_API_USER": api_user,
+                "SHERPADESK_ORG_KEY": org_key,
+                "SHERPADESK_INSTANCE_KEY": instance_key,
+                "SHERPAMIND_NOTIFY_CHANNEL": notify_channel,
+            }.items() if value is not None
+        ],
+    }, indent=2))
+
+
+@app.command("doctor")
+def doctor() -> None:
+    settings = load_settings()
+    paths = ensure_path_layout()
+    checks = {
+        "env_file_exists": paths.env_file.exists(),
+        "runtime_venv_exists": paths.runtime_venv.exists(),
+        "db_exists": settings.db_path.exists(),
+        "watch_state_exists": settings.watch_state_path.exists(),
+        "api_key_present": bool(settings.api_key),
+        "org_key_present": bool(settings.org_key),
+        "instance_key_present": bool(settings.instance_key),
+    }
+    print(json.dumps({
+        "status": "ok",
+        "paths": {
+            "root": str(paths.root),
+            "private_root": str(paths.private_root),
+            "public_root": str(paths.public_root),
+            "env_file": str(paths.env_file),
+            "runtime_venv": str(paths.runtime_venv),
+            "db_path": str(settings.db_path),
+        },
+        "checks": checks,
     }, indent=2))
 
 

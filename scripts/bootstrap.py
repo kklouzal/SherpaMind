@@ -8,17 +8,53 @@ import sys
 import venv
 
 
+DEFAULT_ENV_TEMPLATE = """# SherpaMind skill-local config
+# Fill in SherpaDesk credentials/keys here or use `python3 scripts/run.py configure ...`.
+SHERPADESK_API_BASE_URL=https://api.sherpadesk.com
+SHERPADESK_API_KEY=
+SHERPADESK_API_USER=
+SHERPADESK_ORG_KEY=
+SHERPADESK_INSTANCE_KEY=
+SHERPAMIND_NOTIFY_CHANNEL=
+"""
+
+
 def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def workspace_root() -> Path:
+    return Path(os.getenv("SHERPAMIND_WORKSPACE_ROOT", os.getcwd())).resolve()
+
+
+def sherpamind_root() -> Path:
+    return workspace_root() / ".SherpaMind"
+
+
 def skill_runtime_root() -> Path:
-    workspace_root = Path(os.getenv("SHERPAMIND_WORKSPACE_ROOT", os.getcwd())).resolve()
-    return workspace_root / ".SherpaMind" / "private" / "runtime"
+    return sherpamind_root() / "private" / "runtime"
+
+
+def env_file() -> Path:
+    return sherpamind_root() / "private" / "config.env"
 
 
 def venv_python(venv_root: Path) -> Path:
     return venv_root / "bin" / "python"
+
+
+def ensure_layout() -> None:
+    for path in [
+        sherpamind_root(),
+        sherpamind_root() / "private",
+        sherpamind_root() / "public",
+        sherpamind_root() / "private" / "runtime",
+        sherpamind_root() / "public" / "exports",
+        sherpamind_root() / "public" / "docs",
+    ]:
+        path.mkdir(parents=True, exist_ok=True)
+    if not env_file().exists():
+        env_file().write_text(DEFAULT_ENV_TEMPLATE)
 
 
 def ensure_venv(venv_root: Path) -> None:
@@ -38,6 +74,7 @@ def pip_install(venv_root: Path) -> None:
 
 
 def main() -> int:
+    ensure_layout()
     runtime_root = skill_runtime_root()
     venv_root = runtime_root / "venv"
     ensure_venv(venv_root)

@@ -108,10 +108,38 @@ Current wiki-derived direction:
 - normal API access appears to use `{org_key}-{instance_key}:{api_token}` Basic auth
 - stated rate limit is `600 requests/hour`
 
-## Configuration knobs
+## Bootstrap and configuration
+
+Skill-local bootstrap:
+
+```bash
+python3 scripts/bootstrap.py
+```
+
+This creates:
+- `.SherpaMind/private/runtime/venv`
+- `.SherpaMind/private/config.env`
+- `.SherpaMind/public/exports`
+- `.SherpaMind/public/docs`
+
+Stable runtime entrypoint:
+
+```bash
+python3 scripts/run.py <command> [args...]
+```
+
+Useful onboarding commands:
+
+```bash
+python3 scripts/run.py workspace-layout
+python3 scripts/run.py doctor
+python3 scripts/run.py configure --api-key <token>
+python3 scripts/run.py discover-orgs
+```
 
 Environment variables are documented in `.env.example`.
 Important conservative controls include:
+- `SHERPAMIND_WORKSPACE_ROOT`
 - `SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS`
 - `SHERPAMIND_REQUEST_TIMEOUT_SECONDS`
 - `SHERPAMIND_SEED_PAGE_SIZE`
@@ -120,6 +148,8 @@ Important conservative controls include:
 ## Useful current commands
 
 - `python3 scripts/run.py workspace-layout`
+- `python3 scripts/run.py doctor`
+- `python3 scripts/run.py configure`
 - `python3 scripts/run.py discover-orgs`
 - `python3 scripts/run.py seed`
 - `python3 scripts/run.py watch`

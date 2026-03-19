@@ -53,6 +53,16 @@ python3 scripts/run.py insight-snapshot
 python3 scripts/run.py search-ticket-docs printer --limit 5
 ```
 
+## Onboarding flow
+
+Typical first-run sequence:
+1. `python3 scripts/bootstrap.py`
+2. `python3 scripts/run.py doctor`
+3. `python3 scripts/run.py configure --api-key <token>`
+4. `python3 scripts/run.py discover-orgs`
+5. `python3 scripts/run.py configure --org-key <org> --instance-key <instance>`
+6. `python3 scripts/run.py seed`
+
 ## Important operating rules
 
 - Keep SherpaDesk access read-only unless the skill is explicitly expanded later

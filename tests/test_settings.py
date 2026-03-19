@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sherpamind.settings import load_settings
+from sherpamind.settings import load_settings, write_config_env
 
 
 def test_load_settings_reads_request_controls(monkeypatch, tmp_path: Path) -> None:
@@ -26,3 +26,13 @@ def test_load_settings_reads_seed_controls(monkeypatch, tmp_path: Path) -> None:
     settings = load_settings()
     assert settings.seed_page_size == 50
     assert settings.seed_max_pages == 3
+
+
+def test_write_config_env_is_loaded(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    env_file = write_config_env(api_key="secret", org_key="org1", instance_key="inst1")
+    assert env_file.exists()
+    settings = load_settings()
+    assert settings.api_key == "secret"
+    assert settings.org_key == "org1"
+    assert settings.instance_key == "inst1"
