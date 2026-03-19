@@ -1,19 +1,25 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import typer
 from rich import print
 
 from .analysis import (
     get_dataset_summary,
+    get_insight_snapshot,
+    list_open_ticket_ages,
+    list_recent_account_activity,
     list_recent_tickets,
+    list_technician_recent_load,
     list_ticket_counts_by_account,
     list_ticket_counts_by_priority,
     list_ticket_counts_by_status,
     list_ticket_counts_by_technician,
 )
 from .client import SherpaDeskClient
+from .documents import export_ticket_documents
 from .ingest import (
     seed_all,
     sync_cold_closed_audit,
@@ -105,6 +111,12 @@ def dataset_summary() -> None:
     print(json.dumps(get_dataset_summary(settings.db_path), indent=2))
 
 
+@app.command("insight-snapshot")
+def insight_snapshot() -> None:
+    settings = load_settings()
+    print(json.dumps(get_insight_snapshot(settings.db_path), indent=2))
+
+
 @app.command("report-ticket-counts")
 def report_ticket_counts(limit: int = 20) -> None:
     settings = load_settings()
@@ -138,6 +150,35 @@ def recent_tickets(limit: int = 20) -> None:
     settings = load_settings()
     rows = list_recent_tickets(settings.db_path, limit=limit)
     print(json.dumps(rows, indent=2))
+
+
+@app.command("open-ticket-ages")
+def open_ticket_ages(limit: int = 20) -> None:
+    settings = load_settings()
+    rows = list_open_ticket_ages(settings.db_path, limit=limit)
+    print(json.dumps(rows, indent=2))
+
+
+@app.command("recent-account-activity")
+def recent_account_activity(days: int = 7, limit: int = 20) -> None:
+    settings = load_settings()
+    rows = list_recent_account_activity(settings.db_path, days=days, limit=limit)
+    print(json.dumps(rows, indent=2))
+
+
+@app.command("recent-technician-load")
+def recent_technician_load(days: int = 7, limit: int = 20) -> None:
+    settings = load_settings()
+    rows = list_technician_recent_load(settings.db_path, days=days, limit=limit)
+    print(json.dumps(rows, indent=2))
+
+
+@app.command("export-ticket-docs")
+def export_ticket_docs(output_path: str = "state/exports/ticket-docs.jsonl", limit: int = 0) -> None:
+    settings = load_settings()
+    effective_limit = None if limit <= 0 else limit
+    result = export_ticket_documents(settings.db_path, Path(output_path), limit=effective_limit)
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

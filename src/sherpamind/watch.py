@@ -23,6 +23,7 @@ def _load_watch_state(path: Path) -> dict[str, Any]:
         return {
             "known_open_ticket_ids": [],
             "last_watch_at": None,
+            "open_ticket_snapshot": {},
         }
     return json.loads(path.read_text())
 
@@ -43,6 +44,18 @@ def _build_client(settings: Settings) -> SherpaDeskClient:
         timeout_seconds=settings.request_timeout_seconds,
         min_interval_seconds=settings.request_min_interval_seconds,
     )
+
+
+def _snapshot_ticket(ticket: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "updated_time": ticket.get("updated_time"),
+        "status": ticket.get("status"),
+        "is_new_user_post": ticket.get("is_new_user_post"),
+        "is_new_tech_post": ticket.get("is_new_tech_post"),
+        "next_step_date": ticket.get("next_step_date"),
+        "subject": ticket.get("subject"),
+        "account_name": ticket.get("account_name"),
+    }
 
 
 def watch_new_tickets(settings: Settings) -> WatchResult:
@@ -74,12 +87,36 @@ def watch_new_tickets(settings: Settings) -> WatchResult:
 
     prior_state = _load_watch_state(settings.watch_state_path)
     prior_ids = {int(ticket_id) for ticket_id in prior_state.get("known_open_ticket_ids", [])}
+    prior_snapshot = {str(k): v for k, v in prior_state.get("open_ticket_snapshot", {}).items()}
     current_ids = {int(ticket["id"]) for ticket in open_tickets}
 
     new_ids = sorted(current_ids - prior_ids)
     closed_or_missing_ids = sorted(prior_ids - current_ids)
 
-    new_tickets = [ticket for ticket in open_tickets if int(ticket["id"]) in set(new_ids)]
+    new_id_set = set(new_ids)
+    changed_tickets = []
+    current_snapshot = {}
+    for ticket in open_tickets:
+        ticket_id = str(ticket["id"])
+        snap = _snapshot_ticket(ticket)
+        current_snapshot[ticket_id] = snap
+        if int(ticket["id"]) in new_id_set:
+            continue
+        if prior_snapshot.get(ticket_id) != snap:
+            changed_tickets.append(
+                {
+                    "id": ticket.get("id"),
+                    "subject": ticket.get("subject"),
+                    "account_name": ticket.get("account_name"),
+                    "updated_time": ticket.get("updated_time"),
+                    "status": ticket.get("status"),
+                    "is_new_user_post": ticket.get("is_new_user_post"),
+                    "is_new_tech_post": ticket.get("is_new_tech_post"),
+                    "next_step_date": ticket.get("next_step_date"),
+                }
+            )
+
+    new_tickets = [ticket for ticket in open_tickets if int(ticket["id"]) in new_id_set]
 
     next_state = {
         "known_open_ticket_ids": sorted(current_ids),
@@ -88,6 +125,7 @@ def watch_new_tickets(settings: Settings) -> WatchResult:
         "observed_open_ticket_count": len(current_ids),
         "new_ticket_ids_last_run": new_ids,
         "removed_open_ticket_ids_last_run": closed_or_missing_ids,
+        "open_ticket_snapshot": current_snapshot,
     }
     _save_watch_state(settings.watch_state_path, next_state)
     set_json_state(settings.db_path, "watch.last_state", next_state)
@@ -99,6 +137,7 @@ def watch_new_tickets(settings: Settings) -> WatchResult:
             "watched_pages": settings.hot_open_pages,
             "observed_open_ticket_count": len(current_ids),
             "new_ticket_count": len(new_ids),
+            "changed_open_ticket_count": len(changed_tickets),
             "removed_open_ticket_count": len(closed_or_missing_ids),
             "new_tickets": [
                 {
@@ -112,6 +151,7 @@ def watch_new_tickets(settings: Settings) -> WatchResult:
                 }
                 for ticket in new_tickets
             ],
+            "changed_tickets": changed_tickets,
             "notify_channel_configured": bool(settings.notify_channel),
         },
     )

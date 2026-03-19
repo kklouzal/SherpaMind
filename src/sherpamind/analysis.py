@@ -93,6 +93,75 @@ def list_recent_tickets(db_path: Path, limit: int = 20) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def list_open_ticket_ages(db_path: Path, limit: int = 20) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT t.id,
+                   t.subject,
+                   COALESCE(a.name, t.account_id) AS account,
+                   COALESCE(u.display_name, t.user_id) AS user,
+                   COALESCE(te.display_name, t.assigned_technician_id) AS technician,
+                   t.priority,
+                   t.created_at,
+                   t.updated_at,
+                   ROUND((julianday('now') - julianday(REPLACE(substr(t.created_at, 1, 19), 'T', ' '))), 2) AS age_days,
+                   ROUND((julianday('now') - julianday(REPLACE(substr(COALESCE(t.updated_at, t.created_at), 1, 19), 'T', ' '))), 2) AS days_since_update
+            FROM tickets t
+            LEFT JOIN accounts a ON a.id = t.account_id
+            LEFT JOIN users u ON u.id = t.user_id
+            LEFT JOIN technicians te ON te.id = t.assigned_technician_id
+            WHERE t.status = 'Open'
+            ORDER BY age_days DESC, days_since_update DESC, t.id ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def list_recent_account_activity(db_path: Path, days: int = 7, limit: int = 20) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT COALESCE(a.name, t.account_id, 'unknown') AS account,
+                   COUNT(*) AS ticket_count,
+                   SUM(CASE WHEN t.status = 'Open' THEN 1 ELSE 0 END) AS open_count,
+                   SUM(CASE WHEN t.status = 'Closed' THEN 1 ELSE 0 END) AS closed_count,
+                   MAX(COALESCE(t.updated_at, t.created_at)) AS latest_activity_at
+            FROM tickets t
+            LEFT JOIN accounts a ON a.id = t.account_id
+            WHERE julianday(REPLACE(substr(COALESCE(t.updated_at, t.created_at), 1, 19), 'T', ' ')) >= julianday('now', ?)
+            GROUP BY COALESCE(a.name, t.account_id, 'unknown')
+            ORDER BY ticket_count DESC, latest_activity_at DESC, account ASC
+            LIMIT ?
+            """,
+            (f'-{days} days', limit),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def list_technician_recent_load(db_path: Path, days: int = 7, limit: int = 20) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT COALESCE(te.display_name, t.assigned_technician_id, 'unassigned') AS technician,
+                   COUNT(*) AS ticket_count,
+                   SUM(CASE WHEN t.status = 'Open' THEN 1 ELSE 0 END) AS open_count,
+                   SUM(CASE WHEN t.status = 'Closed' THEN 1 ELSE 0 END) AS closed_count,
+                   MAX(COALESCE(t.updated_at, t.created_at)) AS latest_activity_at
+            FROM tickets t
+            LEFT JOIN technicians te ON te.id = t.assigned_technician_id
+            WHERE julianday(REPLACE(substr(COALESCE(t.updated_at, t.created_at), 1, 19), 'T', ' ')) >= julianday('now', ?)
+            GROUP BY COALESCE(te.display_name, t.assigned_technician_id, 'unassigned')
+            ORDER BY ticket_count DESC, latest_activity_at DESC, technician ASC
+            LIMIT ?
+            """,
+            (f'-{days} days', limit),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_dataset_summary(db_path: Path) -> dict:
     with connect(db_path) as conn:
         counts = {}
@@ -104,4 +173,18 @@ def get_dataset_summary(db_path: Path) -> dict:
     return {
         "counts": counts,
         "latest_ingest_run": dict(latest_run) if latest_run else None,
+    }
+
+
+def get_insight_snapshot(db_path: Path) -> dict:
+    return {
+        "dataset_summary": get_dataset_summary(db_path),
+        "status_counts": list_ticket_counts_by_status(db_path),
+        "priority_counts": list_ticket_counts_by_priority(db_path),
+        "top_accounts": list_ticket_counts_by_account(db_path, limit=10),
+        "top_technicians": list_ticket_counts_by_technician(db_path, limit=10),
+        "oldest_open_tickets": list_open_ticket_ages(db_path, limit=10),
+        "recent_account_activity_7d": list_recent_account_activity(db_path, days=7, limit=10),
+        "recent_technician_load_7d": list_technician_recent_load(db_path, days=7, limit=10),
+        "recent_tickets": list_recent_tickets(db_path, limit=10),
     }

@@ -36,10 +36,10 @@ def make_settings(tmp_path: Path) -> Settings:
 
 def test_watch_new_tickets_tracks_new_and_removed_ids(tmp_path: Path, monkeypatch) -> None:
     settings = make_settings(tmp_path)
-    settings.watch_state_path.write_text(json.dumps({"known_open_ticket_ids": [2, 3], "last_watch_at": None}))
+    settings.watch_state_path.write_text(json.dumps({"known_open_ticket_ids": [2, 3], "last_watch_at": None, "open_ticket_snapshot": {"2": {"updated_time": "old"}}}))
     rows = [
-        {"id": 1, "subject": "New one", "account_name": "Acme", "created_time": "2026-03-19T10:00:00", "updated_time": "2026-03-19T10:01:00", "priority_name": "High", "status": "Open"},
-        {"id": 2, "subject": "Existing", "account_name": "Acme", "created_time": "2026-03-19T09:00:00", "updated_time": "2026-03-19T09:10:00", "priority_name": "Low", "status": "Open"},
+        {"id": 1, "subject": "New one", "account_name": "Acme", "created_time": "2026-03-19T10:00:00", "updated_time": "2026-03-19T10:01:00", "priority_name": "High", "status": "Open", "is_new_user_post": False, "is_new_tech_post": False, "next_step_date": None},
+        {"id": 2, "subject": "Existing", "account_name": "Acme", "created_time": "2026-03-19T09:00:00", "updated_time": "2026-03-19T09:10:00", "priority_name": "Low", "status": "Open", "is_new_user_post": True, "is_new_tech_post": False, "next_step_date": None},
     ]
     monkeypatch.setattr("sherpamind.watch._build_client", lambda settings: FakeClient(rows))
 
@@ -47,7 +47,9 @@ def test_watch_new_tickets_tracks_new_and_removed_ids(tmp_path: Path, monkeypatc
 
     assert result.status == "ok"
     assert result.stats["new_ticket_count"] == 1
+    assert result.stats["changed_open_ticket_count"] == 1
     assert result.stats["removed_open_ticket_count"] == 1
     assert result.stats["new_tickets"][0]["id"] == 1
+    assert result.stats["changed_tickets"][0]["id"] == 2
     saved = json.loads(settings.watch_state_path.read_text())
     assert saved["known_open_ticket_ids"] == [1, 2]

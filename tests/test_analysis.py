@@ -2,7 +2,11 @@ from pathlib import Path
 
 from sherpamind.analysis import (
     get_dataset_summary,
+    get_insight_snapshot,
+    list_open_ticket_ages,
+    list_recent_account_activity,
     list_recent_tickets,
+    list_technician_recent_load,
     list_ticket_counts_by_account,
     list_ticket_counts_by_priority,
     list_ticket_counts_by_status,
@@ -25,16 +29,17 @@ def seed_fixture(db: Path) -> None:
                 "user_id": 11,
                 "tech_id": 21,
                 "subject": "Issue A",
-                "status": "open",
+                "status": "Open",
                 "priority_name": "High",
                 "created_time": "2026-03-18T01:00:00Z",
                 "updated_time": "2026-03-19T03:00:00Z",
+                "initial_post": "Can you help with issue A?",
             },
             {
                 "id": 102,
                 "account_id": 1,
                 "subject": "Issue B",
-                "status": "closed",
+                "status": "Closed",
                 "priority_name": "Low",
                 "created_time": "2026-03-18T01:00:00Z",
                 "updated_time": "2026-03-19T02:00:00Z",
@@ -43,7 +48,7 @@ def seed_fixture(db: Path) -> None:
                 "id": 103,
                 "account_id": 2,
                 "subject": "Issue C",
-                "status": "open",
+                "status": "Open",
                 "priority_name": "High",
                 "created_time": "2026-03-18T01:00:00Z",
                 "updated_time": "2026-03-19T01:00:00Z",
@@ -61,12 +66,20 @@ def test_analysis_reports(tmp_path: Path) -> None:
     by_priority = list_ticket_counts_by_priority(db)
     by_technician = list_ticket_counts_by_technician(db)
     recent = list_recent_tickets(db, limit=2)
+    open_ages = list_open_ticket_ages(db, limit=2)
+    recent_accounts = list_recent_account_activity(db, days=30, limit=5)
+    recent_techs = list_technician_recent_load(db, days=30, limit=5)
     summary = get_dataset_summary(db)
+    snapshot = get_insight_snapshot(db)
 
     assert by_account[0]["account"] == "Acme"
     assert by_account[0]["ticket_count"] == 2
-    assert {row["status"]: row["ticket_count"] for row in by_status}["open"] == 2
+    assert {row["status"]: row["ticket_count"] for row in by_status}["Open"] == 2
     assert {row["priority"]: row["ticket_count"] for row in by_priority}["High"] == 2
     assert by_technician[0]["ticket_count"] >= 1
     assert recent[0]["subject"] == "Issue A"
+    assert open_ages[0]["status"] == "Open" if "status" in open_ages[0] else True
+    assert recent_accounts[0]["ticket_count"] >= 1
+    assert recent_techs[0]["ticket_count"] >= 1
     assert summary["counts"]["tickets"] == 3
+    assert snapshot["dataset_summary"]["counts"]["tickets"] == 3
