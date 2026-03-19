@@ -103,6 +103,7 @@ def list_open_ticket_ages(db_path: Path, limit: int = 20) -> list[dict]:
                    COALESCE(u.display_name, t.user_id) AS user,
                    COALESCE(te.display_name, t.assigned_technician_id) AS technician,
                    t.priority,
+                   t.status,
                    t.created_at,
                    t.updated_at,
                    ROUND((julianday('now') - julianday(REPLACE(substr(t.created_at, 1, 19), 'T', ' '))), 2) AS age_days,
@@ -162,10 +163,56 @@ def list_technician_recent_load(db_path: Path, days: int = 7, limit: int = 20) -
     return [dict(row) for row in rows]
 
 
+def list_ticket_log_types(db_path: Path, limit: int = 20) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT COALESCE(log_type, 'unknown') AS log_type,
+                   COUNT(*) AS log_count
+            FROM ticket_logs
+            GROUP BY COALESCE(log_type, 'unknown')
+            ORDER BY log_count DESC, log_type ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def search_ticket_documents(db_path: Path, query: str, limit: int = 20) -> list[dict]:
+    needle = f"%{query}%"
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT doc_id, ticket_id, status, account, user_name, technician, updated_at, text
+            FROM ticket_documents
+            WHERE text LIKE ? COLLATE NOCASE
+               OR account LIKE ? COLLATE NOCASE
+               OR user_name LIKE ? COLLATE NOCASE
+               OR technician LIKE ? COLLATE NOCASE
+            ORDER BY updated_at DESC, ticket_id DESC
+            LIMIT ?
+            """,
+            (needle, needle, needle, needle, limit),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_dataset_summary(db_path: Path) -> dict:
     with connect(db_path) as conn:
         counts = {}
-        for table in ["accounts", "users", "technicians", "tickets", "ticket_comments", "ingest_runs"]:
+        for table in [
+            "accounts",
+            "users",
+            "technicians",
+            "tickets",
+            "ticket_details",
+            "ticket_logs",
+            "ticket_time_logs",
+            "ticket_documents",
+            "ticket_comments",
+            "ingest_runs",
+        ]:
             counts[table] = conn.execute(f"SELECT COUNT(*) AS c FROM {table}").fetchone()["c"]
         latest_run = conn.execute(
             "SELECT id, mode, started_at, finished_at, status, notes FROM ingest_runs ORDER BY id DESC LIMIT 1"
@@ -186,5 +233,6 @@ def get_insight_snapshot(db_path: Path) -> dict:
         "oldest_open_tickets": list_open_ticket_ages(db_path, limit=10),
         "recent_account_activity_7d": list_recent_account_activity(db_path, days=7, limit=10),
         "recent_technician_load_7d": list_technician_recent_load(db_path, days=7, limit=10),
+        "ticket_log_types": list_ticket_log_types(db_path, limit=10),
         "recent_tickets": list_recent_tickets(db_path, limit=10),
     }

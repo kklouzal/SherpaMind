@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .db import connect
+from .db import connect, now_iso, replace_ticket_documents
 
 
 def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict]:
@@ -24,13 +24,41 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                json_extract(t.raw_json, '$.plain_initial_post') AS plain_initial_post,
                json_extract(t.raw_json, '$.creation_category_name') AS creation_category_name,
                json_extract(t.raw_json, '$.resolution_category_name') AS resolution_category_name,
+               td.workpad,
+               td.note AS detail_note,
+               td.initial_response,
                json_extract(t.raw_json, '$.next_step') AS next_step,
                json_extract(t.raw_json, '$.next_step_date') AS next_step_date,
-               json_extract(t.raw_json, '$.account_location_name') AS account_location_name
+               td.sla_response_date,
+               td.sla_complete_date,
+               td.ticketlogs_count,
+               td.timelogs_count,
+               td.attachments_count,
+               (
+                   SELECT group_concat(COALESCE(tl.plain_note, tl.note), '\n---\n')
+                   FROM (
+                       SELECT plain_note, note
+                       FROM ticket_logs
+                       WHERE ticket_id = t.id
+                       ORDER BY record_date DESC, id DESC
+                       LIMIT 5
+                   ) tl
+               ) AS recent_log_text,
+               (
+                   SELECT group_concat(COALESCE(tl.log_type, 'log'), ', ')
+                   FROM (
+                       SELECT log_type
+                       FROM ticket_logs
+                       WHERE ticket_id = t.id
+                       ORDER BY record_date DESC, id DESC
+                       LIMIT 5
+                   ) tl
+               ) AS recent_log_types
         FROM tickets t
         LEFT JOIN accounts a ON a.id = t.account_id
         LEFT JOIN users u ON u.id = t.user_id
         LEFT JOIN technicians te ON te.id = t.assigned_technician_id
+        LEFT JOIN ticket_details td ON td.ticket_id = t.id
         ORDER BY COALESCE(t.updated_at, t.created_at) DESC, t.id DESC
     """
     params: tuple = ()
@@ -56,8 +84,18 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             f"Updated: {record.get('updated_at') or 'unknown'}",
             f"Closed: {record.get('closed_at') or 'not closed'}",
         ]
-        if record.get('account_location_name'):
-            text_parts.append(f"Location: {record['account_location_name']}")
+        if record.get('initial_response'):
+            text_parts.append(f"Initial response flag/value: {record['initial_response']}")
+        if record.get('sla_response_date'):
+            text_parts.append(f"SLA response date: {record['sla_response_date']}")
+        if record.get('sla_complete_date'):
+            text_parts.append(f"SLA completion date: {record['sla_complete_date']}")
+        if record.get('ticketlogs_count') is not None:
+            text_parts.append(f"Ticket log count: {record['ticketlogs_count']}")
+        if record.get('timelogs_count') is not None:
+            text_parts.append(f"Time log count: {record['timelogs_count']}")
+        if record.get('attachments_count') is not None:
+            text_parts.append(f"Attachment count: {record['attachments_count']}")
         if record.get('next_step'):
             text_parts.append(f"Next step: {record['next_step']}")
         if record.get('next_step_date'):
@@ -66,6 +104,14 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Initial post: {record['initial_post']}")
         elif record.get('plain_initial_post'):
             text_parts.append(f"Initial post: {record['plain_initial_post']}")
+        if record.get('detail_note'):
+            text_parts.append(f"Detail note: {record['detail_note']}")
+        if record.get('workpad'):
+            text_parts.append(f"Workpad: {record['workpad']}")
+        if record.get('recent_log_types'):
+            text_parts.append(f"Recent log types: {record['recent_log_types']}")
+        if record.get('recent_log_text'):
+            text_parts.append(f"Recent logs: {record['recent_log_text']}")
         if record.get('resolution_category_name'):
             text_parts.append(f"Resolution category: {record['resolution_category_name']}")
 
@@ -83,10 +129,24 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "priority": record.get("priority"),
                     "category": record.get("category") or record.get("creation_category_name"),
                     "closed_at": record.get("closed_at"),
+                    "ticketlogs_count": record.get("ticketlogs_count"),
+                    "timelogs_count": record.get("timelogs_count"),
+                    "attachments_count": record.get("attachments_count"),
                 },
             }
         )
     return docs
+
+
+def materialize_ticket_documents(db_path: Path, limit: int | None = None) -> dict:
+    docs = build_ticket_documents(db_path, limit=limit)
+    synced_at = now_iso()
+    replace_ticket_documents(db_path, docs, synced_at=synced_at)
+    return {
+        "status": "ok",
+        "document_count": len(docs),
+        "synced_at": synced_at,
+    }
 
 
 def export_ticket_documents(db_path: Path, output_path: Path, limit: int | None = None) -> dict:

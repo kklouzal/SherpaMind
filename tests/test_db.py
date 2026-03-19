@@ -4,8 +4,10 @@ from sherpamind.db import (
     connect,
     finish_ingest_run,
     initialize_db,
+    replace_ticket_documents,
     start_ingest_run,
     upsert_accounts,
+    upsert_ticket_details,
     upsert_tickets,
     upsert_technicians,
     upsert_users,
@@ -23,6 +25,9 @@ def test_initialize_db_creates_core_tables(tmp_path: Path) -> None:
     assert 'users' in names
     assert 'ticket_comments' in names
     assert 'sync_state' in names
+    assert 'ticket_details' in names
+    assert 'ticket_logs' in names
+    assert 'ticket_documents' in names
 
 
 def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:
@@ -39,7 +44,7 @@ def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:
             "user_id": 2,
             "tech_id": 3,
             "subject": "Printer is haunted",
-            "status": "open",
+            "status": "Open",
             "priority_name": "High",
             "creation_category_name": "Hardware",
             "created_time": "2026-03-18T01:00:00Z",
@@ -47,15 +52,36 @@ def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:
         }],
         synced_at="2026-03-19T01:00:00Z",
     )
+    upsert_ticket_details(
+        db,
+        [{
+            "id": 4,
+            "workpad": "secret work",
+            "ticketlogs": [{"id": 99, "log_type": "Initial Post", "record_date": "2026-03-18T01:00:00Z", "plain_note": "printer broken"}],
+            "timelogs": [],
+            "attachments": [],
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+    replace_ticket_documents(
+        db,
+        [{"doc_id": "ticket:4", "ticket_id": 4, "status": "Open", "account": "Acme", "user_name": "User One", "technician": "Tech One", "updated_at": "2026-03-19T01:00:00Z", "text": "hello", "metadata": {}}],
+        synced_at="2026-03-19T01:00:00Z",
+    )
     with connect(db) as conn:
         ticket = conn.execute("SELECT subject, priority, category FROM tickets WHERE id = '4'").fetchone()
         user = conn.execute("SELECT display_name FROM users WHERE id = '2'").fetchone()
         tech = conn.execute("SELECT display_name FROM technicians WHERE id = '3'").fetchone()
+        detail = conn.execute("SELECT workpad, ticketlogs_count FROM ticket_details WHERE ticket_id = '4'").fetchone()
+        doc = conn.execute("SELECT text FROM ticket_documents WHERE doc_id = 'ticket:4'").fetchone()
     assert ticket["subject"] == "Printer is haunted"
     assert ticket["priority"] == "High"
     assert ticket["category"] == "Hardware"
     assert user["display_name"] == "User One"
     assert tech["display_name"] == "Tech One"
+    assert detail["workpad"] == "secret work"
+    assert detail["ticketlogs_count"] == 1
+    assert doc["text"] == "hello"
 
 
 def test_ingest_run_roundtrip(tmp_path: Path) -> None:

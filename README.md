@@ -116,12 +116,25 @@ Important conservative controls include:
 
 - `sherpamind discover-orgs`
 - `sherpamind seed`
+- `sherpamind watch`
+- `sherpamind sync-hot-open`
+- `sherpamind sync-warm-closed`
+- `sherpamind sync-cold-closed-audit`
+- `sherpamind enrich-priority-ticket-details`
+- `sherpamind materialize-ticket-docs`
 - `sherpamind dataset-summary`
+- `sherpamind insight-snapshot`
 - `sherpamind report-ticket-counts`
 - `sherpamind report-status-counts`
 - `sherpamind report-priority-counts`
 - `sherpamind report-technician-counts`
+- `sherpamind report-ticket-log-types`
 - `sherpamind recent-tickets`
+- `sherpamind open-ticket-ages`
+- `sherpamind recent-account-activity`
+- `sherpamind recent-technician-load`
+- `sherpamind search-ticket-docs`
+- `sherpamind export-ticket-docs`
 
 ## Delta sync direction
 

@@ -11,8 +11,10 @@ from sherpamind.analysis import (
     list_ticket_counts_by_priority,
     list_ticket_counts_by_status,
     list_ticket_counts_by_technician,
+    list_ticket_log_types,
+    search_ticket_documents,
 )
-from sherpamind.db import initialize_db, upsert_accounts, upsert_tickets, upsert_technicians, upsert_users
+from sherpamind.db import initialize_db, replace_ticket_documents, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
 
 
 def seed_fixture(db: Path) -> None:
@@ -56,6 +58,16 @@ def seed_fixture(db: Path) -> None:
         ],
         synced_at="2026-03-19T01:00:00Z",
     )
+    upsert_ticket_details(
+        db,
+        [{"id": 101, "ticketlogs": [{"id": 5001, "log_type": "Initial Post", "plain_note": "printer broken", "record_date": "2026-03-18T01:00:00Z"}], "timelogs": [], "attachments": []}],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+    replace_ticket_documents(
+        db,
+        [{"doc_id": "ticket:101", "ticket_id": 101, "status": "Open", "account": "Acme", "user_name": "Alice User", "technician": "Tech One", "updated_at": "2026-03-19T03:00:00Z", "text": "Printer issue A for Acme", "metadata": {}}],
+        synced_at="2026-03-19T01:00:00Z",
+    )
 
 
 def test_analysis_reports(tmp_path: Path) -> None:
@@ -65,21 +77,26 @@ def test_analysis_reports(tmp_path: Path) -> None:
     by_status = list_ticket_counts_by_status(db)
     by_priority = list_ticket_counts_by_priority(db)
     by_technician = list_ticket_counts_by_technician(db)
+    by_log_type = list_ticket_log_types(db)
     recent = list_recent_tickets(db, limit=2)
     open_ages = list_open_ticket_ages(db, limit=2)
     recent_accounts = list_recent_account_activity(db, days=30, limit=5)
     recent_techs = list_technician_recent_load(db, days=30, limit=5)
     summary = get_dataset_summary(db)
     snapshot = get_insight_snapshot(db)
+    search = search_ticket_documents(db, 'printer', limit=5)
 
     assert by_account[0]["account"] == "Acme"
     assert by_account[0]["ticket_count"] == 2
     assert {row["status"]: row["ticket_count"] for row in by_status}["Open"] == 2
     assert {row["priority"]: row["ticket_count"] for row in by_priority}["High"] == 2
     assert by_technician[0]["ticket_count"] >= 1
+    assert by_log_type[0]["log_type"] == "Initial Post"
     assert recent[0]["subject"] == "Issue A"
-    assert open_ages[0]["status"] == "Open" if "status" in open_ages[0] else True
+    assert open_ages[0]["status"] == "Open"
     assert recent_accounts[0]["ticket_count"] >= 1
     assert recent_techs[0]["ticket_count"] >= 1
     assert summary["counts"]["tickets"] == 3
+    assert summary["counts"]["ticket_logs"] == 1
     assert snapshot["dataset_summary"]["counts"]["tickets"] == 3
+    assert search[0]["doc_id"] == "ticket:101"

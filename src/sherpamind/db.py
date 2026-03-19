@@ -56,6 +56,50 @@ CREATE TABLE IF NOT EXISTS tickets (
     FOREIGN KEY(assigned_technician_id) REFERENCES technicians(id)
 );
 
+CREATE TABLE IF NOT EXISTS ticket_details (
+    ticket_id TEXT PRIMARY KEY,
+    workpad TEXT,
+    note TEXT,
+    initial_response TEXT,
+    sla_response_date TEXT,
+    sla_complete_date TEXT,
+    waiting_date TEXT,
+    next_step_date TEXT,
+    ticketlogs_count INTEGER NOT NULL DEFAULT 0,
+    timelogs_count INTEGER NOT NULL DEFAULT 0,
+    attachments_count INTEGER NOT NULL DEFAULT 0,
+    raw_json TEXT NOT NULL,
+    synced_at TEXT NOT NULL,
+    FOREIGN KEY(ticket_id) REFERENCES tickets(id)
+);
+
+CREATE TABLE IF NOT EXISTS ticket_logs (
+    id TEXT PRIMARY KEY,
+    ticket_id TEXT NOT NULL,
+    log_type TEXT,
+    record_date TEXT,
+    note TEXT,
+    plain_note TEXT,
+    user_id TEXT,
+    user_email TEXT,
+    user_name TEXT,
+    is_tech_only INTEGER,
+    is_waiting INTEGER,
+    raw_json TEXT NOT NULL,
+    synced_at TEXT NOT NULL,
+    FOREIGN KEY(ticket_id) REFERENCES tickets(id)
+);
+
+CREATE TABLE IF NOT EXISTS ticket_time_logs (
+    id TEXT PRIMARY KEY,
+    ticket_id TEXT NOT NULL,
+    record_date TEXT,
+    note TEXT,
+    raw_json TEXT NOT NULL,
+    synced_at TEXT NOT NULL,
+    FOREIGN KEY(ticket_id) REFERENCES tickets(id)
+);
+
 CREATE TABLE IF NOT EXISTS ticket_comments (
     id TEXT PRIMARY KEY,
     ticket_id TEXT NOT NULL,
@@ -63,6 +107,20 @@ CREATE TABLE IF NOT EXISTS ticket_comments (
     author_id TEXT,
     created_at TEXT,
     body TEXT,
+    raw_json TEXT NOT NULL,
+    synced_at TEXT NOT NULL,
+    FOREIGN KEY(ticket_id) REFERENCES tickets(id)
+);
+
+CREATE TABLE IF NOT EXISTS ticket_documents (
+    doc_id TEXT PRIMARY KEY,
+    ticket_id TEXT NOT NULL,
+    status TEXT,
+    account TEXT,
+    user_name TEXT,
+    technician TEXT,
+    updated_at TEXT,
+    text TEXT NOT NULL,
     raw_json TEXT NOT NULL,
     synced_at TEXT NOT NULL,
     FOREIGN KEY(ticket_id) REFERENCES tickets(id)
@@ -121,7 +179,7 @@ def finish_ingest_run(db_path: Path, run_id: int, status: str, notes: str | None
         conn.commit()
 
 
-def _json(value: dict[str, Any]) -> str:
+def _json(value: Any) -> str:
     return json.dumps(value, sort_keys=True)
 
 
@@ -258,3 +316,152 @@ def upsert_tickets(db_path: Path, tickets: list[dict[str, Any]], synced_at: str 
             )
         conn.commit()
     return len(tickets)
+
+
+def upsert_ticket_details(db_path: Path, ticket_details: list[dict[str, Any]], synced_at: str | None = None) -> int:
+    synced_at = synced_at or now_iso()
+    with connect(db_path) as conn:
+        for detail in ticket_details:
+            ticket_id = str(detail["id"])
+            attachments = detail.get("attachments") if isinstance(detail.get("attachments"), list) else []
+            ticketlogs = detail.get("ticketlogs") if isinstance(detail.get("ticketlogs"), list) else []
+            timelogs = detail.get("timelogs") if isinstance(detail.get("timelogs"), list) else []
+            conn.execute(
+                """
+                INSERT INTO ticket_details(
+                    ticket_id, workpad, note, initial_response, sla_response_date, sla_complete_date,
+                    waiting_date, next_step_date, ticketlogs_count, timelogs_count, attachments_count,
+                    raw_json, synced_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ticket_id) DO UPDATE SET
+                    workpad = excluded.workpad,
+                    note = excluded.note,
+                    initial_response = excluded.initial_response,
+                    sla_response_date = excluded.sla_response_date,
+                    sla_complete_date = excluded.sla_complete_date,
+                    waiting_date = excluded.waiting_date,
+                    next_step_date = excluded.next_step_date,
+                    ticketlogs_count = excluded.ticketlogs_count,
+                    timelogs_count = excluded.timelogs_count,
+                    attachments_count = excluded.attachments_count,
+                    raw_json = excluded.raw_json,
+                    synced_at = excluded.synced_at
+                """,
+                (
+                    ticket_id,
+                    detail.get("workpad"),
+                    detail.get("note"),
+                    str(detail.get("initial_response")) if detail.get("initial_response") is not None else None,
+                    detail.get("sla_response_date"),
+                    detail.get("sla_complete_date"),
+                    detail.get("waiting_date"),
+                    detail.get("next_step_date"),
+                    len(ticketlogs),
+                    len(timelogs),
+                    len(attachments),
+                    _json(detail),
+                    synced_at,
+                ),
+            )
+
+            for log in ticketlogs:
+                log_id = str(log["id"])
+                user_name = " ".join(part for part in [log.get("user_firstname"), log.get("user_lastname")] if part) or None
+                conn.execute(
+                    """
+                    INSERT INTO ticket_logs(
+                        id, ticket_id, log_type, record_date, note, plain_note, user_id, user_email, user_name,
+                        is_tech_only, is_waiting, raw_json, synced_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        ticket_id = excluded.ticket_id,
+                        log_type = excluded.log_type,
+                        record_date = excluded.record_date,
+                        note = excluded.note,
+                        plain_note = excluded.plain_note,
+                        user_id = excluded.user_id,
+                        user_email = excluded.user_email,
+                        user_name = excluded.user_name,
+                        is_tech_only = excluded.is_tech_only,
+                        is_waiting = excluded.is_waiting,
+                        raw_json = excluded.raw_json,
+                        synced_at = excluded.synced_at
+                    """,
+                    (
+                        log_id,
+                        ticket_id,
+                        log.get("log_type"),
+                        log.get("record_date"),
+                        log.get("note"),
+                        log.get("plain_note"),
+                        str(log.get("user_id")) if log.get("user_id") is not None else None,
+                        log.get("user_email"),
+                        user_name,
+                        1 if log.get("is_tech_only") else 0,
+                        1 if log.get("is_waiting") else 0,
+                        _json(log),
+                        synced_at,
+                    ),
+                )
+
+            for timelog in timelogs:
+                if timelog.get("id") is None:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO ticket_time_logs(id, ticket_id, record_date, note, raw_json, synced_at)
+                    VALUES(?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        ticket_id = excluded.ticket_id,
+                        record_date = excluded.record_date,
+                        note = excluded.note,
+                        raw_json = excluded.raw_json,
+                        synced_at = excluded.synced_at
+                    """,
+                    (
+                        str(timelog["id"]),
+                        ticket_id,
+                        timelog.get("record_date"),
+                        timelog.get("note"),
+                        _json(timelog),
+                        synced_at,
+                    ),
+                )
+        conn.commit()
+    return len(ticket_details)
+
+
+def replace_ticket_documents(db_path: Path, docs: list[dict[str, Any]], synced_at: str | None = None) -> int:
+    synced_at = synced_at or now_iso()
+    with connect(db_path) as conn:
+        for doc in docs:
+            conn.execute(
+                """
+                INSERT INTO ticket_documents(doc_id, ticket_id, status, account, user_name, technician, updated_at, text, raw_json, synced_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(doc_id) DO UPDATE SET
+                    ticket_id = excluded.ticket_id,
+                    status = excluded.status,
+                    account = excluded.account,
+                    user_name = excluded.user_name,
+                    technician = excluded.technician,
+                    updated_at = excluded.updated_at,
+                    text = excluded.text,
+                    raw_json = excluded.raw_json,
+                    synced_at = excluded.synced_at
+                """,
+                (
+                    doc["doc_id"],
+                    str(doc["ticket_id"]),
+                    doc.get("status"),
+                    doc.get("account"),
+                    doc.get("user_name"),
+                    doc.get("technician"),
+                    doc.get("updated_at"),
+                    doc["text"],
+                    _json(doc),
+                    synced_at,
+                ),
+            )
+        conn.commit()
+    return len(docs)

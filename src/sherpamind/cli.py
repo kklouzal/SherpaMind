@@ -17,9 +17,12 @@ from .analysis import (
     list_ticket_counts_by_priority,
     list_ticket_counts_by_status,
     list_ticket_counts_by_technician,
+    list_ticket_log_types,
+    search_ticket_documents,
 )
 from .client import SherpaDeskClient
-from .documents import export_ticket_documents
+from .documents import export_ticket_documents, materialize_ticket_documents
+from .enrichment import enrich_priority_ticket_details
 from .ingest import (
     seed_all,
     sync_cold_closed_audit,
@@ -105,6 +108,21 @@ def sync_cold_closed() -> None:
     print(json.dumps(result.__dict__, indent=2))
 
 
+@app.command("enrich-priority-ticket-details")
+def enrich_priority_details(limit: int = 50, materialize_docs: bool = True) -> None:
+    settings = load_settings()
+    result = enrich_priority_ticket_details(settings, limit=limit, materialize_docs=materialize_docs)
+    print(json.dumps(result.__dict__, indent=2))
+
+
+@app.command("materialize-ticket-docs")
+def materialize_docs(limit: int = 0) -> None:
+    settings = load_settings()
+    effective_limit = None if limit <= 0 else limit
+    result = materialize_ticket_documents(settings.db_path, limit=effective_limit)
+    print(json.dumps(result, indent=2))
+
+
 @app.command("dataset-summary")
 def dataset_summary() -> None:
     settings = load_settings()
@@ -145,6 +163,13 @@ def report_technician_counts(limit: int = 20) -> None:
     print(json.dumps(rows, indent=2))
 
 
+@app.command("report-ticket-log-types")
+def report_ticket_log_types(limit: int = 20) -> None:
+    settings = load_settings()
+    rows = list_ticket_log_types(settings.db_path, limit=limit)
+    print(json.dumps(rows, indent=2))
+
+
 @app.command("recent-tickets")
 def recent_tickets(limit: int = 20) -> None:
     settings = load_settings()
@@ -170,6 +195,13 @@ def recent_account_activity(days: int = 7, limit: int = 20) -> None:
 def recent_technician_load(days: int = 7, limit: int = 20) -> None:
     settings = load_settings()
     rows = list_technician_recent_load(settings.db_path, days=days, limit=limit)
+    print(json.dumps(rows, indent=2))
+
+
+@app.command("search-ticket-docs")
+def search_docs(query: str, limit: int = 20) -> None:
+    settings = load_settings()
+    rows = search_ticket_documents(settings.db_path, query=query, limit=limit)
     print(json.dumps(rows, indent=2))
 
 
