@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+src/sherpamind/__init__.py
+src/sherpamind/analysis.py
+src/sherpamind/cli.py
+src/sherpamind/client.py
+src/sherpamind/db.py
+src/sherpamind/ingest.py
+src/sherpamind/settings.py
+src/sherpamind/watch.py
+src/sherpamind.egg-info/PKG-INFO
+src/sherpamind.egg-info/SOURCES.txt
+src/sherpamind.egg-info/dependency_links.txt
+src/sherpamind.egg-info/entry_points.txt
+src/sherpamind.egg-info/requires.txt
+src/sherpamind.egg-info/top_level.txt
+tests/test_db.py
