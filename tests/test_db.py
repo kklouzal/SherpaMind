@@ -4,6 +4,7 @@ from sherpamind.db import (
     connect,
     finish_ingest_run,
     initialize_db,
+    replace_ticket_document_chunks,
     replace_ticket_documents,
     start_ingest_run,
     upsert_accounts,
@@ -27,7 +28,9 @@ def test_initialize_db_creates_core_tables(tmp_path: Path) -> None:
     assert 'sync_state' in names
     assert 'ticket_details' in names
     assert 'ticket_logs' in names
+    assert 'ticket_attachments' in names
     assert 'ticket_documents' in names
+    assert 'ticket_document_chunks' in names
 
 
 def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:
@@ -59,13 +62,18 @@ def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:
             "workpad": "secret work",
             "ticketlogs": [{"id": 99, "log_type": "Initial Post", "record_date": "2026-03-18T01:00:00Z", "plain_note": "printer broken"}],
             "timelogs": [],
-            "attachments": [],
+            "attachments": [{"id": "a1", "name": "shot.png", "url": "https://example/shot.png", "size": 1234, "date": "2026-03-18T01:00:00Z"}],
         }],
         synced_at="2026-03-19T01:00:00Z",
     )
     replace_ticket_documents(
         db,
-        [{"doc_id": "ticket:4", "ticket_id": 4, "status": "Open", "account": "Acme", "user_name": "User One", "technician": "Tech One", "updated_at": "2026-03-19T01:00:00Z", "text": "hello", "metadata": {}}],
+        [{"doc_id": "ticket:4", "ticket_id": 4, "status": "Open", "account": "Acme", "user_name": "User One", "technician": "Tech One", "updated_at": "2026-03-19T01:00:00Z", "text": "hello", "metadata": {}, "content_hash": "h1"}],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+    replace_ticket_document_chunks(
+        db,
+        [{"chunk_id": "ticket:4:chunk:0", "doc_id": "ticket:4", "ticket_id": 4, "chunk_index": 0, "text": "hello", "content_hash": "h1"}],
         synced_at="2026-03-19T01:00:00Z",
     )
     with connect(db) as conn:
@@ -73,7 +81,9 @@ def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:
         user = conn.execute("SELECT display_name FROM users WHERE id = '2'").fetchone()
         tech = conn.execute("SELECT display_name FROM technicians WHERE id = '3'").fetchone()
         detail = conn.execute("SELECT workpad, ticketlogs_count FROM ticket_details WHERE ticket_id = '4'").fetchone()
+        attachment = conn.execute("SELECT name, size FROM ticket_attachments WHERE ticket_id = '4'").fetchone()
         doc = conn.execute("SELECT text FROM ticket_documents WHERE doc_id = 'ticket:4'").fetchone()
+        chunk = conn.execute("SELECT text FROM ticket_document_chunks WHERE chunk_id = 'ticket:4:chunk:0'").fetchone()
     assert ticket["subject"] == "Printer is haunted"
     assert ticket["priority"] == "High"
     assert ticket["category"] == "Hardware"
@@ -81,7 +91,10 @@ def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:
     assert tech["display_name"] == "Tech One"
     assert detail["workpad"] == "secret work"
     assert detail["ticketlogs_count"] == 1
+    assert attachment["name"] == "shot.png"
+    assert attachment["size"] == 1234
     assert doc["text"] == "hello"
+    assert chunk["text"] == "hello"
 
 
 def test_ingest_run_roundtrip(tmp_path: Path) -> None:

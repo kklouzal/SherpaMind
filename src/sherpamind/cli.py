@@ -13,11 +13,13 @@ from .analysis import (
     list_recent_account_activity,
     list_recent_tickets,
     list_technician_recent_load,
+    list_ticket_attachment_summary,
     list_ticket_counts_by_account,
     list_ticket_counts_by_priority,
     list_ticket_counts_by_status,
     list_ticket_counts_by_technician,
     list_ticket_log_types,
+    search_ticket_document_chunks,
     search_ticket_documents,
 )
 from .client import SherpaDeskClient
@@ -118,6 +120,7 @@ def enrich_priority_details(limit: int = 50, materialize_docs: bool = True) -> N
 @app.command("materialize-ticket-docs")
 def materialize_docs(limit: int = 0) -> None:
     settings = load_settings()
+    initialize_db(settings.db_path)
     effective_limit = None if limit <= 0 else limit
     result = materialize_ticket_documents(settings.db_path, limit=effective_limit)
     print(json.dumps(result, indent=2))
@@ -170,6 +173,13 @@ def report_ticket_log_types(limit: int = 20) -> None:
     print(json.dumps(rows, indent=2))
 
 
+@app.command("report-attachment-summary")
+def report_attachment_summary(limit: int = 20) -> None:
+    settings = load_settings()
+    rows = list_ticket_attachment_summary(settings.db_path, limit=limit)
+    print(json.dumps(rows, indent=2))
+
+
 @app.command("recent-tickets")
 def recent_tickets(limit: int = 20) -> None:
     settings = load_settings()
@@ -202,6 +212,13 @@ def recent_technician_load(days: int = 7, limit: int = 20) -> None:
 def search_docs(query: str, limit: int = 20) -> None:
     settings = load_settings()
     rows = search_ticket_documents(settings.db_path, query=query, limit=limit)
+    print(json.dumps(rows, indent=2))
+
+
+@app.command("search-ticket-chunks")
+def search_chunks(query: str, limit: int = 20) -> None:
+    settings = load_settings()
+    rows = search_ticket_document_chunks(settings.db_path, query=query, limit=limit)
     print(json.dumps(rows, indent=2))
 
 

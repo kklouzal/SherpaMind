@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from sherpamind.db import initialize_db, replace_ticket_documents, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
-from sherpamind.documents import build_ticket_documents, export_ticket_documents, materialize_ticket_documents
+from sherpamind.db import initialize_db, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
+from sherpamind.documents import build_ticket_document_chunks, build_ticket_documents, export_ticket_documents, materialize_ticket_documents
 
 
 def seed_fixture(db: Path) -> None:
@@ -36,7 +36,7 @@ def seed_fixture(db: Path) -> None:
             "initial_response": True,
             "ticketlogs": [{"id": 501, "log_type": "Initial Post", "record_date": "2026-03-18T01:00:00Z", "plain_note": "printer broken"}],
             "timelogs": [],
-            "attachments": [],
+            "attachments": [{"id": "a1", "name": "shot.png", "url": "https://example/shot.png", "size": 1234, "date": "2026-03-18T01:00:00Z"}],
         }],
         synced_at="2026-03-19T01:00:00Z",
     )
@@ -50,9 +50,15 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Issue A" in docs[0]["text"]
     assert "Internal note" in docs[0]["text"]
     assert "printer broken" in docs[0]["text"]
+    assert "Attachments (metadata only)" in docs[0]["text"]
+    assert docs[0]["metadata"]["attachments"][0]["name"] == "shot.png"
+
+    chunks = build_ticket_document_chunks(docs)
+    assert chunks[0]["chunk_id"].startswith("ticket:101:chunk:")
 
     materialized = materialize_ticket_documents(db)
     assert materialized["status"] == "ok"
+    assert materialized["chunk_count"] >= 1
 
     output = tmp_path / "ticket-docs.jsonl"
     result = export_ticket_documents(db, output)

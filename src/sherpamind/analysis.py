@@ -179,6 +179,26 @@ def list_ticket_log_types(db_path: Path, limit: int = 20) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def list_ticket_attachment_summary(db_path: Path, limit: int = 20) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT t.id AS ticket_id,
+                   t.subject,
+                   COUNT(*) AS attachment_count,
+                   SUM(COALESCE(ta.size, 0)) AS total_attachment_bytes,
+                   MAX(ta.recorded_at) AS latest_attachment_at
+            FROM ticket_attachments ta
+            JOIN tickets t ON t.id = ta.ticket_id
+            GROUP BY t.id, t.subject
+            ORDER BY attachment_count DESC, total_attachment_bytes DESC, t.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def search_ticket_documents(db_path: Path, query: str, limit: int = 20) -> list[dict]:
     needle = f"%{query}%"
     with connect(db_path) as conn:
@@ -198,6 +218,22 @@ def search_ticket_documents(db_path: Path, query: str, limit: int = 20) -> list[
     return [dict(row) for row in rows]
 
 
+def search_ticket_document_chunks(db_path: Path, query: str, limit: int = 20) -> list[dict]:
+    needle = f"%{query}%"
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT chunk_id, doc_id, ticket_id, chunk_index, text
+            FROM ticket_document_chunks
+            WHERE text LIKE ? COLLATE NOCASE
+            ORDER BY ticket_id DESC, chunk_index ASC
+            LIMIT ?
+            """,
+            (needle, limit),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_dataset_summary(db_path: Path) -> dict:
     with connect(db_path) as conn:
         counts = {}
@@ -207,9 +243,11 @@ def get_dataset_summary(db_path: Path) -> dict:
             "technicians",
             "tickets",
             "ticket_details",
+            "ticket_attachments",
             "ticket_logs",
             "ticket_time_logs",
             "ticket_documents",
+            "ticket_document_chunks",
             "ticket_comments",
             "ingest_runs",
         ]:
@@ -234,5 +272,6 @@ def get_insight_snapshot(db_path: Path) -> dict:
         "recent_account_activity_7d": list_recent_account_activity(db_path, days=7, limit=10),
         "recent_technician_load_7d": list_technician_recent_load(db_path, days=7, limit=10),
         "ticket_log_types": list_ticket_log_types(db_path, limit=10),
+        "attachment_summary": list_ticket_attachment_summary(db_path, limit=10),
         "recent_tickets": list_recent_tickets(db_path, limit=10),
     }

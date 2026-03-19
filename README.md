@@ -64,18 +64,23 @@ Poll for newly created tickets and emit actionable summaries.
 
 ## Current status
 
-Repository scaffold, caution docs, request-pacing foundations, hybrid-storage direction, and a first real seed slice are now in place.
-Live auth/org discovery has been verified, and the implemented seed path currently ingests:
-- accounts
-- users
-- technicians
-- tickets
+SherpaMind is now beyond scaffold stage and has working live read-only integration against the real SherpaDesk account.
 
-Not implemented yet:
-- ticket comments/notes/history ingest
-- delta sync
-- retrieval document/index build pipeline
-- watcher polling/alerts
+Implemented today:
+- initial live seed into SQLite for accounts, users, technicians, and tickets
+- tiered delta lanes for hot open tickets, warm recently closed tickets, and cold rolling closed audits
+- watcher polling with local open-ticket state tracking
+- selective priority-ticket detail enrichment
+- ticket log ingestion from single-ticket detail responses
+- attachment metadata ingestion only (no blob download by default)
+- materialized ticket documents and deterministic ticket-document chunks for retrieval/query use
+- structured insight/report commands plus text/chunk search commands
+
+Still not implemented:
+- broad full-history detail enrichment across the entire corpus
+- semantic/vector index sidecar
+- native outbound watcher alert routing
+- richer attachment/image analysis flows (intentionally deferred and opt-in only)
 
 ## Retrieval / OpenClaw access strategy
 
@@ -129,11 +134,13 @@ Important conservative controls include:
 - `sherpamind report-priority-counts`
 - `sherpamind report-technician-counts`
 - `sherpamind report-ticket-log-types`
+- `sherpamind report-attachment-summary`
 - `sherpamind recent-tickets`
 - `sherpamind open-ticket-ages`
 - `sherpamind recent-account-activity`
 - `sherpamind recent-technician-load`
 - `sherpamind search-ticket-docs`
+- `sherpamind search-ticket-chunks`
 - `sherpamind export-ticket-docs`
 
 ## Delta sync direction
@@ -150,7 +157,7 @@ See `docs/delta-sync-strategy.md` for the reasoning and proposed lane design.
 
 ## Open questions
 
-- Exact SherpaDesk authentication details to use for the API client
-- Exact endpoint set and pagination behavior required for tickets, users, and accounts
-- Preferred notification channel for new-ticket watcher alerts
-- Whether SQLite alone is sufficient long-term or whether an adjacent vector/search layer is desirable later
+- Best long-term breadth/cadence for full-corpus detail enrichment without wasting API budget
+- Whether SherpaDesk exposes additional useful comment/history/detail surfaces beyond the currently captured ticket detail + ticket log structures
+- Preferred notification channel for native watcher alerts
+- When to introduce the semantic/vector sidecar on top of the current SQLite + materialized-doc/chunk design

@@ -73,6 +73,18 @@ CREATE TABLE IF NOT EXISTS ticket_details (
     FOREIGN KEY(ticket_id) REFERENCES tickets(id)
 );
 
+CREATE TABLE IF NOT EXISTS ticket_attachments (
+    id TEXT PRIMARY KEY,
+    ticket_id TEXT NOT NULL,
+    name TEXT,
+    url TEXT,
+    size INTEGER,
+    recorded_at TEXT,
+    raw_json TEXT NOT NULL,
+    synced_at TEXT NOT NULL,
+    FOREIGN KEY(ticket_id) REFERENCES tickets(id)
+);
+
 CREATE TABLE IF NOT EXISTS ticket_logs (
     id TEXT PRIMARY KEY,
     ticket_id TEXT NOT NULL,
@@ -122,7 +134,20 @@ CREATE TABLE IF NOT EXISTS ticket_documents (
     updated_at TEXT,
     text TEXT NOT NULL,
     raw_json TEXT NOT NULL,
+    content_hash TEXT,
     synced_at TEXT NOT NULL,
+    FOREIGN KEY(ticket_id) REFERENCES tickets(id)
+);
+
+CREATE TABLE IF NOT EXISTS ticket_document_chunks (
+    chunk_id TEXT PRIMARY KEY,
+    doc_id TEXT NOT NULL,
+    ticket_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    content_hash TEXT,
+    synced_at TEXT NOT NULL,
+    FOREIGN KEY(doc_id) REFERENCES ticket_documents(doc_id),
     FOREIGN KEY(ticket_id) REFERENCES tickets(id)
 );
 
@@ -154,9 +179,19 @@ def connect(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return {row['name'] for row in rows}
+
+
 def initialize_db(db_path: Path) -> None:
     with connect(db_path) as conn:
         conn.executescript(SCHEMA)
+        # Lightweight schema evolution for older local DBs created before new columns/tables existed.
+        if 'ticket_documents' in {row['name'] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+            ticket_doc_cols = _table_columns(conn, 'ticket_documents')
+            if 'content_hash' not in ticket_doc_cols:
+                conn.execute("ALTER TABLE ticket_documents ADD COLUMN content_hash TEXT")
         conn.commit()
 
 
@@ -364,6 +399,33 @@ def upsert_ticket_details(db_path: Path, ticket_details: list[dict[str, Any]], s
                 ),
             )
 
+            conn.execute("DELETE FROM ticket_attachments WHERE ticket_id = ?", (ticket_id,))
+            for attachment in attachments:
+                conn.execute(
+                    """
+                    INSERT INTO ticket_attachments(id, ticket_id, name, url, size, recorded_at, raw_json, synced_at)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        ticket_id = excluded.ticket_id,
+                        name = excluded.name,
+                        url = excluded.url,
+                        size = excluded.size,
+                        recorded_at = excluded.recorded_at,
+                        raw_json = excluded.raw_json,
+                        synced_at = excluded.synced_at
+                    """,
+                    (
+                        str(attachment["id"]),
+                        ticket_id,
+                        attachment.get("name"),
+                        attachment.get("url"),
+                        attachment.get("size"),
+                        attachment.get("date"),
+                        _json(attachment),
+                        synced_at,
+                    ),
+                )
+
             for log in ticketlogs:
                 log_id = str(log["id"])
                 user_name = " ".join(part for part in [log.get("user_firstname"), log.get("user_lastname")] if part) or None
@@ -434,21 +496,15 @@ def upsert_ticket_details(db_path: Path, ticket_details: list[dict[str, Any]], s
 def replace_ticket_documents(db_path: Path, docs: list[dict[str, Any]], synced_at: str | None = None) -> int:
     synced_at = synced_at or now_iso()
     with connect(db_path) as conn:
+        if docs:
+            ticket_ids = sorted({str(doc["ticket_id"]) for doc in docs})
+            placeholders = ",".join("?" for _ in ticket_ids)
+            conn.execute(f"DELETE FROM ticket_documents WHERE ticket_id IN ({placeholders})", ticket_ids)
         for doc in docs:
             conn.execute(
                 """
-                INSERT INTO ticket_documents(doc_id, ticket_id, status, account, user_name, technician, updated_at, text, raw_json, synced_at)
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(doc_id) DO UPDATE SET
-                    ticket_id = excluded.ticket_id,
-                    status = excluded.status,
-                    account = excluded.account,
-                    user_name = excluded.user_name,
-                    technician = excluded.technician,
-                    updated_at = excluded.updated_at,
-                    text = excluded.text,
-                    raw_json = excluded.raw_json,
-                    synced_at = excluded.synced_at
+                INSERT INTO ticket_documents(doc_id, ticket_id, status, account, user_name, technician, updated_at, text, raw_json, content_hash, synced_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     doc["doc_id"],
@@ -460,8 +516,36 @@ def replace_ticket_documents(db_path: Path, docs: list[dict[str, Any]], synced_a
                     doc.get("updated_at"),
                     doc["text"],
                     _json(doc),
+                    doc.get("content_hash"),
                     synced_at,
                 ),
             )
         conn.commit()
     return len(docs)
+
+
+def replace_ticket_document_chunks(db_path: Path, chunks: list[dict[str, Any]], synced_at: str | None = None) -> int:
+    synced_at = synced_at or now_iso()
+    with connect(db_path) as conn:
+        if chunks:
+            ticket_ids = sorted({str(chunk["ticket_id"]) for chunk in chunks})
+            placeholders = ",".join("?" for _ in ticket_ids)
+            conn.execute(f"DELETE FROM ticket_document_chunks WHERE ticket_id IN ({placeholders})", ticket_ids)
+        for chunk in chunks:
+            conn.execute(
+                """
+                INSERT INTO ticket_document_chunks(chunk_id, doc_id, ticket_id, chunk_index, text, content_hash, synced_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    chunk["chunk_id"],
+                    chunk["doc_id"],
+                    str(chunk["ticket_id"]),
+                    int(chunk["chunk_index"]),
+                    chunk["text"],
+                    chunk.get("content_hash"),
+                    synced_at,
+                ),
+            )
+        conn.commit()
+    return len(chunks)

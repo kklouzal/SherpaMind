@@ -1,9 +1,35 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
-from .db import connect, now_iso, replace_ticket_documents
+from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket_documents
+
+
+def _content_hash(text: str) -> str:
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def _chunk_text(text: str, target_chars: int = 1800) -> list[str]:
+    if len(text) <= target_chars:
+        return [text]
+    paragraphs = text.split('\n')
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for para in paragraphs:
+        para_len = len(para) + 1
+        if current and current_len + para_len > target_chars:
+            chunks.append('\n'.join(current).strip())
+            current = [para]
+            current_len = para_len
+        else:
+            current.append(para)
+            current_len += para_len
+    if current:
+        chunks.append('\n'.join(current).strip())
+    return [chunk for chunk in chunks if chunk]
 
 
 def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict]:
@@ -53,7 +79,18 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                        ORDER BY record_date DESC, id DESC
                        LIMIT 5
                    ) tl
-               ) AS recent_log_types
+               ) AS recent_log_types,
+               (
+                   SELECT json_group_array(json_object(
+                       'id', ta.id,
+                       'name', ta.name,
+                       'size', ta.size,
+                       'recorded_at', ta.recorded_at,
+                       'url', ta.url
+                   ))
+                   FROM ticket_attachments ta
+                   WHERE ta.ticket_id = t.id
+               ) AS attachment_metadata_json
         FROM tickets t
         LEFT JOIN accounts a ON a.id = t.account_id
         LEFT JOIN users u ON u.id = t.user_id
@@ -115,6 +152,20 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         if record.get('resolution_category_name'):
             text_parts.append(f"Resolution category: {record['resolution_category_name']}")
 
+        attachment_metadata = []
+        if record.get('attachment_metadata_json'):
+            try:
+                attachment_metadata = json.loads(record['attachment_metadata_json']) or []
+            except json.JSONDecodeError:
+                attachment_metadata = []
+        if attachment_metadata:
+            text_parts.append(
+                "Attachments (metadata only): " + ", ".join(
+                    f"{item.get('name')} [{item.get('size')} bytes]" for item in attachment_metadata[:5]
+                )
+            )
+
+        text = '\n'.join(text_parts)
         docs.append(
             {
                 "doc_id": f"ticket:{record['id']}",
@@ -124,7 +175,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                 "user_name": record.get("user_name"),
                 "technician": record.get("technician"),
                 "updated_at": record.get("updated_at"),
-                "text": "\n".join(text_parts),
+                "text": text,
+                "content_hash": _content_hash(text),
                 "metadata": {
                     "priority": record.get("priority"),
                     "category": record.get("category") or record.get("creation_category_name"),
@@ -132,20 +184,42 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "ticketlogs_count": record.get("ticketlogs_count"),
                     "timelogs_count": record.get("timelogs_count"),
                     "attachments_count": record.get("attachments_count"),
+                    "attachments": attachment_metadata,
                 },
             }
         )
     return docs
 
 
+def build_ticket_document_chunks(docs: list[dict]) -> list[dict]:
+    chunks: list[dict] = []
+    for doc in docs:
+        parts = _chunk_text(doc['text'])
+        for idx, chunk_text in enumerate(parts):
+            chunks.append(
+                {
+                    'chunk_id': f"{doc['doc_id']}:chunk:{idx}",
+                    'doc_id': doc['doc_id'],
+                    'ticket_id': doc['ticket_id'],
+                    'chunk_index': idx,
+                    'text': chunk_text,
+                    'content_hash': _content_hash(chunk_text),
+                }
+            )
+    return chunks
+
+
 def materialize_ticket_documents(db_path: Path, limit: int | None = None) -> dict:
     docs = build_ticket_documents(db_path, limit=limit)
+    chunks = build_ticket_document_chunks(docs)
     synced_at = now_iso()
     replace_ticket_documents(db_path, docs, synced_at=synced_at)
+    replace_ticket_document_chunks(db_path, chunks, synced_at=synced_at)
     return {
-        "status": "ok",
-        "document_count": len(docs),
-        "synced_at": synced_at,
+        'status': 'ok',
+        'document_count': len(docs),
+        'chunk_count': len(chunks),
+        'synced_at': synced_at,
     }
 
 
@@ -156,7 +230,7 @@ def export_ticket_documents(db_path: Path, output_path: Path, limit: int | None 
         for doc in docs:
             f.write(json.dumps(doc, ensure_ascii=False) + '\n')
     return {
-        "status": "ok",
-        "output_path": str(output_path),
-        "document_count": len(docs),
+        'status': 'ok',
+        'output_path': str(output_path),
+        'document_count': len(docs),
     }
