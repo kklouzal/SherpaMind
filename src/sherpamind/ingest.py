@@ -51,6 +51,7 @@ def _build_client(settings: Settings) -> SherpaDeskClient:
         instance_key=settings.instance_key,
         timeout_seconds=settings.request_timeout_seconds,
         min_interval_seconds=settings.request_min_interval_seconds,
+        request_tracking_db_path=settings.db_path,
     )
 
 
