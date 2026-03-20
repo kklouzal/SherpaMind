@@ -30,6 +30,15 @@ Tests and fixtures should stay public-safe.
 - avoid embedding live sensitive payloads when a reduced synthetic fixture proves the behavior just as well
 - prefer `example.com`, placeholder ticket subjects, and obviously fake names in fixtures
 
+## Issue reporting from validation
+
+If testing, live verification, or exploratory use finds a real bug, contract mismatch, or missing capability, check:
+
+- <https://github.com/kklouzal/SherpaMind/issues>
+
+Add supporting detail to an existing issue when it matches; otherwise open a new one.
+Keep issue content anonymized and public-safe.
+
 ## Rule
 
 Do not assume a green local unit test suite means the SherpaDesk API contract is understood correctly.

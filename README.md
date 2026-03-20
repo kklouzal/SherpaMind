@@ -36,6 +36,17 @@ Treat anonymization as a standing development rule:
 
 Assume future autonomous development should preserve public-safe, anonymous examples by default.
 
+## GitHub issue reporting rule
+
+If a running OpenClaw instance encounters a runtime problem, installation problem, documentation gap, bug, unexpected API behavior, or meaningful feature request while using SherpaMind, it should report that back to the project repository:
+
+- issue tracker: <https://github.com/kklouzal/SherpaMind/issues>
+- if a matching issue already exists, add supporting detail instead of opening a duplicate
+- if no matching issue exists, open a new issue with clear reproduction/context
+- keep issue content anonymized and public-safe
+
+This rule is intended to help autonomous use feed actionable maintenance back into the public project.
+
 ## What SherpaMind does
 
 SherpaMind currently covers five major areas:
@@ -73,23 +84,24 @@ SherpaMind currently covers five major areas:
    - performs periodic sync/enrichment/artifact-refresh work without burning OpenClaw tokens
    - keeps service state, logs, and request-usage history locally
 
-## Current live state
+## Proven capability
 
-SherpaMind is live against a real read-only SherpaDesk account and is running as a local service on this host.
+SherpaMind is not just a paper design. It has been exercised against a real read-only SherpaDesk account and observed performing the core behaviors this repository describes.
 
-Observed from the current local runtime state:
+Observed capability evidence includes:
 
-- service unit exists and is active/enabled
-- canonical database lives at `.SherpaMind/private/sherpamind.sqlite3`
-- current live dataset includes **43 accounts**, **495 users**, **2 technicians**, and **12,041 tickets**
-- current enrichment coverage includes **114 ticket details**, **752 ticket logs**, and **97 attachment metadata rows**
-- materialized retrieval layer includes **12,040 ticket documents** and **12,081 ticket document chunks**
-- local vector index includes **12,081 indexed chunks** with **0 missing**, **0 dangling**, and **0 outdated** index rows at the latest check
-- current request-budget telemetry shows the system operating well below the documented 600 requests/hour ceiling during normal service activity
-- current public artifact set exists under `.SherpaMind/public/docs/`
-- current test suite passes locally (`50 passed` in the latest run)
+- successful live authentication against the SherpaDesk API
+- successful local persistence into the canonical SQLite store at `.SherpaMind/private/sherpamind.sqlite3`
+- successful live ingestion of a non-trivial dataset including **43 accounts**, **495 users**, **2 technicians**, and **12,041 tickets** during observed runs
+- successful bounded detail enrichment producing **114 ticket details**, **752 ticket logs**, and **97 attachment metadata rows** during observed runs
+- successful retrieval materialization producing **12,040 ticket documents** and **12,081 ticket document chunks** during observed runs
+- successful local vector indexing with **12,081 indexed chunks** and an observed ready state of **0 missing**, **0 dangling**, and **0 outdated** index rows at the latest validation point
+- successful request-budget tracking showing observed runtime behavior well below the documented `600 requests/hour` ceiling during normal service activity
+- successful generated public artifact output under `.SherpaMind/public/docs/`
+- successful local automated validation with the current test suite passing (`50 passed` in the latest run)
+- successful service-backed runtime operation on a Linux host using the documented user-level `systemd` model
 
-The dataset is live and changes as SherpaDesk changes. Generated status artifacts reflect the last generation time, not a frozen project milestone.
+These figures are evidence from real observed runs, not guaranteed fixed installation outcomes. Exact counts will vary by target SherpaDesk account, sync timing, and local runtime state, but the project has been proven in live use to perform the ingest, sync, enrichment, retrieval-preparation, artifact-generation, and validation behaviors described here.
 
 ## OpenClaw skill packaging
 

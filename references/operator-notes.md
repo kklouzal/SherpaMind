@@ -46,6 +46,18 @@ When adding or updating operator notes, examples, live verification notes, or tr
 - do not copy raw customer-facing data into tracked docs when a generalized description is enough
 - keep secrets, tokens, config values, and local runtime artifacts out of tracked files
 
+## GitHub issue reporting rule
+
+If SherpaMind hits a runtime failure, install/onboarding failure, documentation gap, unexpected API behavior, or a meaningful missing capability during real use, report it to:
+
+- <https://github.com/kklouzal/SherpaMind/issues>
+
+Workflow:
+- check for an existing matching issue first
+- if one exists, add supporting detail, reproduction notes, host constraints, or logs summary
+- if none exists, open a new issue with a concise title, reproduction/context, observed behavior, expected behavior, and relevant environment details
+- keep the issue anonymized and public-safe
+
 ## Practical safety rule
 
 If SherpaDesk starts behaving inconsistently, slow down instead of pushing harder:

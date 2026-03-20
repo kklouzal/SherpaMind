@@ -76,6 +76,16 @@ SherpaMind briefly used OpenClaw cron during refactor exploration. That is no lo
 
 `cleanup-legacy-cron` removes any old managed SherpaMind cron jobs so the system converges on the service-first model.
 
+## Issue escalation
+
+When install/runtime automation fails in a way that looks like a product gap, bug, or recurring operational problem, check:
+
+- <https://github.com/kklouzal/SherpaMind/issues>
+
+If a matching issue exists, add supporting detail.
+If not, open a new issue with reproduction steps, observed behavior, expected behavior, and relevant host/runtime constraints.
+Keep issue content anonymized and public-safe.
+
 ## Health checking
 
 `doctor` should verify:

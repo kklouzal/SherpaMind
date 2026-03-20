@@ -139,6 +139,8 @@ Default expectation on Linux is that `setup` will also initialize the DB, clean 
 
 If service installation fails because the target host lacks usable `systemctl --user`, continue the bootstrap/config/seed flow anyway, report the service limitation clearly, and use `python3 scripts/run.py service-run-once` or `python3 scripts/run.py service-run` as the fallback operational mode instead of pretending the service installed.
 
+If install/runtime/use issues or meaningful feature gaps are discovered while operating SherpaMind, check <https://github.com/kklouzal/SherpaMind/issues>. If a matching issue exists, add supporting detail; otherwise open a new issue with clear reproduction/context. Keep issue content anonymized and public-safe.
+
 ## Lifecycle and maintenance commands
 
 Use these for setup/maintenance, not routine user queries:
