@@ -1,113 +1,35 @@
 ---
 name: sherpamind
-description: Use for SherpaDesk-related requests, especially ticket lookup, support-history retrieval, account/user/technician analysis, stale-ticket review, workload questions, operational reporting, and open-ended natural-language questions about SherpaDesk data. Activates when the user mentions SherpaDesk or asks about tickets, support issues, clients/accounts, technicians, resolution history, recurring incidents, backlog, response timing, or similar support operations analysis.
+description: Use for SherpaDesk-related requests: ticket lookup, support-history retrieval, account/user/technician analysis, stale-ticket review, workload questions, operational reporting, and open-ended natural-language questions about SherpaDesk data. Trigger when the user mentions SherpaDesk or asks about tickets, support issues, clients/accounts, technicians, resolution history, recurring incidents, backlog, response timing, or similar support-operations analysis.
+metadata: {"openclaw":{"emoji":"🧰","homepage":"https://github.com/kklouzal/SherpaMind","requires":{"bins":["python3"]}}}
 ---
 
 # SherpaMind
 
-SherpaMind is the **SherpaDesk data/retrieval front-end skill** for OpenClaw.
+Use SherpaMind as the **OpenClaw query/action layer** over the local SherpaDesk dataset prepared by the backend service.
 
-Its purpose is **not** to replace OpenClaw’s reasoning.
-Its purpose is to teach OpenClaw how to:
-- access the prepared SherpaDesk data correctly
-- use the right SherpaMind command surface efficiently
-- prefer factual retrieval/structure over brittle hardcoded interpretation
-- answer open-ended SherpaDesk questions from rich local data with high confidence
+## Repo root and stable entrypoint
 
-## Use this skill when
+Work from the repo root:
 
-Activate SherpaMind whenever the user asks about **SherpaDesk** or anything strongly related to SherpaDesk support data, including:
+```bash
+cd {baseDir}
+```
 
-- SherpaDesk tickets
-- support issues/incidents/problems
-- accounts/clients/customers in SherpaDesk
-- users/contacts in SherpaDesk
-- technicians / workload / assignments
-- stale open tickets / backlog / waiting tickets
-- recent ticket activity
-- historical ticket context
-- "have we seen this before?"
-- "what happened with X ticket/account/user?"
-- operational reporting over SherpaDesk data
-- natural-language analytical questions over synced SherpaDesk history
-
-Strong trigger phrases/examples:
-- "SherpaDesk"
-- "tickets"
-- "support history"
-- "account X"
-- "technician Y"
-- "backlog"
-- "open tickets"
-- "closed tickets"
-- "stale tickets"
-- "what do we know about this issue"
-- "have we seen this before"
-- "show me context for this problem"
-
-## Core operating model
-
-SherpaMind has two layers:
-
-### 1. Background backend/service
-A local Python backend keeps SherpaDesk data synced and enriched under:
-- `.SherpaMind/private/` — canonical/private state
-- `.SherpaMind/public/` — derived OpenClaw-friendly artifacts
-
-OpenClaw should **not** act as the periodic backend scheduler for this skill.
-That is handled by the SherpaMind service.
-
-### 2. OpenClaw-facing query/retrieval layer
-OpenClaw should use SherpaMind to:
-- inspect structured SherpaDesk data
-- retrieve cleaned ticket documents/chunks
-- read public factual artifacts
-- answer the user’s question using OpenClaw’s own reasoning on top of those inputs
-
-## North star
-
-SherpaMind should prioritize:
-- richer source capture
-- stronger cleanup/normalization
-- stronger structured metadata
-- better per-ticket / per-account / per-technician derived artifacts
-- stable replaceable chunking
-- retrieval/vector readiness
-
-SherpaMind should **avoid** prematurely hardcoding interpretation when OpenClaw can reason at query time from well-prepared data.
-
-So, when using this skill:
-- prefer rich/factual retrieval over canned conclusions
-- prefer structural summaries over opinionated summaries
-- let OpenClaw interpret retrieved evidence for the specific user question
-
-## Runtime / storage contract
-
-- `.SherpaMind/private/sherpamind.sqlite3` — canonical SQLite store
-- `.SherpaMind/private/watch_state.json` — watcher/open-ticket state
-- `.SherpaMind/private/config.env` — local SherpaDesk config
-- `.SherpaMind/private/runtime/venv/` — skill-local Python environment
-- `.SherpaMind/private/logs/service.log` — service log
-- `.SherpaMind/private/service-state.json` — backend loop state
-- `.SherpaMind/public/docs/` — factual public Markdown artifacts
-- `.SherpaMind/public/exports/` — JSONL exports, chunk exports, vector-ready exports
-
-## Stable command entrypoint
-
-Always use the stable runner:
+Use the stable runner:
 
 ```bash
 python3 scripts/run.py <command> [args...]
 ```
 
-Do **not** invent alternate runtime paths or assume global Python packages.
+Do not invent alternate runtime paths.
+Do not treat OpenClaw as the background scheduler for this backend.
 
-## Query strategy for OpenClaw
+## Choose the lightest path that answers the question
 
-When answering user questions, choose the lightest/factual path that can answer the request.
+### Exact facts, counts, status, and workload
 
-### A. Use structured commands for factual questions
-Use these first for exact/state/reporting questions:
+Start with structured commands:
 
 - `python3 scripts/run.py dataset-summary`
 - `python3 scripts/run.py report-api-usage`
@@ -127,12 +49,13 @@ Use these first for exact/state/reporting questions:
 - `python3 scripts/run.py technician-summary "<technician>"`
 
 Examples:
-- "How many open tickets do we have?" → `report-status-counts`
-- "What’s Kyle’s current backlog?" → `technician-summary "Kyle"`
-- "What’s going on with <account>?" → `account-summary "<account>"`
+- open-ticket count → `report-status-counts`
+- technician backlog/load → `technician-summary "Kyle"`
+- account snapshot → `account-summary "<account>"`
 
-### B. Use retrieval commands for fuzzy/open-ended context questions
-Use these for investigative/natural-language recall:
+### Fuzzy investigation, prior-art lookup, and support-history recall
+
+Use retrieval commands:
 
 - `python3 scripts/run.py search-ticket-docs "<query>"`
 - `python3 scripts/run.py search-ticket-chunks "<query>"`
@@ -141,47 +64,84 @@ Use these for investigative/natural-language recall:
 - `python3 scripts/run.py search-ticket-chunks "<query>" --technician "<technician>"`
 - `python3 scripts/run.py search-vector-index "<query>"`
 - `python3 scripts/run.py search-vector-index "<query>" --account "<account>" --status Open`
-- `python3 scripts/run.py search-vector-index "<query>" --technician "<technician>" --priority High --category "Hardware"`
+- `python3 scripts/run.py search-vector-index "<query>" --technician "<technician>" --priority High --category "<category>"`
 
-Examples:
-- "Have we seen this printer problem before?" → start with `search-ticket-chunks printer`, then widen with `search-vector-index printer` if keyword recall looks thin
-- "Show me Outlook-related tickets for <account>" → `search-ticket-chunks Outlook --account "<account>"`
-- "What context do we have around tickets Kyle touched related to MFA?" → `search-ticket-chunks MFA --technician "Kyle"`
-- "Find semantically similar high-priority hardware issues" → `search-vector-index printer --priority High --category Hardware`
+Default retrieval workflow:
+1. Start with keyword/text search when the issue words are concrete.
+2. Widen to vector search when wording may vary or keyword recall looks thin.
+3. Use account/technician/status/priority/category filters when they materially narrow the search.
+4. Answer from retrieved evidence instead of jumping to canned conclusions.
 
-### C. Use public artifacts for quick factual context
-Read from `.SherpaMind/public/docs/` when a concise factual derived artifact is enough:
-- `index.md`
-- `insight-snapshot.md`
-- `stale-open-tickets.md`
-- `recent-account-activity.md`
-- `recent-technician-load.md`
-- `runtime/status.md`
-- `accounts/index.md`
-- `technicians/index.md`
-- `accounts/*.md`
-- `technicians/*.md`
+### Quick factual context from generated artifacts
 
-These are especially useful when OpenClaw needs quick context without pulling many command outputs.
+Read these when a concise derived artifact is enough:
 
-## Preferred workflow for open-ended SherpaDesk questions
+- `{baseDir}/.SherpaMind/public/docs/index.md`
+- `{baseDir}/.SherpaMind/public/docs/insight-snapshot.md`
+- `{baseDir}/.SherpaMind/public/docs/stale-open-tickets.md`
+- `{baseDir}/.SherpaMind/public/docs/recent-account-activity.md`
+- `{baseDir}/.SherpaMind/public/docs/recent-technician-load.md`
+- `{baseDir}/.SherpaMind/public/docs/runtime/status.md`
+- `{baseDir}/.SherpaMind/public/docs/accounts/index.md`
+- `{baseDir}/.SherpaMind/public/docs/technicians/index.md`
+- `{baseDir}/.SherpaMind/public/docs/accounts/*.md`
+- `{baseDir}/.SherpaMind/public/docs/technicians/*.md`
 
-For a natural-language question like:
-> "What’s been going on with account X lately, and have we seen this issue before?"
+## Preferred answer flow
 
-Preferred flow:
-1. run a structural summary first
-   - `account-summary "X"`
-2. run retrieval for the issue/problem text
-   - `search-ticket-chunks "<issue words>" --account "X"`
-3. if needed, consult public docs for supporting context
-4. answer using OpenClaw’s own reasoning over those retrieved results
+For broad questions like “what’s been going on with account X lately?” or “have we seen this before?”:
 
-Do **not** jump straight to a hand-authored conclusion if the retrieval evidence is thin.
+1. Pull one structural summary first.
+2. Pull retrieval evidence second.
+3. Use generated public docs only when they add concise context.
+4. Give the user an answer grounded in the retrieved evidence.
 
-## Setup / lifecycle commands
+Prefer factual retrieval over hand-authored interpretation.
 
-Use these for installation and maintenance, not normal user questions:
+## End-to-end install and onboarding on another OpenClaw instance
+
+If the user asks to install SherpaMind properly end-to-end into an OpenClaw instance, first check the host prerequisites and report any missing pieces plainly before continuing.
+
+Minimum prerequisites to check:
+- `python3` is present
+- Python venv/pip bootstrap works on that host
+- the host has network access for Python package installation
+- `systemctl --user` is available if background service mode is expected
+
+If any prerequisite is missing, stop and tell the user exactly what is missing and what needs to be fixed.
+
+Then use this flow from the installed skill bundle root:
+
+1. bootstrap the skill-local runtime
+   - `python3 scripts/bootstrap.py`
+2. run the setup flow
+   - `python3 scripts/run.py setup`
+3. verify runtime/service state
+   - `python3 scripts/run.py doctor`
+   - `python3 scripts/run.py service-status`
+4. configure the SherpaDesk API token
+   - `python3 scripts/run.py configure --api-key <token>`
+5. discover organizations/instances
+   - `python3 scripts/run.py discover-orgs`
+6. write the chosen org/instance into config
+   - `python3 scripts/run.py configure --org-key <org> --instance-key <instance>`
+7. seed the local dataset
+   - `python3 scripts/run.py seed`
+8. generate/refine the derived artifacts if needed
+   - `python3 scripts/run.py generate-public-snapshot`
+   - `python3 scripts/run.py generate-runtime-status`
+9. confirm the install is actually usable
+   - `python3 scripts/run.py dataset-summary`
+   - `python3 scripts/run.py insight-snapshot`
+   - `python3 scripts/run.py report-vector-index-status`
+
+Default expectation on Linux is that `setup` will also initialize the DB, clean up any old SherpaMind cron jobs, generate an initial public snapshot, and install/start the user-level `systemd` service. Do not stop at cloning or placing files; complete the runtime bootstrap, config, seed, and verification steps.
+
+If service installation fails because the target host lacks usable `systemctl --user`, continue the bootstrap/config/seed flow anyway, report the service limitation clearly, and use `python3 scripts/run.py service-run-once` or `python3 scripts/run.py service-run` as the fallback operational mode instead of pretending the service installed.
+
+## Lifecycle and maintenance commands
+
+Use these for setup/maintenance, not routine user queries:
 
 - `python3 scripts/bootstrap.py`
 - `python3 scripts/run.py workspace-layout`
@@ -195,31 +155,25 @@ Use these for installation and maintenance, not normal user questions:
 - `python3 scripts/run.py install-service`
 - `python3 scripts/run.py restart-service`
 - `python3 scripts/run.py service-status`
+- `python3 scripts/run.py generate-public-snapshot`
+- `python3 scripts/run.py generate-runtime-status`
 
-## Important boundaries
+## Boundaries
 
-- Keep SherpaDesk access read-only unless explicitly expanded later
-- Keep attachment handling metadata-only by default
-- Do not auto-download attachment bodies by default
-- Treat docs/chunks/public Markdown artifacts as replaceable derived caches
-- Let OpenClaw do the interpretation; let SherpaMind do the data prep and retrieval prep
-
-## Maintenance rule
-
-If backend capabilities evolve, update the skill-front in the same wave whenever needed.
-At minimum, re-check:
-- activation guidance
-- preferred command strategy
-- examples
-- references to public/private artifacts
-- any commands that became newly available, obsolete, or misleading
+- Treat SherpaMind as read-only unless the project explicitly grows write behavior later.
+- Keep attachment handling metadata-only by default.
+- Do not auto-download attachment bodies by default.
+- Treat docs, chunks, vector rows, and public Markdown artifacts as replaceable derived caches.
+- Let SherpaMind prepare and expose data; let OpenClaw interpret it at answer time.
 
 ## References
 
-Read these when needed:
-- `docs/architecture-doctrine.md` — project-wide backend/skill/OpenClaw boundary doctrine
-- `docs/openclaw-query-model.md` — OpenClaw-facing query/retrieval design
-- `docs/retrieval-architecture.md` — retrieval/vector-readiness design
-- `docs/delta-sync-strategy.md` — hot/warm/cold sync lane design
-- `docs/api-reference.md` — verified API behavior and caveats
-- `docs/automation.md` — service/install/update/health model
+Read these only when needed. Keep the action layer in this file lean; use the reference files for deeper architecture, retrieval, automation, and API details.
+
+- `{baseDir}/README.md` — current live project overview and command surface
+- `{baseDir}/references/openclaw-query-model.md` — query/retrieval model
+- `{baseDir}/references/architecture-doctrine.md` — backend vs skill-front boundary
+- `{baseDir}/references/retrieval-architecture.md` — retrieval and vector design
+- `{baseDir}/references/automation.md` — service/install/update model
+- `{baseDir}/references/delta-sync-strategy.md` — hot/warm/cold sync behavior
+- `{baseDir}/references/api-reference.md` — verified API/auth behavior

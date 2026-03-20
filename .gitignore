@@ -9,4 +9,7 @@ state/
 *.db
 *.sqlite
 *.sqlite3
+*.egg-info/
+build/
+dist/
 .pytest_cache/

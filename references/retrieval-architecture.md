@@ -56,7 +56,7 @@ Best source:
 6. expose hybrid query commands for OpenClaw/tooling
 
 Current practical implementation now includes:
-- keyword/full-text style search over docs/chunks
+- keyword/full-text style search over references/chunks
 - metadata-rich embedding-ready exports
 - a lightweight local vector index/search layer for immediate similarity retrieval without external embedding APIs
 

@@ -6,7 +6,7 @@ SherpaDesk is the highest-friction external surface in this project.
 
 Before changing API logic, consult:
 - <https://github.com/sherpadesk/api/wiki>
-- `docs/api-reference.md`
+- `references/api-reference.md`
 - recent local verification notes once they exist
 
 ## Local environment

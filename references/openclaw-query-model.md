@@ -32,7 +32,7 @@ Use for natural-language recall and fuzzy investigation:
 These are derived from canonical tables and are **replaceable caches**, not source-of-truth memory.
 
 ### 3. Public markdown artifacts
-Use for quick human/agent inspection under `.SherpaMind/public/docs/`, including:
+Use for quick human/agent inspection under `.SherpaMind/public/references/`, including:
 - `index.md`
 - `insight-snapshot.md`
 - `stale-open-tickets.md`
@@ -72,9 +72,9 @@ OpenClaw-facing NL artifacts must never become unmanaged side files.
 
 Rules:
 - canonical truth lives in structured SQLite tables
-- materialized docs/chunks/public snapshots are derived caches
-- when a ticket changes, regenerate its docs/chunks/artifacts by stable identity
-- replace old docs/chunks for that ticket
+- materialized references/chunks/public snapshots are derived caches
+- when a ticket changes, regenerate its references/chunks/artifacts by stable identity
+- replace old references/chunks for that ticket
 - delete stale chunks that no longer belong to the current materialization
 
 This prevents old stale natural-language support artifacts from lingering after ticket updates.
@@ -134,7 +134,7 @@ Whenever a field becomes operationally useful more than once, promote it into:
 
 SherpaMind should also expose enough observability that OpenClaw can trust the retrieval layer before leaning on it heavily. In practice that means coverage/freshness/readiness outputs should make it easy to see:
 - how much of the corpus has detail enrichment
-- whether ticket docs/chunks cover the full ticket set
+- whether ticket references/chunks cover the full ticket set
 - whether important retrieval metadata (category, issue summary, resolution summary) is materially populated
 - whether chunk sizes look sane for vector/semantic use
 - a real SQLite column/table

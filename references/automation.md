@@ -89,4 +89,4 @@ SherpaMind briefly used OpenClaw cron during refactor exploration. That is no lo
 - legacy repo-local state presence (for upgrade hints)
 - any leftover legacy SherpaMind cron jobs that should be cleaned up
 
-When backend/runtime capabilities change, the skill-front/docs should be reviewed in the same wave so the backend/skill/OpenClaw split remains coherent.
+When backend/runtime capabilities change, the skill-front/references should be reviewed in the same wave so the backend/skill/OpenClaw split remains coherent.

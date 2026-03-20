@@ -65,7 +65,7 @@ When backend capabilities change, ask:
 6. Does `SKILL.md` still teach the best activation/query strategy?
 7. Do `README.md` / query-model docs still describe reality?
 
-If any answer is yes, update the skill-front/docs in the same wave.
+If any answer is yes, update the skill-front/references in the same wave.
 
 ## Preferred bias
 

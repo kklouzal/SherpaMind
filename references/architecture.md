@@ -49,7 +49,7 @@ SherpaMind needs all three behaviors, so the durable design is **SQLite + retrie
 - `.SherpaMind/private/config.env`
 - `.SherpaMind/private/runtime/venv`
 - `.SherpaMind/public/exports/`
-- `.SherpaMind/public/docs/`
+- `.SherpaMind/public/references/`
 
 ### Design principles
 - preserve raw-ish source fields where useful
