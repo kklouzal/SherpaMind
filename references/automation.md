@@ -31,6 +31,8 @@ These run from internal Python timers, not OpenClaw cron.
 The service also tracks real SherpaDesk request usage in SQLite and can use rolling hourly budget utilization to defer lower-priority work before it rides the 600/hour line.
 Old request-event rows are pruned automatically by retention policy so the request log remains bounded.
 
+The service should also repair stale derived retrieval artifacts when the current document materializer version no longer matches what is stored in `ticket_documents`. That keeps metadata/chunking improvements from depending on a human remembering to force a rematerialization pass.
+
 ## Install vs update behavior
 
 ### First install

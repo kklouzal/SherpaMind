@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .db import connect, initialize_db
+from .documents import DOCUMENT_MATERIALIZATION_VERSION, get_ticket_document_materialization_status
 from .vector_index import get_vector_index_status
 
 
@@ -27,6 +28,7 @@ def _load_rows(db_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
                json_extract(d.raw_json, '$.user_id') AS user_id,
                json_extract(d.raw_json, '$.technician_id') AS technician_id,
                json_extract(d.raw_json, '$.created_at') AS created_at,
+               COALESCE(json_extract(d.raw_json, '$.materialization_version'), json_extract(d.raw_json, '$.metadata.materialization_version')) AS materialization_version,
                json_extract(d.raw_json, '$.metadata.priority') AS priority,
                json_extract(d.raw_json, '$.metadata.category') AS category,
                json_extract(d.raw_json, '$.metadata.closed_at') AS closed_at,
@@ -150,6 +152,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
     initialize_db(db_path)
     rows = _load_rows(db_path, limit=limit)
     vector = get_vector_index_status(db_path)
+    materialization = get_ticket_document_materialization_status(db_path)
 
     chunk_count = len(rows)
     document_ids = {row["doc_id"] for row in rows}
@@ -250,6 +253,21 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "metadata_coverage": metadata_coverage,
         "label_source_summary": label_source_summary,
         "vector_index": vector,
+        "materialization": {
+            **materialization,
+            "chunk_rows_at_current_version": sum(
+                1
+                for row in rows
+                if int(row.get("materialization_version") or 0) == DOCUMENT_MATERIALIZATION_VERSION
+            ),
+            "chunk_rows_at_current_version_ratio": round(
+                (
+                    sum(1 for row in rows if int(row.get("materialization_version") or 0) == DOCUMENT_MATERIALIZATION_VERSION)
+                    / chunk_count
+                ),
+                4,
+            ) if chunk_count else 0.0,
+        },
         "content_hash_summary": {
             "present_count": sum(1 for row in rows if _present(row.get("content_hash"))),
             "missing_count": sum(1 for row in rows if not _present(row.get("content_hash"))),

@@ -236,6 +236,7 @@ The service owns:
 - warm closed-ticket reconciliation
 - cold rolling audit work
 - bounded priority enrichment
+- retrieval-artifact self-healing when materialized docs fall behind the current backend materializer version
 - runtime status generation
 - public snapshot generation
 - service-state updates

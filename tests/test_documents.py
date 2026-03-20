@@ -2,7 +2,15 @@ import json
 from pathlib import Path
 
 from sherpamind.db import initialize_db, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
-from sherpamind.documents import build_ticket_document_chunks, build_ticket_documents, export_ticket_chunks, export_ticket_documents, materialize_ticket_documents
+from sherpamind.documents import (
+    DOCUMENT_MATERIALIZATION_VERSION,
+    build_ticket_document_chunks,
+    build_ticket_documents,
+    ensure_current_ticket_materialization,
+    export_ticket_chunks,
+    export_ticket_documents,
+    materialize_ticket_documents,
+)
 
 
 def seed_fixture(db: Path) -> None:
@@ -116,6 +124,8 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["account_label_source"] == "joined"
     assert primary["metadata"]["user_label_source"] == "joined"
     assert primary["metadata"]["technician_label_source"] == "joined"
+    assert primary["materialization_version"] == DOCUMENT_MATERIALIZATION_VERSION
+    assert primary["metadata"]["materialization_version"] == DOCUMENT_MATERIALIZATION_VERSION
 
     fallback = docs_by_id["102"]
     assert fallback["account"] == "Raw Account"
@@ -136,6 +146,7 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     materialized = materialize_ticket_documents(db)
     assert materialized["status"] == "ok"
     assert materialized["chunk_count"] >= 1
+    assert materialized["materialization_version"] == DOCUMENT_MATERIALIZATION_VERSION
 
     output = tmp_path / "ticket-docs.jsonl"
     result = export_ticket_documents(db, output)
@@ -146,6 +157,11 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     chunk_result = export_ticket_chunks(db, chunk_output)
     assert chunk_result["status"] == "ok"
     assert chunk_result["chunk_count"] >= 1
+
+    rematerialization_check = ensure_current_ticket_materialization(db)
+    assert rematerialization_check["status"] == "ok"
+    assert rematerialization_check["refreshed"] is False
+    assert rematerialization_check["materialization"]["current_version"] == DOCUMENT_MATERIALIZATION_VERSION
 
     lines = output.read_text().splitlines()
     assert len(lines) == 2

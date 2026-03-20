@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from sherpamind.db import initialize_db, replace_ticket_document_chunks, replace_ticket_documents
+from sherpamind.documents import DOCUMENT_MATERIALIZATION_VERSION
 from sherpamind.vector_exports import export_embedding_manifest, export_embedding_ready_chunks, get_retrieval_readiness_summary
 
 
@@ -48,6 +49,7 @@ def seed(db: Path) -> None:
                 "technician_label_source": "joined",
                 "resolution_summary": "Closed successfully",
                 "has_resolution_summary": True,
+                "materialization_version": DOCUMENT_MATERIALIZATION_VERSION,
             },
             "content_hash": "abc",
         }],
@@ -118,6 +120,10 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["label_source_summary"]["user_label_source"]["email"]["chunks"] == 1
     assert summary["label_source_summary"]["technician_label_source"]["joined"]["chunks"] == 1
     assert summary["metadata_coverage"]["has_attachments"]["ratio"] == 1.0
+    assert summary["materialization"]["current_version"] >= 1
+    assert summary["materialization"]["current_version_docs"] == 1
+    assert summary["materialization"]["stale_docs"] == 0
+    assert summary["materialization"]["chunk_rows_at_current_version"] == 1
     assert summary["vector_index"]["total_chunk_rows"] == 1
     assert summary["content_hash_summary"]["present_count"] == 1
 

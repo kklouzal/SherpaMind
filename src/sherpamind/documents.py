@@ -8,6 +8,9 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
+DOCUMENT_MATERIALIZATION_VERSION = 2
+
+
 def _content_hash(text: str) -> str:
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
@@ -347,6 +350,7 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                 "created_at": record.get("created_at"),
                 "text": text,
                 "content_hash": _content_hash(text),
+                "materialization_version": DOCUMENT_MATERIALIZATION_VERSION,
                 "metadata": {
                     "priority": record.get("priority"),
                     "category": normalized_category,
@@ -400,6 +404,7 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "technician_label_source": technician_label_source,
                     "resolution_summary": resolution_summary,
                     "has_resolution_summary": bool(resolution_summary),
+                    "materialization_version": DOCUMENT_MATERIALIZATION_VERSION,
                 },
             }
         )
@@ -442,6 +447,61 @@ def materialize_ticket_documents(db_path: Path, limit: int | None = None) -> dic
         "document_count": len(docs),
         "chunk_count": len(chunks),
         "synced_at": synced_at,
+        "materialization_version": DOCUMENT_MATERIALIZATION_VERSION,
+    }
+
+
+def get_ticket_document_materialization_status(db_path: Path) -> dict:
+    with connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM tickets) AS ticket_count,
+                (SELECT COUNT(*) FROM ticket_documents) AS document_count,
+                (SELECT COUNT(*) FROM ticket_document_chunks) AS chunk_count,
+                SUM(CASE WHEN COALESCE(json_extract(raw_json, '$.materialization_version'), json_extract(raw_json, '$.metadata.materialization_version'), 0) = ? THEN 1 ELSE 0 END) AS current_version_docs,
+                SUM(CASE WHEN COALESCE(json_extract(raw_json, '$.materialization_version'), json_extract(raw_json, '$.metadata.materialization_version')) IS NULL THEN 1 ELSE 0 END) AS unversioned_docs,
+                MIN(COALESCE(json_extract(raw_json, '$.materialization_version'), json_extract(raw_json, '$.metadata.materialization_version'))) AS min_version,
+                MAX(COALESCE(json_extract(raw_json, '$.materialization_version'), json_extract(raw_json, '$.metadata.materialization_version'))) AS max_version
+            FROM ticket_documents
+            """,
+            (DOCUMENT_MATERIALIZATION_VERSION,),
+        ).fetchone()
+    ticket_count = int(row["ticket_count"] or 0)
+    document_count = int(row["document_count"] or 0)
+    current_version_docs = int(row["current_version_docs"] or 0)
+    unversioned_docs = int(row["unversioned_docs"] or 0)
+    stale_docs = max(document_count - current_version_docs, 0)
+    return {
+        "current_version": DOCUMENT_MATERIALIZATION_VERSION,
+        "ticket_count": ticket_count,
+        "document_count": document_count,
+        "chunk_count": int(row["chunk_count"] or 0),
+        "current_version_docs": current_version_docs,
+        "stale_docs": stale_docs,
+        "stale_ratio": round((stale_docs / document_count), 4) if document_count else 0.0,
+        "unversioned_docs": unversioned_docs,
+        "min_version": int(row["min_version"]) if row["min_version"] is not None else None,
+        "max_version": int(row["max_version"]) if row["max_version"] is not None else None,
+        "needs_refresh": document_count != ticket_count or stale_docs > 0,
+    }
+
+
+def ensure_current_ticket_materialization(db_path: Path) -> dict:
+    status = get_ticket_document_materialization_status(db_path)
+    if not status["needs_refresh"]:
+        return {"status": "ok", "refreshed": False, "materialization": status}
+    refreshed = materialize_ticket_documents(db_path, limit=None)
+    refreshed_status = get_ticket_document_materialization_status(db_path)
+    return {
+        "status": "ok",
+        "refreshed": True,
+        "reason": {
+            "document_count_mismatch": status["document_count"] != status["ticket_count"],
+            "stale_docs": status["stale_docs"],
+        },
+        "materialization": refreshed_status,
+        "refresh_result": refreshed,
     }
 
 

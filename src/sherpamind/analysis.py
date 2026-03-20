@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .db import connect, initialize_db
+from .documents import DOCUMENT_MATERIALIZATION_VERSION
 
 
 def list_ticket_counts_by_account(db_path: Path, limit: int = 20) -> list[dict]:
@@ -298,8 +299,10 @@ def get_enrichment_coverage(db_path: Path) -> dict:
                 (SELECT COALESCE(MAX(LENGTH(text)), 0) FROM ticket_document_chunks) AS max_chunk_chars,
                 (SELECT COUNT(*) FROM ticket_document_chunks WHERE LENGTH(text) < 200) AS tiny_chunk_count,
                 (SELECT COUNT(*) FROM ticket_document_chunks WHERE LENGTH(text) > 1800) AS over_target_chunk_count,
-                (SELECT COUNT(*) FROM ticket_document_chunks WHERE chunk_index > 0) AS multi_chunk_rows
-            """
+                (SELECT COUNT(*) FROM ticket_document_chunks WHERE chunk_index > 0) AS multi_chunk_rows,
+                (SELECT COUNT(*) FROM ticket_documents WHERE COALESCE(json_extract(raw_json, '$.materialization_version'), json_extract(raw_json, '$.metadata.materialization_version'), 0) = {version}) AS current_materialization_docs,
+                (SELECT COUNT(*) FROM ticket_documents WHERE COALESCE(json_extract(raw_json, '$.materialization_version'), json_extract(raw_json, '$.metadata.materialization_version')) IS NULL) AS unversioned_docs
+            """.format(version=DOCUMENT_MATERIALIZATION_VERSION)
         ).fetchone()
         metadata = conn.execute(
             """
@@ -376,6 +379,11 @@ def get_enrichment_coverage(db_path: Path) -> dict:
             "max_chunk_chars": int(retrieval["max_chunk_chars"] or 0),
             "tiny_chunk_count": int(retrieval["tiny_chunk_count"] or 0),
             "over_target_chunk_count": int(retrieval["over_target_chunk_count"] or 0),
+            "materialization_version": DOCUMENT_MATERIALIZATION_VERSION,
+            "current_materialization_docs": int(retrieval["current_materialization_docs"] or 0),
+            "stale_materialization_docs": max(document_count - int(retrieval["current_materialization_docs"] or 0), 0),
+            "stale_materialization_ratio": round((max(document_count - int(retrieval["current_materialization_docs"] or 0), 0) / document_count), 4) if document_count else 0.0,
+            "unversioned_docs": int(retrieval["unversioned_docs"] or 0),
         },
         "metadata": {
             "total_documents": total_documents,

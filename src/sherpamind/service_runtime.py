@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from .analysis import get_api_usage_summary
 from .db import prune_api_request_events
+from .documents import ensure_current_ticket_materialization
 from .enrichment import enrich_priority_ticket_details
 from .ingest import sync_cold_closed_audit, sync_hot_open_tickets, sync_warm_closed_tickets
 from .paths import ensure_path_layout
@@ -54,6 +55,7 @@ def _task_specs(settings: Settings) -> list[TaskSpec]:
         TaskSpec("warm_closed", settings.service_warm_closed_every_seconds, sync_warm_closed_tickets, budget_class="important"),
         TaskSpec("cold_closed", settings.service_cold_closed_every_seconds, sync_cold_closed_audit, budget_class="deferrable"),
         TaskSpec("enrichment", settings.service_enrichment_every_seconds, lambda s: enrich_priority_ticket_details(s, limit=s.service_enrichment_limit, materialize_docs=True), budget_class="deferrable"),
+        TaskSpec("retrieval_artifacts", settings.service_public_snapshot_every_seconds, lambda s: ensure_current_ticket_materialization(s.db_path), budget_class="lightweight"),
         TaskSpec("public_snapshot", settings.service_public_snapshot_every_seconds, lambda s: generate_public_snapshot(s.db_path), budget_class="lightweight"),
         TaskSpec("vector_refresh", settings.service_vector_refresh_every_seconds, lambda s: build_vector_index(s.db_path), budget_class="lightweight"),
         TaskSpec("runtime_status", settings.service_doctor_every_seconds, lambda s: generate_runtime_status_artifacts(s.db_path), budget_class="lightweight"),

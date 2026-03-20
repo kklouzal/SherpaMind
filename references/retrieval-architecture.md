@@ -75,3 +75,5 @@ Avoid prematurely synthesizing strongly interpretive "known-fix" or theme conclu
 
 Do not let the retrieval layer become the only source of truth.
 Derived retrieval artifacts should be rebuildable from canonical local data.
+
+That also means materialized docs/chunks need visible drift detection when the backend materializer changes. If metadata cleanup, chunking, or document-shape logic improves, SherpaMind should be able to detect stale derived artifacts and refresh them instead of quietly serving yesterday's retrieval shape.
