@@ -49,15 +49,16 @@ Best source:
 1. ingest canonical SherpaDesk data into SQLite
 2. normalize linked entities and stable ticket/comment metadata
 3. build retrieval documents from tickets, comments, accounts, users, and derived summaries
-4. chunk long text where needed
-5. index documents into:
+4. carry stable workflow/state metadata forward with those documents (subject cleanup, user/account/technician linkage, recent log types, next-step hints, attachment presence, resolution highlights)
+5. chunk long text where needed
+6. index documents into:
    - FTS/keyword search
    - vector embeddings/index
-6. expose hybrid query commands for OpenClaw/tooling
+7. expose hybrid query commands for OpenClaw/tooling
 
 Current practical implementation now includes:
 - keyword/full-text style search over references/chunks
-- metadata-rich embedding-ready exports
+- metadata-rich embedding-ready exports with filter-friendly ticket context
 - a lightweight local vector index/search layer for immediate similarity retrieval without external embedding APIs
 
 ## Recommended retrieval document types
@@ -73,10 +74,4 @@ Avoid prematurely synthesizing strongly interpretive "known-fix" or theme conclu
 ## Important rule
 
 Do not let the retrieval layer become the only source of truth.
-Derived retrieval artifacts should be rebuildable from canonical local data.
-Derived retrieval artifacts should be rebuildable from canonical local data.
- Important rule
-
-Do not let the retrieval layer become the only source of truth.
-Derived retrieval artifacts should be rebuildable from canonical local data.
 Derived retrieval artifacts should be rebuildable from canonical local data.

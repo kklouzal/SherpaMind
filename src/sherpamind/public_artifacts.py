@@ -120,6 +120,12 @@ def generate_public_snapshot(db_path: Path) -> dict:
             ("latest_activity_at", "Latest Activity"),
         ]),
         "",
+        "## Retrieval metadata readiness",
+        "",
+        "```json",
+        json.dumps(enrichment_coverage.get("metadata", {}), indent=2),
+        "```",
+        "",
         "## Account artifact coverage",
         "",
         _markdown_table(account_summaries[:10], [

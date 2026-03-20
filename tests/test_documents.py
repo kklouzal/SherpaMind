@@ -54,8 +54,18 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "printer broken" in docs[0]["text"]
     assert "Attachments (metadata only)" in docs[0]["text"]
     assert docs[0]["metadata"]["attachments"][0]["name"] == "shot.png"
+    assert docs[0]["metadata"]["attachment_names"] == ["shot.png"]
+    assert docs[0]["metadata"]["has_attachments"] is True
     assert docs[0]["metadata"]["category"] == "Hardware / Printer"
+    assert docs[0]["metadata"]["cleaned_subject"] == "Issue A"
     assert docs[0]["metadata"]["cleaned_initial_post"] == "Can you help with issue A?"
+    assert docs[0]["metadata"]["cleaned_workpad"] == "Internal note"
+    assert docs[0]["metadata"]["cleaned_next_step"] == "Call back"
+    assert docs[0]["metadata"]["has_next_step"] is True
+    assert docs[0]["metadata"]["recent_log_types"] == ["Initial Post"]
+    assert docs[0]["metadata"]["recent_log_types_csv"] == "Initial Post"
+    assert docs[0]["metadata"]["initial_response_present"] is True
+    assert docs[0]["metadata"]["user_email"] == "alice@example.com"
     assert docs[0]["metadata"]["detail_available"] is True
 
     chunks = build_ticket_document_chunks(docs)

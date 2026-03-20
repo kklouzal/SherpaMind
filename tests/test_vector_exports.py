@@ -22,10 +22,18 @@ def seed(db: Path) -> None:
                 "priority": "High",
                 "category": "Hardware",
                 "attachments_count": 1,
+                "has_attachments": True,
                 "ticketlogs_count": 5,
                 "timelogs_count": 0,
+                "cleaned_subject": "hello",
                 "cleaned_initial_post": "Help me",
+                "cleaned_next_step": "Call back tomorrow",
+                "has_next_step": True,
+                "recent_log_types_csv": "Initial Post, Response",
+                "initial_response_present": True,
+                "user_email": "alice@example.com",
                 "resolution_summary": "Closed successfully",
+                "has_resolution_summary": True,
             },
             "content_hash": "abc",
         }],
@@ -56,7 +64,13 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["account"] == "Acme"
     assert row["metadata"]["priority"] == "High"
     assert row["metadata"]["ticketlogs_count"] == 5
+    assert row["metadata"]["has_attachments"] is True
+    assert row["metadata"]["cleaned_next_step"] == "Call back tomorrow"
+    assert row["metadata"]["has_next_step"] is True
+    assert row["metadata"]["recent_log_types"] == "Initial Post, Response"
+    assert row["metadata"]["user_email"] == "alice@example.com"
     assert row["metadata"]["resolution_summary"] == "Closed successfully"
+    assert row["metadata"]["has_resolution_summary"] is True
 
 
 def test_export_embedding_manifest(tmp_path: Path) -> None:

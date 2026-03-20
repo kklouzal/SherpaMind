@@ -52,6 +52,7 @@ from .ingest import (
 )
 from .settings import load_settings, write_config_env
 from .summaries import get_account_summary, get_technician_summary
+from .vector_exports import export_embedding_manifest, export_embedding_ready_chunks
 from .vector_index import build_vector_index, get_vector_index_status, search_vector_index
 from .watch import watch_new_tickets
 from .db import initialize_db

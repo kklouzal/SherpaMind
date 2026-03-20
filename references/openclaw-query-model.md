@@ -135,7 +135,7 @@ Whenever a field becomes operationally useful more than once, promote it into:
 SherpaMind should also expose enough observability that OpenClaw can trust the retrieval layer before leaning on it heavily. In practice that means coverage/freshness/readiness outputs should make it easy to see:
 - how much of the corpus has detail enrichment
 - whether ticket references/chunks cover the full ticket set
-- whether important retrieval metadata (category, issue summary, resolution summary) is materially populated
+- whether important retrieval metadata (category, cleaned subject, issue summary, next-step hints, recent log types, resolution summary, attachment presence) is materially populated
 - whether chunk sizes look sane for vector/semantic use
 - a real SQLite column/table
 - a reusable structural query
@@ -143,9 +143,5 @@ SherpaMind should also expose enough observability that OpenClaw can trust the r
 - or a generated public artifact if it helps OpenClaw/humans inspect the state quickly
 
 If a proposed feature mainly hardcodes conclusions that OpenClaw could derive at query time from well-prepared data, prefer better data preparation over baking that interpretation into SherpaMind.
-
-That is how SherpaMind becomes naturally queryable instead of technically queryable only in theory.
-r
-- or a generated public artifact if it helps OpenClaw/humans inspect the state quickly
 
 That is how SherpaMind becomes naturally queryable instead of technically queryable only in theory.

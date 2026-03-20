@@ -102,6 +102,7 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Enrichment coverage" in text
     assert "Sync freshness" in text
     assert "Attachment metadata summary" in text
+    assert "Retrieval metadata readiness" in text
     assert "Account artifact coverage" in text
     assert "Technician artifact coverage" in text
     assert ".SherpaMind/private/sherpamind.sqlite3" in text

@@ -12,6 +12,12 @@ def _content_hash(text: str) -> str:
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
 
+def _split_csv_values(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [part.strip() for part in value.split(',') if part and part.strip()]
+
+
 def _chunk_text(text: str, target_chars: int = 1800) -> list[str]:
     if len(text) <= target_chars:
         return [text]
@@ -126,6 +132,9 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             or record.get("class_name")
             or record.get("submission_category")
         )
+        cleaned_subject = normalize_ticket_text(record.get("subject"))
+        cleaned_next_step = normalize_ticket_text(record.get("next_step"))
+        recent_log_types = _split_csv_values(record.get("recent_log_types"))
 
         text_parts = [
             f"Ticket #{record['id']}: {record.get('subject') or '(no subject)'}",
@@ -151,8 +160,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Time log count: {record['timelogs_count']}")
         if record.get("attachments_count") is not None:
             text_parts.append(f"Attachment count: {record['attachments_count']}")
-        if record.get("next_step"):
-            text_parts.append(f"Next step: {normalize_ticket_text(record['next_step'])}")
+        if cleaned_next_step:
+            text_parts.append(f"Next step: {cleaned_next_step}")
         if record.get("next_step_date"):
             text_parts.append(f"Next step date: {record['next_step_date']}")
         if cleaned_initial_post:
@@ -210,9 +219,22 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "timelogs_count": record.get("timelogs_count"),
                     "attachments_count": record.get("attachments_count"),
                     "attachments": attachment_metadata,
+                    "attachment_names": [item.get("name") for item in attachment_metadata if item.get("name")],
+                    "has_attachments": bool(attachment_metadata),
                     "detail_available": bool(record.get("detail_note") or record.get("workpad") or record.get("initial_response") or record.get("ticketlogs_count") or record.get("attachments_count")),
+                    "cleaned_subject": cleaned_subject[:300] if cleaned_subject else None,
                     "cleaned_initial_post": cleaned_initial_post[:400] if cleaned_initial_post else None,
+                    "cleaned_detail_note": cleaned_detail_note[:400] if cleaned_detail_note else None,
+                    "cleaned_workpad": cleaned_workpad[:400] if cleaned_workpad else None,
+                    "cleaned_next_step": cleaned_next_step[:300] if cleaned_next_step else None,
+                    "next_step_date": record.get("next_step_date"),
+                    "has_next_step": bool(cleaned_next_step or record.get("next_step_date")),
+                    "recent_log_types": recent_log_types,
+                    "recent_log_types_csv": ", ".join(recent_log_types) if recent_log_types else None,
+                    "initial_response_present": record.get("initial_response") is not None,
+                    "user_email": record.get("user_email"),
                     "resolution_summary": resolution_summary,
+                    "has_resolution_summary": bool(resolution_summary),
                 },
             }
         )

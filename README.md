@@ -67,14 +67,17 @@ SherpaMind currently covers five major areas:
 
 3. **Retrieval preparation**
    - materializes ticket documents from canonical rows
+   - normalizes ticket text into cleaner retrieval-ready summaries
+   - carries workflow/state metadata such as subject, user email, recent log types, next-step hints, attachment presence, and resolution highlights into derived artifacts
    - chunks long documents deterministically
    - supports keyword/text search over docs and chunks
-   - exports embedding-ready chunk payloads
+   - exports metadata-rich embedding-ready chunk payloads
    - builds and queries a local vector index
 
 4. **Operator and OpenClaw observability**
    - reports dataset counts and freshness
    - reports enrichment coverage and retrieval coverage
+   - reports retrieval-metadata readiness across the materialized document layer
    - reports API usage and hourly budget pressure
    - reports vector index readiness and drift
    - generates public Markdown artifacts for lightweight inspection
