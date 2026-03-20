@@ -151,6 +151,12 @@ def search_vector_index(
         if technician:
             clauses.append("d.technician LIKE ? COLLATE NOCASE")
             params.append(f"%{technician}%")
+        if priority:
+            clauses.append("json_extract(d.raw_json, '$.metadata.priority') = ?")
+            params.append(priority)
+        if category:
+            clauses.append("json_extract(d.raw_json, '$.metadata.category') LIKE ? COLLATE NOCASE")
+            params.append(f"%{category}%")
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         rows = conn.execute(
             f"""

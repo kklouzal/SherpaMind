@@ -54,6 +54,7 @@ def _task_specs(settings: Settings) -> list[TaskSpec]:
         TaskSpec("enrichment", settings.service_enrichment_every_seconds, lambda s: enrich_priority_ticket_details(s, limit=s.service_enrichment_limit, materialize_docs=True), budget_class="deferrable"),
         TaskSpec("public_snapshot", settings.service_public_snapshot_every_seconds, lambda s: generate_public_snapshot(s.db_path), budget_class="lightweight"),
         TaskSpec("vector_refresh", settings.service_vector_refresh_every_seconds, lambda s: build_vector_index(s.db_path), budget_class="lightweight"),
+        TaskSpec("runtime_status", settings.service_doctor_every_seconds, lambda s: generate_runtime_status_artifacts(s.db_path), budget_class="lightweight"),
         TaskSpec("doctor_marker", settings.service_doctor_every_seconds, lambda s: {"status": "ok", "checked_at": _now_iso()}, budget_class="lightweight"),
     ]
 

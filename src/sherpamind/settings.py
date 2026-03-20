@@ -127,7 +127,7 @@ def load_settings() -> Settings:
         service_public_snapshot_every_seconds=int(_env_value("SHERPAMIND_SERVICE_PUBLIC_SNAPSHOT_EVERY_SECONDS", file_values, "1800") or "1800"),
         service_vector_refresh_every_seconds=int(_env_value("SHERPAMIND_SERVICE_VECTOR_REFRESH_EVERY_SECONDS", file_values, "1800") or "1800"),
         service_doctor_every_seconds=int(_env_value("SHERPAMIND_SERVICE_DOCTOR_EVERY_SECONDS", file_values, "43200") or "43200"),
-        service_enrichment_limit=int(_env_value("SHERPAMIND_SERVICE_ENRICHMENT_LIMIT", file_values, "50") or "50"),
+        service_enrichment_limit=int(_env_value("SHERPAMIND_SERVICE_ENRICHMENT_LIMIT", file_values, "60") or "60"),
         api_hourly_limit=int(_env_value("SHERPAMIND_API_HOURLY_LIMIT", file_values, "600") or "600"),
         api_budget_warn_ratio=float(_env_value("SHERPAMIND_API_BUDGET_WARN_RATIO", file_values, "0.7") or "0.7"),
         api_budget_critical_ratio=float(_env_value("SHERPAMIND_API_BUDGET_CRITICAL_RATIO", file_values, "0.85") or "0.85"),

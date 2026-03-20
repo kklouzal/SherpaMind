@@ -555,6 +555,13 @@ def generate_snapshot() -> None:
     print(json.dumps(result, indent=2))
 
 
+@app.command("generate-runtime-status")
+def generate_runtime_status() -> None:
+    settings = load_settings()
+    result = generate_runtime_status_artifacts(settings.db_path)
+    print(json.dumps(result, indent=2))
+
+
 if __name__ == "__main__":
     app()
  == "__main__":
