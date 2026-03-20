@@ -258,8 +258,8 @@ def sync_delta(settings: Settings) -> DeltaSyncResult:
         status = "needs_org_context" if "ORG_KEY" in error else "needs_config"
         return DeltaSyncResult(status=status, message=error)
     return DeltaSyncResult(
-        status="stub",
+        status="use_explicit_lanes",
         message=(
-            "Use the explicit lane commands instead: hot open sync, warm closed sync, and cold closed audit sync."
+            "SherpaMind no longer uses a generic delta-sync path. Use the explicit lane commands or the background service instead: hot open sync, warm closed sync, and cold closed audit sync."
         ),
     )
