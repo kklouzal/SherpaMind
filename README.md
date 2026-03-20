@@ -62,6 +62,7 @@ SherpaMind currently covers five major areas:
    - refreshes hot open-ticket state
    - reconciles recently closed tickets
    - performs rolling cold closed-ticket audits
+   - backfills technician stub rows from stable ticket payload names when the standalone technicians endpoint is thinner than real ticket assignee history
    - enriches a bounded priority ticket set through single-ticket detail fetches
    - stores ticket logs and attachment metadata from detail responses
 
@@ -69,6 +70,7 @@ SherpaMind currently covers five major areas:
    - materializes ticket documents from canonical rows
    - normalizes ticket text into cleaner retrieval-ready summaries
    - normalizes account/user/technician labels so retrieval/vector facets prefer human-readable names over raw numeric IDs when ticket payloads provide them
+   - promotes ticket-observed technician labels into canonical stub rows when that is the cleanest stable source available, so technician-facing summaries/filter facets stay readable even when endpoint coverage is thin
    - carries workflow/state metadata such as subject, user email, recent log types, next-step hints, attachment presence, resolution highlights, and label-source provenance into derived artifacts
    - chunks long documents deterministically
    - supports keyword/text search over docs and chunks
@@ -102,7 +104,7 @@ Observed capability evidence includes:
 - successful local vector indexing with **12,081 indexed chunks** and an observed ready state of **0 missing**, **0 dangling**, and **0 outdated** index rows at the latest validation point
 - successful request-budget tracking showing observed runtime behavior well below the documented `600 requests/hour` ceiling during normal service activity
 - successful generated public artifact output under `.SherpaMind/public/docs/`
-- successful local automated validation with the current test suite passing (`50 passed` in the latest run)
+- successful local automated validation with the current test suite passing (`54 passed` in the latest run)
 - successful service-backed runtime operation on a Linux host using the documented user-level `systemd` model
 
 These figures are evidence from real observed runs, not guaranteed fixed installation outcomes. Exact counts will vary by target SherpaDesk account, sync timing, and local runtime state, but the project has been proven in live use to perform the ingest, sync, enrichment, retrieval-preparation, artifact-generation, and validation behaviors described here.
@@ -301,6 +303,7 @@ python3 scripts/run.py <command> [args...]
 - `python3 scripts/bootstrap.py`
 - `python3 scripts/run.py workspace-layout`
 - `python3 scripts/run.py init-db`
+- `python3 scripts/run.py backfill-technician-stubs`
 - `python3 scripts/run.py setup`
 - `python3 scripts/run.py configure`
 - `python3 scripts/run.py doctor`

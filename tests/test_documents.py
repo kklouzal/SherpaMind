@@ -98,7 +98,7 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Technician: Queue Owner" in fallback["text"]
     assert fallback["metadata"]["account_label_source"] == "raw"
     assert fallback["metadata"]["user_label_source"] == "raw"
-    assert fallback["metadata"]["technician_label_source"] == "raw"
+    assert fallback["metadata"]["technician_label_source"] == "joined"
 
     chunks = build_ticket_document_chunks(docs)
     chunks_by_ticket = {chunk["ticket_id"]: chunk for chunk in chunks}

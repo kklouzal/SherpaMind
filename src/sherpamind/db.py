@@ -271,6 +271,30 @@ def _display_name(record: dict[str, Any]) -> str | None:
     ) or None
 
 
+def _ticket_technician_stub(ticket: dict[str, Any]) -> dict[str, Any] | None:
+    technician_id = ticket.get("tech_id")
+    if technician_id is None:
+        return None
+    display_name = (
+        ticket.get("assigned_technician_name")
+        or ticket.get("technician_name")
+        or ticket.get("tech_name")
+        or " ".join(
+            part
+            for part in [ticket.get("technician_firstname"), ticket.get("technician_lastname")]
+            if part
+        )
+        or None
+    )
+    return {
+        "id": technician_id,
+        "FullName": display_name,
+        "email": ticket.get("technician_email"),
+        "updated_time": ticket.get("updated_time"),
+        "source": "ticket_stub",
+    }
+
+
 def upsert_users(db_path: Path, users: list[dict[str, Any]], synced_at: str | None = None) -> int:
     synced_at = synced_at or now_iso()
     with connect(db_path) as conn:
@@ -305,23 +329,35 @@ def upsert_technicians(db_path: Path, technicians: list[dict[str, Any]], synced_
     synced_at = synced_at or now_iso()
     with connect(db_path) as conn:
         for technician in technicians:
+            display_name = _display_name(technician)
+            email = technician.get("email")
+            updated_at = technician.get("updated") or technician.get("modified") or technician.get("updated_time")
             conn.execute(
                 """
                 INSERT INTO technicians(id, display_name, email, raw_json, updated_at, synced_at)
                 VALUES(?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
-                    display_name = excluded.display_name,
-                    email = excluded.email,
-                    raw_json = excluded.raw_json,
-                    updated_at = excluded.updated_at,
+                    display_name = CASE
+                        WHEN excluded.display_name IS NOT NULL AND trim(excluded.display_name) <> ''
+                        THEN excluded.display_name
+                        ELSE technicians.display_name
+                    END,
+                    email = COALESCE(excluded.email, technicians.email),
+                    raw_json = CASE
+                        WHEN json_extract(excluded.raw_json, '$.source') = 'ticket_stub'
+                             AND COALESCE(json_extract(technicians.raw_json, '$.source'), '') <> 'ticket_stub'
+                        THEN technicians.raw_json
+                        ELSE excluded.raw_json
+                    END,
+                    updated_at = COALESCE(excluded.updated_at, technicians.updated_at),
                     synced_at = excluded.synced_at
                 """,
                 (
                     str(technician["id"]),
-                    _display_name(technician),
-                    technician.get("email"),
+                    display_name,
+                    email,
                     _json(technician),
-                    technician.get("updated") or technician.get("modified") or technician.get("updated_time"),
+                    updated_at,
                     synced_at,
                 ),
             )
@@ -331,6 +367,9 @@ def upsert_technicians(db_path: Path, technicians: list[dict[str, Any]], synced_
 
 def upsert_tickets(db_path: Path, tickets: list[dict[str, Any]], synced_at: str | None = None) -> int:
     synced_at = synced_at or now_iso()
+    technician_stubs = [stub for ticket in tickets if (stub := _ticket_technician_stub(ticket)) is not None]
+    if technician_stubs:
+        upsert_technicians(db_path, technician_stubs, synced_at=synced_at)
     with connect(db_path) as conn:
         for ticket in tickets:
             conn.execute(
@@ -372,6 +411,42 @@ def upsert_tickets(db_path: Path, tickets: list[dict[str, Any]], synced_at: str 
             )
         conn.commit()
     return len(tickets)
+
+
+def backfill_ticket_technician_stubs(db_path: Path, synced_at: str | None = None) -> dict[str, int | str]:
+    synced_at = synced_at or now_iso()
+    with connect(db_path) as conn:
+        ticket_rows = conn.execute(
+            """
+            SELECT raw_json
+            FROM tickets
+            WHERE assigned_technician_id IS NOT NULL AND trim(assigned_technician_id) <> ''
+            """
+        ).fetchall()
+        before_count = int(conn.execute("SELECT COUNT(*) AS c FROM technicians").fetchone()["c"])
+    stubs = []
+    seen_ids: set[str] = set()
+    for row in ticket_rows:
+        ticket = json.loads(row["raw_json"])
+        stub = _ticket_technician_stub(ticket)
+        if not stub:
+            continue
+        stub_id = str(stub["id"])
+        if stub_id in seen_ids:
+            continue
+        seen_ids.add(stub_id)
+        stubs.append(stub)
+    if stubs:
+        upsert_technicians(db_path, stubs, synced_at=synced_at)
+    with connect(db_path) as conn:
+        after_count = int(conn.execute("SELECT COUNT(*) AS c FROM technicians").fetchone()["c"])
+    return {
+        "status": "ok",
+        "observed_ticket_technician_ids": len(stubs),
+        "technician_count_before": before_count,
+        "technician_count_after": after_count,
+        "technician_rows_added": max(after_count - before_count, 0),
+    }
 
 
 def upsert_ticket_details(db_path: Path, ticket_details: list[dict[str, Any]], synced_at: str | None = None) -> int:

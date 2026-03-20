@@ -24,6 +24,8 @@ Use for exact facts, counts, filters, state, and time-based analysis:
 - `sync_state`
 - `ingest_runs`
 
+The `technicians` table may include stable ticket-observed stub rows when the standalone technicians endpoint does not cover all assignee IDs seen in tickets. That is intentional backend cleanup so technician filters and summaries stay human-readable instead of falling back to raw numeric IDs.
+
 ### 2. Materialized retrieval documents
 Use for natural-language recall and fuzzy investigation:
 - `ticket_documents`
@@ -98,6 +100,7 @@ Possible future exception:
 - `python3 scripts/run.py doctor`
 - `python3 scripts/run.py service-status`
 - `python3 scripts/run.py service-run-once`
+- `python3 scripts/run.py backfill-technician-stubs`
 - `python3 scripts/run.py generate-public-snapshot`
 
 ### Structured insight commands
