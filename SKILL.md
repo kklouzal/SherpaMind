@@ -197,9 +197,20 @@ Use these for installation and maintenance, not normal user questions:
 - Treat docs/chunks/public Markdown artifacts as replaceable derived caches
 - Let OpenClaw do the interpretation; let SherpaMind do the data prep and retrieval prep
 
+## Maintenance rule
+
+If backend capabilities evolve, update the skill-front in the same wave whenever needed.
+At minimum, re-check:
+- activation guidance
+- preferred command strategy
+- examples
+- references to public/private artifacts
+- any commands that became newly available, obsolete, or misleading
+
 ## References
 
 Read these when needed:
+- `docs/architecture-doctrine.md` — project-wide backend/skill/OpenClaw boundary doctrine
 - `docs/openclaw-query-model.md` — OpenClaw-facing query/retrieval design
 - `docs/retrieval-architecture.md` — retrieval/vector-readiness design
 - `docs/delta-sync-strategy.md` — hot/warm/cold sync lane design

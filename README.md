@@ -48,6 +48,11 @@ North star:
 - generate clean, replaceable retrieval artifacts
 - let OpenClaw perform the interpretation at query time instead of hardcoding brittle conclusions into SherpaMind
 
+Project mantra:
+- **Backend prepares the data**
+- **Skill-front teaches access**
+- **OpenClaw reasons at query time**
+
 ### Main components
 - `SKILL.md` — skill entry instructions and operating contract
 - `scripts/bootstrap.py` — skill-local runtime bootstrap
