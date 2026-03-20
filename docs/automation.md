@@ -42,6 +42,7 @@ These run from internal Python timers, not OpenClaw cron.
 ### Update / re-bootstrap
 - rerun bootstrap safely
 - preserve `.SherpaMind/private` and `.SherpaMind/public`
+- archive old repo-local `state/` leftovers once migrated
 - reinstall/rewrite the systemd user unit idempotently
 - restart the service safely
 - doctor the runtime

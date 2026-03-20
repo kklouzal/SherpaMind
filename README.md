@@ -203,6 +203,7 @@ On update / re-bootstrap:
 - rerun bootstrap safely to refresh the skill-local venv if needed
 - rerun `doctor`
 - migrate legacy state if needed
+- archive old repo-local `state/` leftovers once migrated
 - install/restart the user service idempotently
 - clean up any legacy SherpaMind OpenClaw cron jobs
 

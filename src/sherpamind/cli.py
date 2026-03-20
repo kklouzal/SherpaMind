@@ -26,7 +26,7 @@ from .automation import doctor_automation, remove_managed_cron_jobs
 from .client import SherpaDeskClient
 from .documents import export_ticket_documents, materialize_ticket_documents
 from .enrichment import enrich_priority_ticket_details
-from .migrate import migrate_legacy_state
+from .migrate import archive_legacy_state, migrate_legacy_state
 from .paths import ensure_path_layout
 from .public_artifacts import generate_public_snapshot
 from .service_manager import (
@@ -175,6 +175,13 @@ def cleanup_legacy_cron() -> None:
     print(json.dumps(result.__dict__, indent=2))
 
 
+@app.command("archive-legacy-state")
+def archive_legacy() -> None:
+    paths = ensure_path_layout()
+    result = archive_legacy_state(paths.workspace_root)
+    print(json.dumps(result.__dict__, indent=2))
+
+
 @app.command("setup")
 def setup(
     migrate_legacy: bool = True,
@@ -196,6 +203,11 @@ def setup(
             steps.append({"legacy_cron_cleanup": cleanup.__dict__})
         except Exception as exc:
             steps.append({"legacy_cron_cleanup_error": f"{type(exc).__name__}: {exc}"})
+    try:
+        archive = archive_legacy_state(paths.workspace_root)
+        steps.append({"legacy_state_archive": archive.__dict__})
+    except Exception as exc:
+        steps.append({"legacy_state_archive_error": f"{type(exc).__name__}: {exc}"})
     if not initialize_db_only and settings.db_path.exists():
         try:
             snapshot = generate_public_snapshot(settings.db_path)

@@ -15,6 +15,13 @@ class MigrationResult:
     stats: dict | None = None
 
 
+@dataclass
+class LegacyArchiveResult:
+    status: str
+    message: str
+    stats: dict | None = None
+
+
 def _looks_empty_sqlite(path: Path) -> bool:
     if not path.exists():
         return True
@@ -77,4 +84,39 @@ def migrate_legacy_state(legacy_root: Path) -> MigrationResult:
             "replaced": replaced,
             "skipped": skipped,
         },
+    )
+
+
+def archive_legacy_state(legacy_root: Path) -> LegacyArchiveResult:
+    paths = ensure_path_layout()
+    legacy_state_dir = legacy_root / "state"
+    archive_root = paths.private_root / "legacy"
+    moved = []
+    skipped = []
+
+    if not legacy_state_dir.exists():
+        return LegacyArchiveResult(
+            status="ok",
+            message="No legacy state directory present.",
+            stats={"moved": moved, "skipped": [{"path": str(legacy_state_dir), "reason": "missing"}]},
+        )
+
+    archive_root.mkdir(parents=True, exist_ok=True)
+    for item in sorted(legacy_state_dir.iterdir()):
+        destination = archive_root / item.name
+        if destination.exists():
+            skipped.append({"path": str(item), "reason": "archive destination already exists"})
+            continue
+        shutil.move(str(item), str(destination))
+        moved.append({"from": str(item), "to": str(destination)})
+
+    try:
+        legacy_state_dir.rmdir()
+    except OSError:
+        pass
+
+    return LegacyArchiveResult(
+        status="ok",
+        message="Legacy SherpaMind repo-local state archived into .SherpaMind/private/legacy.",
+        stats={"moved": moved, "skipped": skipped, "archive_root": str(archive_root)},
     )

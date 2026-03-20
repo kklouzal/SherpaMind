@@ -58,6 +58,7 @@ python3 scripts/run.py doctor
 python3 scripts/run.py setup
 python3 scripts/run.py migrate-legacy-state
 python3 scripts/run.py cleanup-legacy-cron
+python3 scripts/run.py archive-legacy-state
 python3 scripts/run.py configure --api-key <token>
 python3 scripts/run.py discover-orgs
 python3 scripts/run.py seed
@@ -114,3 +115,4 @@ Read these when needed:
 - `docs/delta-sync-strategy.md` — hot/warm/cold sync lane design
 - `docs/api-reference.md` — verified API behavior and caveats
 - `docs/automation.md` — service/install/update/health model
+odel

@@ -1,7 +1,7 @@
 from pathlib import Path
 import sqlite3
 
-from sherpamind.migrate import migrate_legacy_state
+from sherpamind.migrate import archive_legacy_state, migrate_legacy_state
 
 
 def test_migrate_legacy_state_copies_state_files(monkeypatch, tmp_path: Path) -> None:
@@ -41,3 +41,17 @@ def test_migrate_legacy_state_replaces_empty_destination_sqlite(monkeypatch, tmp
 
     assert result.status == "ok"
     assert len(result.stats["replaced"]) == 1
+
+
+def test_archive_legacy_state_moves_repo_local_state(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    legacy_state = tmp_path / "state"
+    legacy_state.mkdir(parents=True, exist_ok=True)
+    (legacy_state / "sherpamind.sqlite3").write_text("db")
+    (legacy_state / "watch_state.json").write_text("{}")
+
+    result = archive_legacy_state(tmp_path)
+
+    assert result.status == "ok"
+    assert (tmp_path / ".SherpaMind" / "private" / "legacy" / "sherpamind.sqlite3").exists()
+    assert (tmp_path / ".SherpaMind" / "private" / "legacy" / "watch_state.json").exists()
