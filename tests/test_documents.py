@@ -32,12 +32,21 @@ def seed_fixture(db: Path) -> None:
             "created_time": "2026-03-18T01:00:00Z",
             "updated_time": "2026-03-19T03:00:00Z",
             "initial_post": "",
+            "account_location_name": "HQ",
+            "support_group_name": "Dispatch",
+            "location_name": "Front Desk",
+            "department_key": "service",
+            "is_via_email_parser": 1,
+            "is_handle_by_callcentre": 0,
+            "confirmed_by_name": "Dispatcher",
+            "confirmed_date": "2026-03-19T04:30:00Z",
         }, {
             "id": 102,
             "account_id": 2,
             "user_id": 12,
             "tech_id": 999,
             "account_name": "Raw Account",
+            "account_location_name": "Warehouse",
             "user_firstname": "Bob",
             "user_lastname": "Jones",
             "technician_firstname": "Queue",
@@ -65,7 +74,12 @@ def seed_fixture(db: Path) -> None:
             "support_group_name": "Managed Services",
             "default_contract_name": "Gold",
             "location_name": "HQ",
+            "account_location_name": "HQ Campus",
+            "department_key": "managed-services",
             "confirmed_by_name": "Tech Lead",
+            "confirmed_date": "2026-03-19T05:00:00Z",
+            "is_via_email_parser": 1,
+            "is_handle_by_callcentre": 0,
             "is_waiting_on_response": True,
             "is_resolved": False,
             "is_confirmed": True,
@@ -87,12 +101,17 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["doc_id"] == "ticket:101"
     assert "Issue A" in primary["text"]
     assert "Issue summary:" in primary["text"]
-    assert "email parser" not in primary["text"].lower()
+    assert "This ticket was created via the email parser." not in primary["text"]
     assert "Internal note" in primary["text"]
     assert "printer broken" in primary["text"]
     assert "Support group: Managed Services" in primary["text"]
     assert "Contract: Gold" in primary["text"]
     assert "Location: HQ" in primary["text"]
+    assert "Account location: HQ Campus" in primary["text"]
+    assert "Department key: managed-services" in primary["text"]
+    assert "Via email parser: True" in primary["text"]
+    assert "Handled by call centre: False" in primary["text"]
+    assert "Confirmed date: 2026-03-19T05:00:00Z" in primary["text"]
     assert "Follow-up note: Waiting on user approval" in primary["text"]
     assert "Requested completion note: Finish after-hours maintenance window" in primary["text"]
     assert "Attachments (metadata only)" in primary["text"]
@@ -111,7 +130,12 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["support_group_name"] == "Managed Services"
     assert primary["metadata"]["default_contract_name"] == "Gold"
     assert primary["metadata"]["location_name"] == "HQ"
+    assert primary["metadata"]["account_location_name"] == "HQ Campus"
+    assert primary["metadata"]["department_key"] == "managed-services"
     assert primary["metadata"]["confirmed_by_name"] == "Tech Lead"
+    assert primary["metadata"]["confirmed_date"] == "2026-03-19T05:00:00Z"
+    assert primary["metadata"]["is_via_email_parser"] is True
+    assert primary["metadata"]["is_handle_by_callcentre"] is False
     assert primary["metadata"]["is_waiting_on_response"] is True
     assert primary["metadata"]["is_resolved"] is False
     assert primary["metadata"]["is_confirmed"] is True
@@ -134,6 +158,8 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Account: Raw Account" in fallback["text"]
     assert "User: Bob Jones" in fallback["text"]
     assert "Technician: Queue Owner" in fallback["text"]
+    assert "Account location: Warehouse" in fallback["text"]
+    assert fallback["metadata"]["account_location_name"] == "Warehouse"
     assert fallback["metadata"]["account_label_source"] == "raw"
     assert fallback["metadata"]["user_label_source"] == "raw"
     assert fallback["metadata"]["technician_label_source"] == "joined"

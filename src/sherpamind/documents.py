@@ -3,12 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket_documents
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 2
+DOCUMENT_MATERIALIZATION_VERSION = 3
 
 
 def _content_hash(text: str) -> str:
@@ -41,6 +42,21 @@ def _looks_like_identifier(value: str | None) -> bool:
 def _join_name_parts(*parts: str | None) -> str | None:
     joined = " ".join(part.strip() for part in parts if part and part.strip())
     return joined or None
+
+
+def _coerce_bool(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    candidate = str(value).strip().lower()
+    if candidate in {"1", "true", "yes", "y", "on"}:
+        return True
+    if candidate in {"0", "false", "no", "n", "off", ""}:
+        return False
+    return bool(candidate)
 
 
 def _resolve_account_label(record: dict) -> tuple[str | None, str]:
@@ -163,15 +179,20 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                td.initial_response,
                json_extract(t.raw_json, '$.next_step') AS next_step,
                json_extract(td.raw_json, '$.next_step') AS detail_next_step,
-               json_extract(t.raw_json, '$.next_step_date') AS next_step_date,
+               COALESCE(json_extract(td.raw_json, '$.next_step_date'), json_extract(t.raw_json, '$.next_step_date')) AS next_step_date,
                json_extract(td.raw_json, '$.followup_date') AS followup_date,
                json_extract(td.raw_json, '$.followup_note') AS followup_note,
                json_extract(td.raw_json, '$.request_completion_date') AS request_completion_date,
                json_extract(td.raw_json, '$.request_completion_note') AS request_completion_note,
-               json_extract(td.raw_json, '$.support_group_name') AS support_group_name,
-               json_extract(td.raw_json, '$.default_contract_name') AS default_contract_name,
-               json_extract(td.raw_json, '$.location_name') AS location_name,
-               json_extract(td.raw_json, '$.confirmed_by_name') AS confirmed_by_name,
+               COALESCE(json_extract(td.raw_json, '$.support_group_name'), json_extract(t.raw_json, '$.support_group_name')) AS support_group_name,
+               COALESCE(json_extract(td.raw_json, '$.default_contract_name'), json_extract(t.raw_json, '$.default_contract_name')) AS default_contract_name,
+               COALESCE(json_extract(td.raw_json, '$.location_name'), json_extract(t.raw_json, '$.location_name')) AS location_name,
+               COALESCE(json_extract(td.raw_json, '$.account_location_name'), json_extract(t.raw_json, '$.account_location_name')) AS account_location_name,
+               COALESCE(json_extract(td.raw_json, '$.confirmed_by_name'), json_extract(t.raw_json, '$.confirmed_by_name')) AS confirmed_by_name,
+               COALESCE(json_extract(td.raw_json, '$.confirmed_date'), json_extract(t.raw_json, '$.confirmed_date')) AS confirmed_date,
+               COALESCE(json_extract(td.raw_json, '$.department_key'), json_extract(t.raw_json, '$.department_key')) AS department_key,
+               COALESCE(json_extract(td.raw_json, '$.is_via_email_parser'), json_extract(t.raw_json, '$.is_via_email_parser')) AS is_via_email_parser,
+               COALESCE(json_extract(td.raw_json, '$.is_handle_by_callcentre'), json_extract(t.raw_json, '$.is_handle_by_callcentre')) AS is_handle_by_callcentre,
                json_extract(td.raw_json, '$.is_waiting_on_response') AS is_waiting_on_response,
                json_extract(td.raw_json, '$.is_resolved') AS is_resolved,
                json_extract(td.raw_json, '$.is_confirmed') AS is_confirmed,
@@ -255,6 +276,11 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         account_label, account_label_source = _resolve_account_label(record)
         user_label, user_label_source = _resolve_user_label(record)
         technician_label, technician_label_source = _resolve_technician_label(record)
+        is_waiting_on_response = _coerce_bool(record.get("is_waiting_on_response"))
+        is_resolved = _coerce_bool(record.get("is_resolved"))
+        is_confirmed = _coerce_bool(record.get("is_confirmed"))
+        is_via_email_parser = _coerce_bool(record.get("is_via_email_parser"))
+        is_handle_by_callcentre = _coerce_bool(record.get("is_handle_by_callcentre"))
 
         text_parts = [
             f"Ticket #{record['id']}: {record.get('subject') or '(no subject)'}",
@@ -268,6 +294,16 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             f"Updated: {record.get('updated_at') or 'unknown'}",
             f"Closed: {record.get('closed_at') or 'not closed'}",
         ]
+        if record.get("account_location_name"):
+            text_parts.append(f"Account location: {record['account_location_name']}")
+        if record.get("location_name"):
+            text_parts.append(f"Location: {record['location_name']}")
+        if record.get("department_key"):
+            text_parts.append(f"Department key: {record['department_key']}")
+        if is_via_email_parser is not None:
+            text_parts.append(f"Via email parser: {is_via_email_parser}")
+        if is_handle_by_callcentre is not None:
+            text_parts.append(f"Handled by call centre: {is_handle_by_callcentre}")
         if record.get("initial_response"):
             text_parts.append(f"Initial response flag/value: {record['initial_response']}")
         if record.get("sla_response_date"):
@@ -284,16 +320,16 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Support group: {record['support_group_name']}")
         if record.get("default_contract_name"):
             text_parts.append(f"Contract: {record['default_contract_name']}")
-        if record.get("location_name"):
-            text_parts.append(f"Location: {record['location_name']}")
         if record.get("confirmed_by_name"):
             text_parts.append(f"Confirmed by: {record['confirmed_by_name']}")
-        if record.get("is_waiting_on_response") is not None:
-            text_parts.append(f"Waiting on response: {bool(record['is_waiting_on_response'])}")
-        if record.get("is_confirmed") is not None:
-            text_parts.append(f"Confirmed: {bool(record['is_confirmed'])}")
-        if record.get("is_resolved") is not None:
-            text_parts.append(f"Resolved flag: {bool(record['is_resolved'])}")
+        if record.get("confirmed_date"):
+            text_parts.append(f"Confirmed date: {record['confirmed_date']}")
+        if is_waiting_on_response is not None:
+            text_parts.append(f"Waiting on response: {is_waiting_on_response}")
+        if is_confirmed is not None:
+            text_parts.append(f"Confirmed: {is_confirmed}")
+        if is_resolved is not None:
+            text_parts.append(f"Resolved flag: {is_resolved}")
         if cleaned_next_step:
             text_parts.append(f"Next step: {cleaned_next_step}")
         if record.get("next_step_date"):
@@ -376,6 +412,12 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                         or record.get("request_completion_note")
                         or record.get("support_group_name")
                         or record.get("default_contract_name")
+                        or record.get("account_location_name")
+                        or record.get("department_key")
+                        or record.get("confirmed_by_name")
+                        or record.get("confirmed_date")
+                        or is_via_email_parser is not None
+                        or is_handle_by_callcentre is not None
                     ),
                     "cleaned_subject": cleaned_subject[:300] if cleaned_subject else None,
                     "cleaned_initial_post": cleaned_initial_post[:400] if cleaned_initial_post else None,
@@ -395,10 +437,15 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "support_group_name": record.get("support_group_name"),
                     "default_contract_name": record.get("default_contract_name"),
                     "location_name": record.get("location_name"),
+                    "account_location_name": record.get("account_location_name"),
+                    "department_key": record.get("department_key"),
                     "confirmed_by_name": record.get("confirmed_by_name"),
-                    "is_waiting_on_response": bool(record.get("is_waiting_on_response")) if record.get("is_waiting_on_response") is not None else None,
-                    "is_resolved": bool(record.get("is_resolved")) if record.get("is_resolved") is not None else None,
-                    "is_confirmed": bool(record.get("is_confirmed")) if record.get("is_confirmed") is not None else None,
+                    "confirmed_date": record.get("confirmed_date"),
+                    "is_via_email_parser": is_via_email_parser,
+                    "is_handle_by_callcentre": is_handle_by_callcentre,
+                    "is_waiting_on_response": is_waiting_on_response,
+                    "is_resolved": is_resolved,
+                    "is_confirmed": is_confirmed,
                     "account_label_source": account_label_source,
                     "user_label_source": user_label_source,
                     "technician_label_source": technician_label_source,

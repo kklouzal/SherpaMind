@@ -49,7 +49,7 @@ Best source:
 1. ingest canonical SherpaDesk data into SQLite
 2. normalize linked entities and stable ticket/comment metadata
 3. build retrieval documents from tickets, comments, accounts, users, and derived summaries
-4. carry stable workflow/state metadata forward with those documents (subject cleanup, user/account/technician linkage, human-readable entity labels, label-source provenance, recent log types, next-step hints, request-completion/follow-up cues, contract/confirmation context, attachment presence, resolution highlights)
+4. carry stable workflow/state metadata forward with those documents (subject cleanup, user/account/technician linkage, human-readable entity labels, label-source provenance, recent log types, next-step hints, request-completion/follow-up cues, contract/confirmation context, account-location and department context, intake-channel/handling flags, attachment presence, resolution highlights)
 5. chunk long text where needed
 6. index documents into:
    - FTS/keyword search
