@@ -165,6 +165,17 @@ CREATE TABLE IF NOT EXISTS ingest_runs (
     status TEXT NOT NULL,
     notes TEXT
 );
+
+CREATE TABLE IF NOT EXISTS api_request_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at TEXT NOT NULL,
+    method TEXT NOT NULL,
+    path TEXT NOT NULL,
+    status_code INTEGER,
+    outcome TEXT NOT NULL,
+    attempt_kind TEXT,
+    raw_json TEXT
+);
 """
 
 
@@ -549,3 +560,33 @@ def replace_ticket_document_chunks(db_path: Path, chunks: list[dict[str, Any]], 
             )
         conn.commit()
     return len(chunks)
+
+
+def record_api_request_event(
+    db_path: Path,
+    *,
+    method: str,
+    path: str,
+    status_code: int | None,
+    outcome: str,
+    attempt_kind: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    initialize_db(db_path)
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO api_request_events(recorded_at, method, path, status_code, outcome, attempt_kind, raw_json)
+            VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                now_iso(),
+                method,
+                path,
+                status_code,
+                outcome,
+                attempt_kind,
+                _json(extra or {}),
+            ),
+        )
+        conn.commit()

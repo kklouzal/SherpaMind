@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .db import connect
+from .db import connect, initialize_db
 
 
 def list_ticket_counts_by_account(db_path: Path, limit: int = 20) -> list[dict]:
@@ -234,7 +234,43 @@ def search_ticket_document_chunks(db_path: Path, query: str, limit: int = 20) ->
     return [dict(row) for row in rows]
 
 
+def get_api_usage_summary(db_path: Path) -> dict:
+    initialize_db(db_path)
+    with connect(db_path) as conn:
+        last_hour = conn.execute(
+            """
+            SELECT COUNT(*) AS request_count,
+                   SUM(CASE WHEN status_code IS NOT NULL AND status_code >= 400 THEN 1 ELSE 0 END) AS error_count,
+                   MIN(recorded_at) AS earliest_at,
+                   MAX(recorded_at) AS latest_at
+            FROM api_request_events
+            WHERE julianday(recorded_at) >= julianday('now', '-1 hour')
+            """
+        ).fetchone()
+        top_paths = conn.execute(
+            """
+            SELECT path, COUNT(*) AS request_count
+            FROM api_request_events
+            WHERE julianday(recorded_at) >= julianday('now', '-1 hour')
+            GROUP BY path
+            ORDER BY request_count DESC, path ASC
+            LIMIT 10
+            """
+        ).fetchall()
+    request_count = int(last_hour["request_count"] or 0)
+    return {
+        "requests_last_hour": request_count,
+        "errors_last_hour": int(last_hour["error_count"] or 0),
+        "remaining_hourly_budget": max(0, 600 - request_count),
+        "budget_utilization_ratio": round(request_count / 600, 4),
+        "earliest_request_at": last_hour["earliest_at"],
+        "latest_request_at": last_hour["latest_at"],
+        "top_paths_last_hour": [dict(row) for row in top_paths],
+    }
+
+
 def get_dataset_summary(db_path: Path) -> dict:
+    initialize_db(db_path)
     with connect(db_path) as conn:
         counts = {}
         for table in [
@@ -250,6 +286,7 @@ def get_dataset_summary(db_path: Path) -> dict:
             "ticket_document_chunks",
             "ticket_comments",
             "ingest_runs",
+            "api_request_events",
         ]:
             counts[table] = conn.execute(f"SELECT COUNT(*) AS c FROM {table}").fetchone()["c"]
         latest_run = conn.execute(
@@ -258,6 +295,7 @@ def get_dataset_summary(db_path: Path) -> dict:
     return {
         "counts": counts,
         "latest_ingest_run": dict(latest_run) if latest_run else None,
+        "api_usage": get_api_usage_summary(db_path),
     }
 
 

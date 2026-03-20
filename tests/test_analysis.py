@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from sherpamind.analysis import (
+    get_api_usage_summary,
     get_dataset_summary,
     get_insight_snapshot,
     list_open_ticket_ages,
@@ -16,7 +17,17 @@ from sherpamind.analysis import (
     search_ticket_document_chunks,
     search_ticket_documents,
 )
-from sherpamind.db import initialize_db, replace_ticket_document_chunks, replace_ticket_documents, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
+from sherpamind.db import (
+    initialize_db,
+    record_api_request_event,
+    replace_ticket_document_chunks,
+    replace_ticket_documents,
+    upsert_accounts,
+    upsert_ticket_details,
+    upsert_tickets,
+    upsert_technicians,
+    upsert_users,
+)
 
 
 def seed_fixture(db: Path) -> None:
@@ -62,7 +73,12 @@ def seed_fixture(db: Path) -> None:
     )
     upsert_ticket_details(
         db,
-        [{"id": 101, "ticketlogs": [{"id": 5001, "log_type": "Initial Post", "plain_note": "printer broken", "record_date": "2026-03-18T01:00:00Z"}], "timelogs": [], "attachments": [{"id": "a1", "name": "shot.png", "url": "https://example/shot.png", "size": 1234, "date": "2026-03-18T01:00:00Z"}]}],
+        [{
+            "id": 101,
+            "ticketlogs": [{"id": 5001, "log_type": "Initial Post", "plain_note": "printer broken", "record_date": "2026-03-18T01:00:00Z"}],
+            "timelogs": [],
+            "attachments": [{"id": "a1", "name": "shot.png", "url": "https://example/shot.png", "size": 1234, "date": "2026-03-18T01:00:00Z"}],
+        }],
         synced_at="2026-03-19T01:00:00Z",
     )
     replace_ticket_documents(
@@ -75,6 +91,7 @@ def seed_fixture(db: Path) -> None:
         [{"chunk_id": "ticket:101:chunk:0", "doc_id": "ticket:101", "ticket_id": 101, "chunk_index": 0, "text": "Printer issue A for Acme", "content_hash": "h1"}],
         synced_at="2026-03-19T01:00:00Z",
     )
+    record_api_request_event(db, method="GET", path="tickets", status_code=200, outcome="http_response")
 
 
 def test_analysis_reports(tmp_path: Path) -> None:
@@ -90,6 +107,7 @@ def test_analysis_reports(tmp_path: Path) -> None:
     open_ages = list_open_ticket_ages(db, limit=2)
     recent_accounts = list_recent_account_activity(db, days=30, limit=5)
     recent_techs = list_technician_recent_load(db, days=30, limit=5)
+    usage = get_api_usage_summary(db)
     summary = get_dataset_summary(db)
     snapshot = get_insight_snapshot(db)
     search = search_ticket_documents(db, 'printer', limit=5)
@@ -106,10 +124,12 @@ def test_analysis_reports(tmp_path: Path) -> None:
     assert open_ages[0]["status"] == "Open"
     assert recent_accounts[0]["ticket_count"] >= 1
     assert recent_techs[0]["ticket_count"] >= 1
+    assert usage["requests_last_hour"] == 1
     assert summary["counts"]["tickets"] == 3
     assert summary["counts"]["ticket_logs"] == 1
     assert summary["counts"]["ticket_attachments"] == 1
     assert summary["counts"]["ticket_document_chunks"] == 1
+    assert summary["counts"]["api_request_events"] == 1
     assert snapshot["dataset_summary"]["counts"]["tickets"] == 3
     assert search[0]["doc_id"] == "ticket:101"
     assert search_chunks[0]["chunk_id"] == "ticket:101:chunk:0"

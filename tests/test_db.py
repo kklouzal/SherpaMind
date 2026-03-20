@@ -31,6 +31,7 @@ def test_initialize_db_creates_core_tables(tmp_path: Path) -> None:
     assert 'ticket_attachments' in names
     assert 'ticket_documents' in names
     assert 'ticket_document_chunks' in names
+    assert 'api_request_events' in names
 
 
 def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:

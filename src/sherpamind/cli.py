@@ -7,6 +7,7 @@ import typer
 from rich import print
 
 from .analysis import (
+    get_api_usage_summary,
     get_dataset_summary,
     get_insight_snapshot,
     list_open_ticket_ages,
@@ -65,6 +66,7 @@ def _build_client() -> SherpaDeskClient:
         instance_key=settings.instance_key,
         timeout_seconds=settings.request_timeout_seconds,
         min_interval_seconds=settings.request_min_interval_seconds,
+        request_tracking_db_path=settings.db_path,
     )
 
 
@@ -159,6 +161,7 @@ def doctor() -> None:
         "checks": checks,
         "service": doctor_service(),
         "legacy_cron": doctor_automation(),
+        "api_usage": get_api_usage_summary(settings.db_path),
     }, indent=2))
 
 
@@ -348,6 +351,12 @@ def materialize_docs(limit: int = 0) -> None:
 def dataset_summary() -> None:
     settings = load_settings()
     print(json.dumps(get_dataset_summary(settings.db_path), indent=2))
+
+
+@app.command("report-api-usage")
+def report_api_usage() -> None:
+    settings = load_settings()
+    print(json.dumps(get_api_usage_summary(settings.db_path), indent=2))
 
 
 @app.command("insight-snapshot")

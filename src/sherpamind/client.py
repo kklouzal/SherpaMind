@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 import base64
 
@@ -12,6 +13,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from .db import record_api_request_event
 from .rate_limit import RequestPacer
 
 
@@ -24,6 +26,7 @@ class SherpaDeskClient:
     instance_key: str | None = None
     timeout_seconds: float = 30.0
     min_interval_seconds: float = 8.0
+    request_tracking_db_path: Path | None = None
     pacer: RequestPacer = field(init=False)
 
     def __post_init__(self) -> None:
@@ -56,13 +59,38 @@ class SherpaDeskClient:
     )
     def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         self.pacer.wait()
-        with httpx.Client(timeout=self.timeout_seconds, headers=self._build_headers()) as client:
-            response = client.get(self._build_url(path), params=params)
-            response.raise_for_status()
-            content_type = response.headers.get("content-type", "")
-            if "json" in content_type.lower():
-                return response.json()
-            return response.text
+        try:
+            with httpx.Client(timeout=self.timeout_seconds, headers=self._build_headers()) as client:
+                response = client.get(self._build_url(path), params=params)
+                if self.request_tracking_db_path is not None:
+                    record_api_request_event(
+                        self.request_tracking_db_path,
+                        method="GET",
+                        path=path,
+                        status_code=response.status_code,
+                        outcome="http_response",
+                        attempt_kind="get",
+                        extra={"params": params or {}},
+                    )
+                response.raise_for_status()
+                content_type = response.headers.get("content-type", "")
+                if "json" in content_type.lower():
+                    return response.json()
+                return response.text
+        except httpx.HTTPStatusError:
+            raise
+        except httpx.HTTPError as exc:
+            if self.request_tracking_db_path is not None:
+                record_api_request_event(
+                    self.request_tracking_db_path,
+                    method="GET",
+                    path=path,
+                    status_code=None,
+                    outcome="http_error",
+                    attempt_kind=type(exc).__name__,
+                    extra={"params": params or {}, "detail": str(exc)},
+                )
+            raise
 
     def discover_organizations(self) -> Any:
         return self.get("organizations/")
