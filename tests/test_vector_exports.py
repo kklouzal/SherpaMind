@@ -19,7 +19,15 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
             "technician": "Tech One",
             "updated_at": "2026-03-19T03:00:00Z",
             "text": "hello",
-            "metadata": {"priority": "High", "category": "Hardware", "attachments_count": 1},
+            "metadata": {
+                "priority": "High",
+                "category": "Hardware",
+                "attachments_count": 1,
+                "ticketlogs_count": 5,
+                "timelogs_count": 0,
+                "cleaned_initial_post": "Help me",
+                "resolution_summary": "Closed successfully",
+            },
             "content_hash": "abc",
         }],
         synced_at="2026-03-19T01:00:00Z",
@@ -43,3 +51,5 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["id"] == "ticket:101:chunk:0"
     assert row["metadata"]["account"] == "Acme"
     assert row["metadata"]["priority"] == "High"
+    assert row["metadata"]["ticketlogs_count"] == 5
+    assert row["metadata"]["resolution_summary"] == "Closed successfully"

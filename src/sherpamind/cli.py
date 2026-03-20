@@ -26,6 +26,7 @@ from .analysis import (
 from .automation import doctor_automation, remove_managed_cron_jobs
 from .client import SherpaDeskClient
 from .documents import export_ticket_chunks, export_ticket_documents, materialize_ticket_documents
+from .freshness import get_sync_freshness
 from .enrichment import enrich_priority_ticket_details
 from .migrate import archive_legacy_state, migrate_legacy_state
 from .paths import ensure_path_layout
@@ -507,6 +508,14 @@ def export_embedding_chunks_cmd(output_path: str = "", limit: int = 0) -> None:
 def generate_snapshot() -> None:
     settings = load_settings()
     result = generate_public_snapshot(settings.db_path)
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == "__main__":
+    app()
+ == "__main__":
+    app()
+lic_snapshot(settings.db_path)
     print(json.dumps(result, indent=2))
 
 

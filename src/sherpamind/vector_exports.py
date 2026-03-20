@@ -55,6 +55,10 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                     "category": record["category"],
                     "closed_at": record["closed_at"],
                     "attachments_count": record["attachments_count"],
+                    "ticketlogs_count": record["ticketlogs_count"],
+                    "timelogs_count": record["timelogs_count"],
+                    "cleaned_initial_post": record["cleaned_initial_post"],
+                    "resolution_summary": record["resolution_summary"],
                     "updated_at": record["updated_at"],
                     "content_hash": record["content_hash"],
                 },
@@ -63,6 +67,10 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
             count += 1
     return {
         "status": "ok",
+        "output_path": str(output_path),
+        "chunk_count": count,
+    }
+   "status": "ok",
         "output_path": str(output_path),
         "chunk_count": count,
     }

@@ -34,6 +34,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
 
     dataset_summary = get_dataset_summary(db_path)
     enrichment_coverage = get_enrichment_coverage(db_path)
+    sync_freshness = get_sync_freshness(db_path)
     status_counts = list_ticket_counts_by_status(db_path)
     open_ages = list_open_ticket_ages(db_path, limit=10)
     account_activity = list_recent_account_activity(db_path, days=7, limit=10)
