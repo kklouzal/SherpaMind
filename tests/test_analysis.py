@@ -3,6 +3,7 @@ from pathlib import Path
 from sherpamind.analysis import (
     get_api_usage_summary,
     get_dataset_summary,
+    get_enrichment_coverage,
     get_insight_snapshot,
     list_open_ticket_ages,
     list_recent_account_activity,
@@ -108,10 +109,11 @@ def test_analysis_reports(tmp_path: Path) -> None:
     recent_accounts = list_recent_account_activity(db, days=30, limit=5)
     recent_techs = list_technician_recent_load(db, days=30, limit=5)
     usage = get_api_usage_summary(db)
+    coverage = get_enrichment_coverage(db)
     summary = get_dataset_summary(db)
     snapshot = get_insight_snapshot(db)
     search = search_ticket_documents(db, 'printer', limit=5)
-    search_chunks = search_ticket_document_chunks(db, 'printer', limit=5)
+    search_chunks = search_ticket_document_chunks(db, 'printer', limit=5, account='Acme', status='Open', technician='Tech')
 
     assert by_account[0]["account"] == "Acme"
     assert by_account[0]["ticket_count"] == 2
@@ -125,6 +127,8 @@ def test_analysis_reports(tmp_path: Path) -> None:
     assert recent_accounts[0]["ticket_count"] >= 1
     assert recent_techs[0]["ticket_count"] >= 1
     assert usage["requests_last_hour"] == 1
+    assert coverage["ticket_details_covered"] == 1
+    assert coverage["open_detail_coverage"] == 1
     assert summary["counts"]["tickets"] == 3
     assert summary["counts"]["ticket_logs"] == 1
     assert summary["counts"]["ticket_attachments"] == 1

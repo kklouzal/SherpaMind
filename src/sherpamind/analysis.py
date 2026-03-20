@@ -218,20 +218,91 @@ def search_ticket_documents(db_path: Path, query: str, limit: int = 20) -> list[
     return [dict(row) for row in rows]
 
 
-def search_ticket_document_chunks(db_path: Path, query: str, limit: int = 20) -> list[dict]:
+def search_ticket_document_chunks(
+    db_path: Path,
+    query: str,
+    limit: int = 20,
+    account: str | None = None,
+    status: str | None = None,
+    technician: str | None = None,
+) -> list[dict]:
     needle = f"%{query}%"
+    clauses = ["c.text LIKE ? COLLATE NOCASE"]
+    params: list = [needle]
+    if account:
+        clauses.append("d.account LIKE ? COLLATE NOCASE")
+        params.append(f"%{account}%")
+    if status:
+        clauses.append("d.status = ?")
+        params.append(status)
+    if technician:
+        clauses.append("d.technician LIKE ? COLLATE NOCASE")
+        params.append(f"%{technician}%")
+    where = " AND ".join(clauses)
     with connect(db_path) as conn:
         rows = conn.execute(
-            """
-            SELECT chunk_id, doc_id, ticket_id, chunk_index, text
-            FROM ticket_document_chunks
-            WHERE text LIKE ? COLLATE NOCASE
-            ORDER BY ticket_id DESC, chunk_index ASC
+            f"""
+            SELECT c.chunk_id, c.doc_id, c.ticket_id, c.chunk_index, c.text,
+                   d.status, d.account, d.technician, d.updated_at
+            FROM ticket_document_chunks c
+            JOIN ticket_documents d ON d.doc_id = c.doc_id
+            WHERE {where}
+            ORDER BY d.updated_at DESC, c.ticket_id DESC, c.chunk_index ASC
             LIMIT ?
             """,
-            (needle, limit),
+            (*params, limit),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def get_enrichment_coverage(db_path: Path) -> dict:
+    initialize_db(db_path)
+    with connect(db_path) as conn:
+        totals = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS total_tickets,
+                SUM(CASE WHEN status = 'Open' THEN 1 ELSE 0 END) AS open_tickets,
+                SUM(CASE WHEN status = 'Closed' THEN 1 ELSE 0 END) AS closed_tickets
+            FROM tickets
+            """
+        ).fetchone()
+        detail = conn.execute("SELECT COUNT(*) AS c FROM ticket_details").fetchone()["c"]
+        logs = conn.execute("SELECT COUNT(DISTINCT ticket_id) AS c FROM ticket_logs").fetchone()["c"]
+        attachments = conn.execute("SELECT COUNT(DISTINCT ticket_id) AS c FROM ticket_attachments").fetchone()["c"]
+        open_detail = conn.execute(
+            """
+            SELECT COUNT(*) AS c
+            FROM tickets t
+            JOIN ticket_details td ON td.ticket_id = t.id
+            WHERE t.status = 'Open'
+            """
+        ).fetchone()["c"]
+        warm_detail = conn.execute(
+            """
+            SELECT COUNT(*) AS c
+            FROM tickets t
+            JOIN ticket_details td ON td.ticket_id = t.id
+            WHERE t.status = 'Closed'
+              AND t.closed_at IS NOT NULL
+              AND julianday(REPLACE(substr(t.closed_at, 1, 19), 'T', ' ')) >= julianday('now', '-7 days')
+            """
+        ).fetchone()["c"]
+    total_tickets = int(totals["total_tickets"] or 0)
+    open_tickets = int(totals["open_tickets"] or 0)
+    closed_tickets = int(totals["closed_tickets"] or 0)
+    return {
+        "total_tickets": total_tickets,
+        "open_tickets": open_tickets,
+        "closed_tickets": closed_tickets,
+        "ticket_details_covered": int(detail),
+        "ticket_logs_covered": int(logs),
+        "ticket_attachments_covered": int(attachments),
+        "detail_coverage_ratio": round((int(detail) / total_tickets), 4) if total_tickets else 0.0,
+        "open_detail_coverage": int(open_detail),
+        "open_detail_coverage_ratio": round((int(open_detail) / open_tickets), 4) if open_tickets else 0.0,
+        "warm_detail_coverage": int(warm_detail),
+    }
 
 
 def get_api_usage_summary(db_path: Path, hourly_limit: int = 600) -> dict:

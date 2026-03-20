@@ -371,6 +371,12 @@ def insight_snapshot() -> None:
     print(json.dumps(get_insight_snapshot(settings.db_path), indent=2))
 
 
+@app.command("report-enrichment-coverage")
+def report_enrichment_coverage() -> None:
+    settings = load_settings()
+    print(json.dumps(get_enrichment_coverage(settings.db_path), indent=2))
+
+
 @app.command("report-ticket-counts")
 def report_ticket_counts(limit: int = 20) -> None:
     settings = load_settings()
@@ -505,4 +511,6 @@ def generate_snapshot() -> None:
 
 
 if __name__ == "__main__":
+    app()
+ == "__main__":
     app()
