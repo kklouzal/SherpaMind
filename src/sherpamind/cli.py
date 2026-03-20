@@ -52,7 +52,7 @@ from .ingest import (
 )
 from .settings import load_settings, write_config_env
 from .summaries import get_account_summary, get_technician_summary
-from .vector_exports import export_embedding_manifest, export_embedding_ready_chunks
+from .vector_exports import export_embedding_manifest, export_embedding_ready_chunks, get_retrieval_readiness_summary
 from .vector_index import build_vector_index, get_vector_index_status, search_vector_index
 from .watch import watch_new_tickets
 from .db import initialize_db
@@ -530,6 +530,13 @@ def build_vector_index_cmd(limit: int = 0, dims: int = 256) -> None:
 def report_vector_index_status() -> None:
     settings = load_settings()
     print(json.dumps(get_vector_index_status(settings.db_path), indent=2))
+
+
+@app.command("report-retrieval-readiness")
+def report_retrieval_readiness(limit: int = 0) -> None:
+    settings = load_settings()
+    effective_limit = None if limit <= 0 else limit
+    print(json.dumps(get_retrieval_readiness_summary(settings.db_path, limit=effective_limit), indent=2))
 
 
 @app.command("search-vector-index")

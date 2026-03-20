@@ -6,6 +6,7 @@ import json
 from .analysis import get_api_usage_summary, get_dataset_summary, get_enrichment_coverage
 from .freshness import get_sync_freshness
 from .vector_index import get_vector_index_status
+from .vector_exports import get_retrieval_readiness_summary
 from .paths import ensure_path_layout
 
 
@@ -19,6 +20,7 @@ def generate_runtime_status_artifacts(db_path: Path) -> dict:
     usage = get_api_usage_summary(db_path)
     dataset = get_dataset_summary(db_path)
     vector = get_vector_index_status(db_path)
+    retrieval = get_retrieval_readiness_summary(db_path)
 
     status_md = [
         "# SherpaMind Runtime Status",
@@ -46,6 +48,11 @@ def generate_runtime_status_artifacts(db_path: Path) -> dict:
         "## Vector index status",
         "```json",
         json.dumps(vector, indent=2),
+        "```",
+        "",
+        "## Retrieval readiness",
+        "```json",
+        json.dumps(retrieval, indent=2),
         "```",
     ]
     out = runtime_dir / "status.md"

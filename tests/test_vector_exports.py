@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from sherpamind.db import initialize_db, replace_ticket_document_chunks, replace_ticket_documents
-from sherpamind.vector_exports import export_embedding_manifest, export_embedding_ready_chunks
+from sherpamind.vector_exports import export_embedding_manifest, export_embedding_ready_chunks, get_retrieval_readiness_summary
 
 
 def seed(db: Path) -> None:
@@ -73,6 +73,21 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["has_resolution_summary"] is True
 
 
+def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    seed(db)
+    summary = get_retrieval_readiness_summary(db)
+    assert summary["chunk_count"] == 1
+    assert summary["document_count"] == 1
+    assert summary["chunk_quality"]["max_chunk_chars"] == len("chunk text")
+    assert summary["filter_facets"]["accounts"] == ["Acme"]
+    assert summary["filter_facets"]["priorities"] == ["High"]
+    assert summary["metadata_coverage"]["cleaned_subject"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_attachments"]["ratio"] == 1.0
+    assert summary["vector_index"]["total_chunk_rows"] == 1
+    assert summary["content_hash_summary"]["present_count"] == 1
+
+
 def test_export_embedding_manifest(tmp_path: Path) -> None:
     db = tmp_path / "sherpamind.sqlite3"
     seed(db)
@@ -81,4 +96,5 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     assert result["status"] == "ok"
     manifest = json.loads(output.read_text())
     assert manifest["chunk_count"] == 1
-    assert manifest["accounts"] == ["Acme"]
+    assert manifest["filter_facets"]["accounts"] == ["Acme"]
+    assert manifest["metadata_coverage"]["resolution_summary"]["chunks"] == 1

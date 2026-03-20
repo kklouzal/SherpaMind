@@ -359,6 +359,7 @@ python3 scripts/run.py <command> [args...]
 - `python3 scripts/run.py export-embedding-manifest`
 - `python3 scripts/run.py build-vector-index`
 - `python3 scripts/run.py report-vector-index-status`
+- `python3 scripts/run.py report-retrieval-readiness`
 - `python3 scripts/run.py search-vector-index <query>`
 - `python3 scripts/run.py generate-public-snapshot`
 - `python3 scripts/run.py generate-runtime-status`
@@ -391,6 +392,7 @@ python3 scripts/run.py generate-runtime-status
 python3 scripts/run.py dataset-summary
 python3 scripts/run.py insight-snapshot
 python3 scripts/run.py report-vector-index-status
+python3 scripts/run.py report-retrieval-readiness
 ```
 
 On a normal Linux host, `python3 scripts/run.py setup` is expected to:
@@ -481,7 +483,7 @@ SherpaMind also tracks real API usage in SQLite and reports:
 - budget utilization ratio
 - most-hit API paths
 
-Vector readiness reporting includes:
+Vector and retrieval readiness reporting includes:
 
 - indexed chunk count
 - total chunk rows
@@ -490,6 +492,10 @@ Vector readiness reporting includes:
 - missing index rows
 - dangling index rows
 - outdated content rows
+- chunk-size quality metrics (avg/min/max, tiny, over-target)
+- filter-facet inventories for accounts, technicians, statuses, priorities, and categories
+- chunk-level metadata coverage for cleaned subject/issue summary/next-step/log-type/resolution/attachment readiness
+- freshness windows for materialized chunks vs ticket update timestamps
 
 ## Current limitations and intentionally deferred areas
 
