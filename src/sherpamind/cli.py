@@ -152,6 +152,35 @@ def migrate_state() -> None:
     print(json.dumps(result.__dict__, indent=2))
 
 
+@app.command("setup")
+def setup(migrate_legacy: bool = True, initialize_db_only: bool = False) -> None:
+    settings = load_settings()
+    paths = ensure_path_layout()
+    steps = []
+    if migrate_legacy:
+        migration = migrate_legacy_state(paths.workspace_root)
+        steps.append({"migration": migration.__dict__})
+    initialize_db(settings.db_path)
+    steps.append({"init_db": str(settings.db_path)})
+    if not initialize_db_only and settings.db_path.exists():
+        try:
+            snapshot = generate_public_snapshot(settings.db_path)
+            steps.append({"public_snapshot": snapshot})
+        except Exception as exc:
+            steps.append({"public_snapshot_error": f"{type(exc).__name__}: {exc}"})
+    print(json.dumps({
+        "status": "ok",
+        "message": "SherpaMind setup flow completed.",
+        "steps": steps,
+        "next": [
+            "python3 scripts/run.py doctor",
+            "python3 scripts/run.py configure --api-key <token>",
+            "python3 scripts/run.py discover-orgs",
+            "python3 scripts/run.py seed",
+        ],
+    }, indent=2))
+
+
 @app.command("discover-orgs")
 def discover_orgs() -> None:
     client = _build_client()

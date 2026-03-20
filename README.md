@@ -2,7 +2,7 @@
 
 > Canonical SherpaDesk API docs: <https://github.com/sherpadesk/api/wiki>
 
-SherpaMind is a local-first SherpaDesk data ingestion, sync, analysis, and alerting toolkit.
+SherpaMind is a local-first SherpaDesk ingest, sync, enrichment, analysis, and OpenClaw retrieval toolkit.
 
 ## Goals
 
@@ -22,51 +22,45 @@ SherpaMind is a local-first SherpaDesk data ingestion, sync, analysis, and alert
      - recurring problem themes
      - resolution patterns and operational bottlenecks
 
-4. **New-ticket watcher**
+4. **OpenClaw-friendly retrieval**
+   - Materialize ticket documents/chunks and public Markdown artifacts for natural-language access.
+   - Keep canonical truth in SQLite while exposing easy-to-consume derived views.
+
+5. **New-ticket watcher**
    - Detect newly created tickets on a schedule.
    - Produce alert-ready structured summaries and analysis.
    - Suggest likely next questions and possible solution directions.
 
 ## Architecture
 
-SherpaMind is designed as a Python toolkit backed by **hybrid local storage**:
+SherpaMind is being refactored into a **distributable skill** with a split runtime/storage model:
+- `.SherpaMind/private/` — canonical/private skill state (SQLite, watcher state, runtime venv, config)
+- `.SherpaMind/public/` — derived OpenClaw-friendly artifacts (Markdown snapshots, exports, similar cacheable outputs)
+
+Data architecture:
 - **SQLite** as the canonical structured system of record
-- a planned **retrieval sidecar** for semantic/vector and keyword search over ticket/comment knowledge
+- **materialized ticket documents/chunks** as replaceable retrieval caches for OpenClaw
+- a future **semantic/vector sidecar** when the current SQL + docs/chunks stack needs deeper semantic recall
 
 ### Main components
+- `SKILL.md` — skill entry instructions and operating contract
+- `scripts/bootstrap.py` — skill-local runtime bootstrap
+- `scripts/run.py` — stable runtime entrypoint through the skill-local venv
 - `sherpamind.client` — SherpaDesk API client
 - `sherpamind.db` — SQLite schema, migrations, and repository helpers
 - `sherpamind.ingest` — initial seed and delta sync logic
+- `sherpamind.enrichment` — bounded detail enrichment for high-priority tickets
 - `sherpamind.watch` — new-ticket polling and alert payload generation
 - `sherpamind.analysis` — reusable analytical queries and derived views
-- retrieval/export pipeline — document building, chunking, FTS/vector indexing for OpenClaw-facing retrieval
+- `sherpamind.documents` — ticket document/chunk materialization for retrieval/search
+- `sherpamind.public_artifacts` — generated Markdown/public artifacts under `.SherpaMind/public/docs`
 - `sherpamind.cli` — operator-facing command surface
-
-## Planned workflows
-
-### Seed
-Pull down relevant SherpaDesk entities and populate the local database.
-
-Current implemented seed slice:
-- accounts
-- users
-- technicians
-- tickets
-
-### Sync
-Perform delta syncs based on modified timestamps or equivalent cursor state.
-
-### Analyze
-Run structured queries over local data for support, trend, and resolution analysis.
-
-### Watch
-Poll for newly created tickets and emit actionable summaries.
 
 ## Current status
 
 SherpaMind is now beyond scaffold stage and has working live read-only integration against the real SherpaDesk account.
 
-Implemented today:
+Implemented:
 - initial live seed into SQLite for accounts, users, technicians, and tickets
 - tiered delta lanes for hot open tickets, warm recently closed tickets, and cold rolling closed audits
 - watcher polling with local open-ticket state tracking
@@ -74,39 +68,15 @@ Implemented today:
 - ticket log ingestion from single-ticket detail responses
 - attachment metadata ingestion only (no blob download by default)
 - materialized ticket documents and deterministic ticket-document chunks for retrieval/query use
+- generated public Markdown artifacts under `.SherpaMind/public/docs`
 - structured insight/report commands plus text/chunk search commands
+- skill-local bootstrap, runtime, config, doctor, and legacy migration flow
 
 Still not implemented:
 - broad full-history detail enrichment across the entire corpus
 - semantic/vector index sidecar
 - native outbound watcher alert routing
 - richer attachment/image analysis flows (intentionally deferred and opt-in only)
-
-## Retrieval / OpenClaw access strategy
-
-SherpaMind should support OpenClaw through a **hybrid query model**:
-- **SQL / structured queries** for exact metrics, counts, SLA-like timing, ownership, and state
-- **keyword/full-text retrieval** for precise strings, account names, products, error messages, and IDs
-- **vector/semantic retrieval** for fuzzy problem similarity, recurring issue themes, prior resolutions, and investigative context gathering
-
-This is intentionally **not** a vector-only system. The SherpaDesk dataset mixes hard operational facts with messy support prose, so the right shape is canonical structured storage plus a retrieval sidecar.
-
-## External API caution
-
-SherpaDesk integration should be implemented conservatively:
-- consult the canonical API wiki before changing request behavior: <https://github.com/sherpadesk/api/wiki>
-- confirm auth behavior explicitly
-- confirm endpoint behavior explicitly
-- rate-limit conservatively by default
-- document live quirks in-repo
-- avoid bursty seed/sync behavior
-- keep secrets local only; do not commit API tokens or live account identifiers carelessly
-
-Current wiki-derived direction:
-- API base: `https://api.sherpadesk.com`
-- organization discovery can likely use `x:{api_token}` Basic auth against `/organizations/`
-- normal API access appears to use `{org_key}-{instance_key}:{api_token}` Basic auth
-- stated rate limit is `600 requests/hour`
 
 ## Bootstrap and configuration
 
@@ -133,6 +103,8 @@ Useful onboarding commands:
 ```bash
 python3 scripts/run.py workspace-layout
 python3 scripts/run.py doctor
+python3 scripts/run.py setup
+python3 scripts/run.py migrate-legacy-state
 python3 scripts/run.py configure --api-key <token>
 python3 scripts/run.py discover-orgs
 ```
@@ -149,6 +121,7 @@ Important conservative controls include:
 
 - `python3 scripts/run.py workspace-layout`
 - `python3 scripts/run.py doctor`
+- `python3 scripts/run.py setup`
 - `python3 scripts/run.py migrate-legacy-state`
 - `python3 scripts/run.py configure`
 - `python3 scripts/run.py discover-orgs`
@@ -174,6 +147,24 @@ Important conservative controls include:
 - `python3 scripts/run.py search-ticket-docs`
 - `python3 scripts/run.py search-ticket-chunks`
 - `python3 scripts/run.py export-ticket-docs`
+- `python3 scripts/run.py generate-public-snapshot`
+
+## External API caution
+
+SherpaDesk integration should be implemented conservatively:
+- consult the canonical API wiki before changing request behavior: <https://github.com/sherpadesk/api/wiki>
+- confirm auth behavior explicitly
+- confirm endpoint behavior explicitly
+- rate-limit conservatively by default
+- document live quirks in-repo
+- avoid bursty seed/sync behavior
+- keep secrets local only; do not commit API tokens or live account identifiers carelessly
+
+Current verified direction:
+- API base: `https://api.sherpadesk.com`
+- organization discovery can use `x:{api_token}` Basic auth against `/organizations/`
+- normal API access uses `{org_key}-{instance_key}:{api_token}` Basic auth
+- stated rate limit is `600 requests/hour`
 
 ## Delta sync direction
 

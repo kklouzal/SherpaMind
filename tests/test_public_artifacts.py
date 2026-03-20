@@ -42,3 +42,6 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "SherpaMind Public Insight Snapshot" in text
     assert "Attachment metadata summary" in text
     assert ".SherpaMind/private/sherpamind.sqlite3" in text
+    assert len(result["generated_files"]) >= 5
+    for generated in result["generated_files"]:
+        assert Path(generated).exists()

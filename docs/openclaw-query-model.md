@@ -93,6 +93,15 @@ Possible future exception:
 - `sherpamind search-ticket-docs "printer"`
 - `sherpamind search-ticket-chunks "printer"`
 - `sherpamind export-ticket-docs`
+- `sherpamind generate-public-snapshot`
+
+### Public markdown artifacts
+SherpaMind can also materialize OpenClaw-friendly Markdown under `.SherpaMind/public/docs/`, including:
+- `index.md`
+- `insight-snapshot.md`
+- `stale-open-tickets.md`
+- `recent-account-activity.md`
+- `recent-technician-load.md`
 
 ## Design rule
 

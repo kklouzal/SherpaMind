@@ -46,7 +46,9 @@ Examples:
 ```bash
 python3 scripts/run.py workspace-layout
 python3 scripts/run.py doctor
+python3 scripts/run.py setup
 python3 scripts/run.py migrate-legacy-state
+python3 scripts/run.py configure --api-key <token>
 python3 scripts/run.py discover-orgs
 python3 scripts/run.py seed
 python3 scripts/run.py watch

@@ -29,7 +29,6 @@ def _markdown_table(rows: list[dict], columns: list[tuple[str, str]]) -> str:
 
 def generate_public_snapshot(db_path: Path) -> dict:
     paths = ensure_path_layout()
-    snapshot_path = paths.docs_root / "insight-snapshot.md"
     generated_at = datetime.now(timezone.utc).isoformat()
 
     dataset_summary = get_dataset_summary(db_path)
@@ -40,6 +39,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
     attachment_summary = list_ticket_attachment_summary(db_path, limit=10)
     recent_tickets = list_recent_tickets(db_path, limit=10)
 
+    snapshot_path = paths.docs_root / "insight-snapshot.md"
     md = [
         "# SherpaMind Public Insight Snapshot",
         "",
@@ -113,10 +113,84 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "- Canonical truth remains in `.SherpaMind/private/sherpamind.sqlite3`.",
         "- Attachment bodies are not downloaded by default; this snapshot reflects metadata only.",
     ]
-
     snapshot_path.write_text("\n".join(md) + "\n")
+
+    stale_open_path = paths.docs_root / "stale-open-tickets.md"
+    stale_open_md = [
+        "# SherpaMind Stale Open Tickets",
+        "",
+        f"Generated: `{generated_at}`",
+        "",
+        _markdown_table(open_ages, [
+            ("id", "Ticket ID"),
+            ("subject", "Subject"),
+            ("account", "Account"),
+            ("technician", "Technician"),
+            ("age_days", "Age Days"),
+            ("days_since_update", "Days Since Update"),
+        ]),
+        "",
+        "- Derived from the canonical SQLite store under `.SherpaMind/private/`.",
+    ]
+    stale_open_path.write_text("\n".join(stale_open_md) + "\n")
+
+    account_activity_path = paths.docs_root / "recent-account-activity.md"
+    account_activity_md = [
+        "# SherpaMind Recent Account Activity",
+        "",
+        f"Generated: `{generated_at}`",
+        "",
+        _markdown_table(account_activity, [
+            ("account", "Account"),
+            ("ticket_count", "Tickets"),
+            ("open_count", "Open"),
+            ("closed_count", "Closed"),
+            ("latest_activity_at", "Latest Activity"),
+        ]),
+    ]
+    account_activity_path.write_text("\n".join(account_activity_md) + "\n")
+
+    technician_load_path = paths.docs_root / "recent-technician-load.md"
+    technician_load_md = [
+        "# SherpaMind Recent Technician Load",
+        "",
+        f"Generated: `{generated_at}`",
+        "",
+        _markdown_table(technician_load, [
+            ("technician", "Technician"),
+            ("ticket_count", "Tickets"),
+            ("open_count", "Open"),
+            ("closed_count", "Closed"),
+            ("latest_activity_at", "Latest Activity"),
+        ]),
+    ]
+    technician_load_path.write_text("\n".join(technician_load_md) + "\n")
+
+    index_path = paths.docs_root / "index.md"
+    index_md = [
+        "# SherpaMind Public Docs Index",
+        "",
+        f"Generated: `{generated_at}`",
+        "",
+        "Available derived artifacts:",
+        "- `insight-snapshot.md`",
+        "- `stale-open-tickets.md`",
+        "- `recent-account-activity.md`",
+        "- `recent-technician-load.md`",
+        "",
+        "These are derived/public artifacts for OpenClaw-friendly access. Canonical truth remains in `.SherpaMind/private/`.",
+    ]
+    index_path.write_text("\n".join(index_md) + "\n")
+
     return {
         "status": "ok",
         "output_path": str(snapshot_path),
         "generated_at": generated_at,
+        "generated_files": [
+            str(index_path),
+            str(snapshot_path),
+            str(stale_open_path),
+            str(account_activity_path),
+            str(technician_load_path),
+        ],
     }
