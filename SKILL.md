@@ -157,6 +157,8 @@ Read from `.SherpaMind/public/docs/` when a concise factual derived artifact is 
 - `recent-account-activity.md`
 - `recent-technician-load.md`
 - `runtime/status.md`
+- `accounts/index.md`
+- `technicians/index.md`
 - `accounts/*.md`
 - `technicians/*.md`
 

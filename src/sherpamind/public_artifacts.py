@@ -16,7 +16,12 @@ from .analysis import (
 )
 from .freshness import get_sync_freshness
 from .paths import ensure_path_layout
-from .summaries import get_account_summary, get_technician_summary
+from .summaries import (
+    get_account_summary,
+    get_technician_summary,
+    list_account_artifact_summaries,
+    list_technician_artifact_summaries,
+)
 
 
 def _markdown_table(rows: list[dict], columns: list[tuple[str, str]]) -> str:
@@ -48,6 +53,8 @@ def generate_public_snapshot(db_path: Path) -> dict:
     technician_load = list_technician_recent_load(db_path, days=7, limit=10)
     attachment_summary = list_ticket_attachment_summary(db_path, limit=10)
     recent_tickets = list_recent_tickets(db_path, limit=10)
+    account_summaries = list_account_artifact_summaries(db_path)
+    technician_summaries = list_technician_artifact_summaries(db_path)
 
     account_dir = paths.docs_root / "accounts"
     technician_dir = paths.docs_root / "technicians"
@@ -111,6 +118,30 @@ def generate_public_snapshot(db_path: Path) -> dict:
             ("open_count", "Open"),
             ("closed_count", "Closed"),
             ("latest_activity_at", "Latest Activity"),
+        ]),
+        "",
+        "## Account artifact coverage",
+        "",
+        _markdown_table(account_summaries[:10], [
+            ("account", "Account"),
+            ("total_tickets", "Tickets"),
+            ("detail_tickets", "Detail Tickets"),
+            ("log_tickets", "Log Tickets"),
+            ("attachment_tickets", "Attachment Tickets"),
+            ("document_tickets", "Document Tickets"),
+            ("chunk_count", "Chunks"),
+        ]),
+        "",
+        "## Technician artifact coverage",
+        "",
+        _markdown_table(technician_summaries[:10], [
+            ("technician", "Technician"),
+            ("total_tickets", "Tickets"),
+            ("detail_tickets", "Detail Tickets"),
+            ("log_tickets", "Log Tickets"),
+            ("attachment_tickets", "Attachment Tickets"),
+            ("document_tickets", "Document Tickets"),
+            ("chunk_count", "Chunks"),
         ]),
         "",
         "## Attachment metadata summary",
@@ -193,19 +224,66 @@ def generate_public_snapshot(db_path: Path) -> dict:
     ]
     technician_load_path.write_text("\n".join(technician_load_md) + "\n")
 
+    account_index_path = account_dir / "index.md"
+    account_index_md = [
+        "# SherpaMind Account Artifact Index",
+        "",
+        f"Generated: `{generated_at}`",
+        "",
+        f"Total account docs: `{len(account_summaries)}`",
+        "",
+        _markdown_table(account_summaries, [
+            ("account", "Account"),
+            ("total_tickets", "Tickets"),
+            ("open_tickets", "Open"),
+            ("closed_tickets", "Closed"),
+            ("detail_tickets", "Detail Tickets"),
+            ("document_tickets", "Document Tickets"),
+            ("chunk_count", "Chunks"),
+            ("latest_activity_at", "Latest Activity"),
+        ]),
+        "",
+        "These are derived per-account retrieval/support artifacts, not canonical truth.",
+    ]
+    account_index_path.write_text("\n".join(account_index_md) + "\n")
+
+    technician_index_path = technician_dir / "index.md"
+    technician_index_md = [
+        "# SherpaMind Technician Artifact Index",
+        "",
+        f"Generated: `{generated_at}`",
+        "",
+        f"Total technician docs: `{len(technician_summaries)}`",
+        "",
+        _markdown_table(technician_summaries, [
+            ("technician", "Technician"),
+            ("total_tickets", "Tickets"),
+            ("open_tickets", "Open"),
+            ("closed_tickets", "Closed"),
+            ("detail_tickets", "Detail Tickets"),
+            ("document_tickets", "Document Tickets"),
+            ("chunk_count", "Chunks"),
+            ("latest_activity_at", "Latest Activity"),
+        ]),
+        "",
+        "These are derived per-technician retrieval/support artifacts, not canonical truth.",
+    ]
+    technician_index_path.write_text("\n".join(technician_index_md) + "\n")
+
     generated_files = [
         str(snapshot_path),
         str(stale_open_path),
         str(account_activity_path),
         str(technician_load_path),
+        str(account_index_path),
+        str(technician_index_path),
     ]
+    account_docs_written = 0
+    technician_docs_written = 0
 
-    for account_name in [
-        row.get("account")
-        for row in account_activity[:5]
-        if row.get("account") and row.get("account") != "unknown"
-    ]:
-        summary = get_account_summary(db_path, account_name)
+    for account_row in account_summaries:
+        account_name = account_row["account"]
+        summary = get_account_summary(db_path, str(account_row["account_ref"] or account_name))
         if summary.get("status") != "ok":
             continue
         path = account_dir / f"{_safe_doc_name(account_name)}.md"
@@ -220,12 +298,25 @@ def generate_public_snapshot(db_path: Path) -> dict:
             json.dumps(summary["stats"], indent=2),
             "```",
             "",
+            "## Status breakdown",
+            "",
+            _markdown_table(summary["status_breakdown"], [("status", "Status"), ("ticket_count", "Ticket Count")]),
+            "",
+            "## Priority breakdown",
+            "",
+            _markdown_table(summary["priority_breakdown"], [("priority", "Priority"), ("ticket_count", "Ticket Count")]),
+            "",
+            "## Category breakdown",
+            "",
+            _markdown_table(summary["category_breakdown"], [("category", "Category"), ("ticket_count", "Ticket Count")]),
+            "",
             "## Open tickets",
             "",
             _markdown_table(summary["open_tickets"], [
                 ("id", "Ticket ID"),
                 ("subject", "Subject"),
                 ("priority", "Priority"),
+                ("category", "Category"),
                 ("updated_at", "Updated"),
             ]),
             "",
@@ -235,6 +326,8 @@ def generate_public_snapshot(db_path: Path) -> dict:
                 ("id", "Ticket ID"),
                 ("subject", "Subject"),
                 ("status", "Status"),
+                ("priority", "Priority"),
+                ("category", "Category"),
                 ("updated_at", "Updated"),
             ]),
             "",
@@ -244,13 +337,11 @@ def generate_public_snapshot(db_path: Path) -> dict:
         ]
         path.write_text("\n".join(lines) + "\n")
         generated_files.append(str(path))
+        account_docs_written += 1
 
-    for technician_name in [
-        row.get("technician")
-        for row in technician_load[:5]
-        if row.get("technician") and row.get("technician") != "unassigned"
-    ]:
-        summary = get_technician_summary(db_path, technician_name)
+    for technician_row in technician_summaries:
+        technician_name = technician_row["technician"]
+        summary = get_technician_summary(db_path, str(technician_row["technician_ref"] or technician_name))
         if summary.get("status") != "ok":
             continue
         path = technician_dir / f"{_safe_doc_name(technician_name)}.md"
@@ -265,12 +356,25 @@ def generate_public_snapshot(db_path: Path) -> dict:
             json.dumps(summary["stats"], indent=2),
             "```",
             "",
+            "## Status breakdown",
+            "",
+            _markdown_table(summary["status_breakdown"], [("status", "Status"), ("ticket_count", "Ticket Count")]),
+            "",
+            "## Priority breakdown",
+            "",
+            _markdown_table(summary["priority_breakdown"], [("priority", "Priority"), ("ticket_count", "Ticket Count")]),
+            "",
+            "## Category breakdown",
+            "",
+            _markdown_table(summary["category_breakdown"], [("category", "Category"), ("ticket_count", "Ticket Count")]),
+            "",
             "## Open tickets",
             "",
             _markdown_table(summary["open_tickets"], [
                 ("id", "Ticket ID"),
                 ("subject", "Subject"),
                 ("priority", "Priority"),
+                ("category", "Category"),
                 ("updated_at", "Updated"),
             ]),
             "",
@@ -280,6 +384,8 @@ def generate_public_snapshot(db_path: Path) -> dict:
                 ("id", "Ticket ID"),
                 ("subject", "Subject"),
                 ("status", "Status"),
+                ("priority", "Priority"),
+                ("category", "Category"),
                 ("updated_at", "Updated"),
             ]),
             "",
@@ -289,6 +395,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
         ]
         path.write_text("\n".join(lines) + "\n")
         generated_files.append(str(path))
+        technician_docs_written += 1
 
     index_path = paths.docs_root / "index.md"
     index_md = [
@@ -301,8 +408,10 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "- `stale-open-tickets.md`",
         "- `recent-account-activity.md`",
         "- `recent-technician-load.md`",
-        f"- account docs: `{account_dir}`",
-        f"- technician docs: `{technician_dir}`",
+        "- `accounts/index.md`",
+        "- `technicians/index.md`",
+        f"- account docs directory: `{account_dir}` ({account_docs_written} docs)",
+        f"- technician docs directory: `{technician_dir}` ({technician_docs_written} docs)",
         "",
         "These are derived/public artifacts for OpenClaw-friendly access. Canonical truth remains in `.SherpaMind/private/`.",
         "The matching vector-ready export lives under `.SherpaMind/public/exports/embedding-ticket-chunks.jsonl` when generated.",
@@ -316,4 +425,8 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "output_path": str(snapshot_path),
         "generated_at": generated_at,
         "generated_files": generated_files,
+        "account_docs_generated": account_docs_written,
+        "technician_docs_generated": technician_docs_written,
+        "account_artifact_candidates": len(account_summaries),
+        "technician_artifact_candidates": len(technician_summaries),
     }

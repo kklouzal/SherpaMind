@@ -38,6 +38,8 @@ Use for quick human/agent inspection under `.SherpaMind/public/docs/`, including
 - `stale-open-tickets.md`
 - `recent-account-activity.md`
 - `recent-technician-load.md`
+- `accounts/index.md`
+- `technicians/index.md`
 - `runtime/status.md`
 
 These are generated/replaced artifacts, not append-only memory files.
