@@ -102,6 +102,8 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
                 "last_status": "ok",
                 "last_run_at": _now_iso(),
             })
+            task_state.pop("last_error", None)
+            task_state.pop("last_skip_reason", None)
             results.append({"task": spec.name, "status": "ok", "result": getattr(result, '__dict__', result)})
             _append_log(f"task={spec.name} status=ok")
             usage = get_api_usage_summary(settings.db_path)
