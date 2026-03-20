@@ -182,15 +182,94 @@ def generate_public_snapshot(db_path: Path) -> dict:
     ]
     index_path.write_text("\n".join(index_md) + "\n")
 
+    account_dir = paths.docs_root / "accounts"
+    technician_dir = paths.docs_root / "technicians"
+    account_dir.mkdir(parents=True, exist_ok=True)
+    technician_dir.mkdir(parents=True, exist_ok=True)
+
+    generated_files = [
+        str(index_path),
+        str(snapshot_path),
+        str(stale_open_path),
+        str(account_activity_path),
+        str(technician_load_path),
+    ]
+
+    for account_name in [row.get('account') for row in account_activity[:5] if row.get('account') and row.get('account') != 'unknown']:
+        summary = get_account_summary(db_path, account_name)
+        if summary.get('status') != 'ok':
+            continue
+        safe_name = ''.join(ch if ch.isalnum() or ch in ('-', '_') else '_' for ch in account_name)[:80]
+        path = account_dir / f"{safe_name}.md"
+        lines = [
+            f"# Account Summary: {summary['account']['name']}",
+            "",
+            f"Generated: `{generated_at}`",
+            "",
+            "## Stats",
+            "",
+            "```json",
+            json.dumps(summary['stats'], indent=2),
+            "```",
+            "",
+            "## Open tickets",
+            "",
+            _markdown_table(summary['open_tickets'], [
+                ('id', 'Ticket ID'), ('subject', 'Subject'), ('priority', 'Priority'), ('updated_at', 'Updated')
+            ]),
+            "",
+            "## Recent tickets",
+            "",
+            _markdown_table(summary['recent_tickets'], [
+                ('id', 'Ticket ID'), ('subject', 'Subject'), ('status', 'Status'), ('updated_at', 'Updated')
+            ]),
+            "",
+            "## Recent log types",
+            "",
+            _markdown_table(summary['recent_log_types'], [('log_type', 'Log Type'), ('log_count', 'Count')]),
+        ]
+        path.write_text('\n'.join(lines) + '\n')
+        generated_files.append(str(path))
+
+    for technician_name in [row.get('technician') for row in technician_load[:5] if row.get('technician') and row.get('technician') != 'unassigned']:
+        summary = get_technician_summary(db_path, technician_name)
+        if summary.get('status') != 'ok':
+            continue
+        safe_name = ''.join(ch if ch.isalnum() or ch in ('-', '_') else '_' for ch in technician_name)[:80]
+        path = technician_dir / f"{safe_name}.md"
+        lines = [
+            f"# Technician Summary: {summary['technician']['display_name']}",
+            "",
+            f"Generated: `{generated_at}`",
+            "",
+            "## Stats",
+            "",
+            "```json",
+            json.dumps(summary['stats'], indent=2),
+            "```",
+            "",
+            "## Open tickets",
+            "",
+            _markdown_table(summary['open_tickets'], [
+                ('id', 'Ticket ID'), ('subject', 'Subject'), ('priority', 'Priority'), ('updated_at', 'Updated')
+            ]),
+            "",
+            "## Recent tickets",
+            "",
+            _markdown_table(summary['recent_tickets'], [
+                ('id', 'Ticket ID'), ('subject', 'Subject'), ('status', 'Status'), ('updated_at', 'Updated')
+            ]),
+            "",
+            "## Recent log types",
+            "",
+            _markdown_table(summary['recent_log_types'], [('log_type', 'Log Type'), ('log_count', 'Count')]),
+        ]
+        path.write_text('\n'.join(lines) + '\n')
+        generated_files.append(str(path))
+
     return {
         "status": "ok",
         "output_path": str(snapshot_path),
         "generated_at": generated_at,
-        "generated_files": [
-            str(index_path),
-            str(snapshot_path),
-            str(stale_open_path),
-            str(account_activity_path),
-            str(technician_load_path),
-        ],
+        "generated_files": generated_files,
     }

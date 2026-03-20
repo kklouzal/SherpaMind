@@ -23,7 +23,7 @@ def seed_fixture(db: Path) -> None:
             "creation_category_name": "Hardware",
             "created_time": "2026-03-18T01:00:00Z",
             "updated_time": "2026-03-19T03:00:00Z",
-            "initial_post": "Can you help with issue A?",
+            "initial_post": "<p>Can you help with issue A?</p><br>This ticket was created via the email parser.",
             "next_step": "Call back",
         }],
         synced_at="2026-03-19T01:00:00Z",
@@ -48,6 +48,8 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     docs = build_ticket_documents(db)
     assert docs[0]["doc_id"] == "ticket:101"
     assert "Issue A" in docs[0]["text"]
+    assert "Issue summary:" in docs[0]["text"]
+    assert "email parser" not in docs[0]["text"].lower()
     assert "Internal note" in docs[0]["text"]
     assert "printer broken" in docs[0]["text"]
     assert "Attachments (metadata only)" in docs[0]["text"]

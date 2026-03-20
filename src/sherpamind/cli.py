@@ -48,6 +48,7 @@ from .ingest import (
     sync_warm_closed_tickets,
 )
 from .settings import load_settings, write_config_env
+from .summaries import get_account_summary, get_technician_summary
 from .watch import watch_new_tickets
 from .db import initialize_db
 
@@ -438,6 +439,18 @@ def recent_technician_load(days: int = 7, limit: int = 20) -> None:
     settings = load_settings()
     rows = list_technician_recent_load(settings.db_path, days=days, limit=limit)
     print(json.dumps(rows, indent=2))
+
+
+@app.command("account-summary")
+def account_summary(account_query: str, limit_open: int = 10, limit_recent: int = 10) -> None:
+    settings = load_settings()
+    print(json.dumps(get_account_summary(settings.db_path, account_query, limit_open=limit_open, limit_recent=limit_recent), indent=2))
+
+
+@app.command("technician-summary")
+def technician_summary(technician_query: str, limit_open: int = 10, limit_recent: int = 10) -> None:
+    settings = load_settings()
+    print(json.dumps(get_technician_summary(settings.db_path, technician_query, limit_open=limit_open, limit_recent=limit_recent), indent=2))
 
 
 @app.command("search-ticket-docs")

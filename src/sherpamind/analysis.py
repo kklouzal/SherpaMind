@@ -258,7 +258,6 @@ def get_api_usage_summary(db_path: Path, hourly_limit: int = 600) -> dict:
             """
         ).fetchall()
     request_count = int(last_hour["request_count"] or 0)
-    hourly_limit = 600
     return {
         "requests_last_hour": request_count,
         "errors_last_hour": int(last_hour["error_count"] or 0),

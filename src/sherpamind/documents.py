@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket_documents
+from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
 def _content_hash(text: str) -> str:
@@ -14,21 +15,21 @@ def _content_hash(text: str) -> str:
 def _chunk_text(text: str, target_chars: int = 1800) -> list[str]:
     if len(text) <= target_chars:
         return [text]
-    paragraphs = text.split('\n')
+    paragraphs = text.split("\n")
     chunks: list[str] = []
     current: list[str] = []
     current_len = 0
     for para in paragraphs:
         para_len = len(para) + 1
         if current and current_len + para_len > target_chars:
-            chunks.append('\n'.join(current).strip())
+            chunks.append("\n".join(current).strip())
             current = [para]
             current_len = para_len
         else:
             current.append(para)
             current_len += para_len
     if current:
-        chunks.append('\n'.join(current).strip())
+        chunks.append("\n".join(current).strip())
     return [chunk for chunk in chunks if chunk]
 
 
@@ -106,9 +107,15 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
     with connect(db_path) as conn:
         rows = conn.execute(query, params).fetchall()
 
-    docs = []
+    docs: list[dict] = []
     for row in rows:
         record = dict(row)
+        cleaned_initial_post = normalize_ticket_text(record.get("initial_post") or record.get("plain_initial_post"))
+        cleaned_detail_note = normalize_ticket_text(record.get("detail_note"))
+        cleaned_workpad = normalize_ticket_text(record.get("workpad"))
+        cleaned_recent_logs = normalize_ticket_text(record.get("recent_log_text"))
+        resolution_summary = summarize_resolution_from_logs(record.get("recent_log_text"))
+
         text_parts = [
             f"Ticket #{record['id']}: {record.get('subject') or '(no subject)'}",
             f"Status: {record.get('status') or 'unknown'}",
@@ -121,41 +128,41 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             f"Updated: {record.get('updated_at') or 'unknown'}",
             f"Closed: {record.get('closed_at') or 'not closed'}",
         ]
-        if record.get('initial_response'):
+        if record.get("initial_response"):
             text_parts.append(f"Initial response flag/value: {record['initial_response']}")
-        if record.get('sla_response_date'):
+        if record.get("sla_response_date"):
             text_parts.append(f"SLA response date: {record['sla_response_date']}")
-        if record.get('sla_complete_date'):
+        if record.get("sla_complete_date"):
             text_parts.append(f"SLA completion date: {record['sla_complete_date']}")
-        if record.get('ticketlogs_count') is not None:
+        if record.get("ticketlogs_count") is not None:
             text_parts.append(f"Ticket log count: {record['ticketlogs_count']}")
-        if record.get('timelogs_count') is not None:
+        if record.get("timelogs_count") is not None:
             text_parts.append(f"Time log count: {record['timelogs_count']}")
-        if record.get('attachments_count') is not None:
+        if record.get("attachments_count") is not None:
             text_parts.append(f"Attachment count: {record['attachments_count']}")
-        if record.get('next_step'):
-            text_parts.append(f"Next step: {record['next_step']}")
-        if record.get('next_step_date'):
+        if record.get("next_step"):
+            text_parts.append(f"Next step: {normalize_ticket_text(record['next_step'])}")
+        if record.get("next_step_date"):
             text_parts.append(f"Next step date: {record['next_step_date']}")
-        if record.get('initial_post'):
-            text_parts.append(f"Initial post: {record['initial_post']}")
-        elif record.get('plain_initial_post'):
-            text_parts.append(f"Initial post: {record['plain_initial_post']}")
-        if record.get('detail_note'):
-            text_parts.append(f"Detail note: {record['detail_note']}")
-        if record.get('workpad'):
-            text_parts.append(f"Workpad: {record['workpad']}")
-        if record.get('recent_log_types'):
+        if cleaned_initial_post:
+            text_parts.append(f"Issue summary: {cleaned_initial_post[:2400]}")
+        if cleaned_detail_note:
+            text_parts.append(f"Internal note: {cleaned_detail_note[:1600]}")
+        if cleaned_workpad:
+            text_parts.append(f"Workpad summary: {cleaned_workpad[:1600]}")
+        if record.get("recent_log_types"):
             text_parts.append(f"Recent log types: {record['recent_log_types']}")
-        if record.get('recent_log_text'):
-            text_parts.append(f"Recent logs: {record['recent_log_text']}")
-        if record.get('resolution_category_name'):
+        if cleaned_recent_logs:
+            text_parts.append(f"Recent log summary: {cleaned_recent_logs[:2400]}")
+        if resolution_summary:
+            text_parts.append(f"Resolution/activity highlight: {resolution_summary}")
+        if record.get("resolution_category_name"):
             text_parts.append(f"Resolution category: {record['resolution_category_name']}")
 
         attachment_metadata = []
-        if record.get('attachment_metadata_json'):
+        if record.get("attachment_metadata_json"):
             try:
-                attachment_metadata = json.loads(record['attachment_metadata_json']) or []
+                attachment_metadata = json.loads(record["attachment_metadata_json"]) or []
             except json.JSONDecodeError:
                 attachment_metadata = []
         if attachment_metadata:
@@ -165,7 +172,7 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                 )
             )
 
-        text = '\n'.join(text_parts)
+        text = "\n".join(text_parts)
         docs.append(
             {
                 "doc_id": f"ticket:{record['id']}",
@@ -185,6 +192,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "timelogs_count": record.get("timelogs_count"),
                     "attachments_count": record.get("attachments_count"),
                     "attachments": attachment_metadata,
+                    "cleaned_initial_post": cleaned_initial_post[:400] if cleaned_initial_post else None,
+                    "resolution_summary": resolution_summary,
                 },
             }
         )
@@ -194,16 +203,16 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
 def build_ticket_document_chunks(docs: list[dict]) -> list[dict]:
     chunks: list[dict] = []
     for doc in docs:
-        parts = _chunk_text(doc['text'])
+        parts = _chunk_text(doc["text"])
         for idx, chunk_text in enumerate(parts):
             chunks.append(
                 {
-                    'chunk_id': f"{doc['doc_id']}:chunk:{idx}",
-                    'doc_id': doc['doc_id'],
-                    'ticket_id': doc['ticket_id'],
-                    'chunk_index': idx,
-                    'text': chunk_text,
-                    'content_hash': _content_hash(chunk_text),
+                    "chunk_id": f"{doc['doc_id']}:chunk:{idx}",
+                    "doc_id": doc["doc_id"],
+                    "ticket_id": doc["ticket_id"],
+                    "chunk_index": idx,
+                    "text": chunk_text,
+                    "content_hash": _content_hash(chunk_text),
                 }
             )
     return chunks
@@ -216,21 +225,21 @@ def materialize_ticket_documents(db_path: Path, limit: int | None = None) -> dic
     replace_ticket_documents(db_path, docs, synced_at=synced_at)
     replace_ticket_document_chunks(db_path, chunks, synced_at=synced_at)
     return {
-        'status': 'ok',
-        'document_count': len(docs),
-        'chunk_count': len(chunks),
-        'synced_at': synced_at,
+        "status": "ok",
+        "document_count": len(docs),
+        "chunk_count": len(chunks),
+        "synced_at": synced_at,
     }
 
 
 def export_ticket_documents(db_path: Path, output_path: Path, limit: int | None = None) -> dict:
     docs = build_ticket_documents(db_path, limit=limit)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open('w', encoding='utf-8') as f:
+    with output_path.open("w", encoding="utf-8") as f:
         for doc in docs:
-            f.write(json.dumps(doc, ensure_ascii=False) + '\n')
+            f.write(json.dumps(doc, ensure_ascii=False) + "\n")
     return {
-        'status': 'ok',
-        'output_path': str(output_path),
-        'document_count': len(docs),
+        "status": "ok",
+        "output_path": str(output_path),
+        "document_count": len(docs),
     }
