@@ -27,11 +27,22 @@ def seed(db: Path) -> None:
                 "timelogs_count": 0,
                 "cleaned_subject": "hello",
                 "cleaned_initial_post": "Help me",
+                "cleaned_followup_note": "Waiting on customer reply",
+                "cleaned_request_completion_note": "Complete during maintenance window",
                 "cleaned_next_step": "Call back tomorrow",
+                "followup_date": "2026-03-20T10:00:00Z",
+                "request_completion_date": "2026-03-21T17:00:00Z",
                 "has_next_step": True,
                 "recent_log_types_csv": "Initial Post, Response",
                 "initial_response_present": True,
                 "user_email": "alice@example.com",
+                "support_group_name": "Managed Services",
+                "default_contract_name": "Gold",
+                "location_name": "HQ",
+                "confirmed_by_name": "Tech Lead",
+                "is_waiting_on_response": True,
+                "is_resolved": False,
+                "is_confirmed": True,
                 "account_label_source": "raw",
                 "user_label_source": "email",
                 "technician_label_source": "joined",
@@ -68,7 +79,18 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["priority"] == "High"
     assert row["metadata"]["ticketlogs_count"] == 5
     assert row["metadata"]["has_attachments"] is True
+    assert row["metadata"]["cleaned_followup_note"] == "Waiting on customer reply"
+    assert row["metadata"]["cleaned_request_completion_note"] == "Complete during maintenance window"
     assert row["metadata"]["cleaned_next_step"] == "Call back tomorrow"
+    assert row["metadata"]["followup_date"] == "2026-03-20T10:00:00Z"
+    assert row["metadata"]["request_completion_date"] == "2026-03-21T17:00:00Z"
+    assert row["metadata"]["support_group_name"] == "Managed Services"
+    assert row["metadata"]["default_contract_name"] == "Gold"
+    assert row["metadata"]["location_name"] == "HQ"
+    assert row["metadata"]["confirmed_by_name"] == "Tech Lead"
+    assert row["metadata"]["is_waiting_on_response"] is True
+    assert row["metadata"]["is_resolved"] is False
+    assert row["metadata"]["is_confirmed"] is True
     assert row["metadata"]["has_next_step"] is True
     assert row["metadata"]["recent_log_types"] == "Initial Post, Response"
     assert row["metadata"]["user_email"] == "alice@example.com"
@@ -89,6 +111,9 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["filter_facets"]["accounts"] == ["Acme"]
     assert summary["filter_facets"]["priorities"] == ["High"]
     assert summary["metadata_coverage"]["cleaned_subject"]["chunks"] == 1
+    assert summary["metadata_coverage"]["cleaned_followup_note"]["chunks"] == 1
+    assert summary["metadata_coverage"]["support_group_name"]["chunks"] == 1
+    assert summary["metadata_coverage"]["is_waiting_on_response"]["chunks"] == 1
     assert summary["label_source_summary"]["account_label_source"]["raw"]["chunks"] == 1
     assert summary["label_source_summary"]["user_label_source"]["email"]["chunks"] == 1
     assert summary["label_source_summary"]["technician_label_source"]["joined"]["chunks"] == 1

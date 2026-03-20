@@ -149,6 +149,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                json_extract(t.raw_json, '$.technician_lastname') AS raw_technician_lastname,
                json_extract(t.raw_json, '$.initial_post') AS initial_post,
                json_extract(t.raw_json, '$.plain_initial_post') AS plain_initial_post,
+               json_extract(td.raw_json, '$.initial_post') AS detail_initial_post,
+               json_extract(td.raw_json, '$.plain_initial_post') AS detail_plain_initial_post,
                json_extract(t.raw_json, '$.creation_category_name') AS creation_category_name,
                json_extract(t.raw_json, '$.class_name') AS class_name,
                json_extract(t.raw_json, '$.submission_category') AS submission_category,
@@ -157,7 +159,19 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                td.note AS detail_note,
                td.initial_response,
                json_extract(t.raw_json, '$.next_step') AS next_step,
+               json_extract(td.raw_json, '$.next_step') AS detail_next_step,
                json_extract(t.raw_json, '$.next_step_date') AS next_step_date,
+               json_extract(td.raw_json, '$.followup_date') AS followup_date,
+               json_extract(td.raw_json, '$.followup_note') AS followup_note,
+               json_extract(td.raw_json, '$.request_completion_date') AS request_completion_date,
+               json_extract(td.raw_json, '$.request_completion_note') AS request_completion_note,
+               json_extract(td.raw_json, '$.support_group_name') AS support_group_name,
+               json_extract(td.raw_json, '$.default_contract_name') AS default_contract_name,
+               json_extract(td.raw_json, '$.location_name') AS location_name,
+               json_extract(td.raw_json, '$.confirmed_by_name') AS confirmed_by_name,
+               json_extract(td.raw_json, '$.is_waiting_on_response') AS is_waiting_on_response,
+               json_extract(td.raw_json, '$.is_resolved') AS is_resolved,
+               json_extract(td.raw_json, '$.is_confirmed') AS is_confirmed,
                td.sla_response_date,
                td.sla_complete_date,
                td.ticketlogs_count,
@@ -212,9 +226,18 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
     docs: list[dict] = []
     for row in rows:
         record = dict(row)
-        cleaned_initial_post = normalize_ticket_text(record.get("initial_post") or record.get("plain_initial_post"))
+        cleaned_initial_post = normalize_ticket_text(
+            _first_present(
+                record.get("detail_plain_initial_post"),
+                record.get("detail_initial_post"),
+                record.get("plain_initial_post"),
+                record.get("initial_post"),
+            )
+        )
         cleaned_detail_note = normalize_ticket_text(record.get("detail_note"))
         cleaned_workpad = normalize_ticket_text(record.get("workpad"))
+        cleaned_followup_note = normalize_ticket_text(record.get("followup_note"))
+        cleaned_request_completion_note = normalize_ticket_text(record.get("request_completion_note"))
         cleaned_recent_logs = normalize_ticket_text(record.get("recent_log_text"))
         resolution_summary = summarize_resolution_from_logs(record.get("recent_log_text"))
         normalized_category = (
@@ -224,7 +247,7 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             or record.get("submission_category")
         )
         cleaned_subject = normalize_ticket_text(record.get("subject"))
-        cleaned_next_step = normalize_ticket_text(record.get("next_step"))
+        cleaned_next_step = normalize_ticket_text(_first_present(record.get("detail_next_step"), record.get("next_step")))
         recent_log_types = _split_csv_values(record.get("recent_log_types"))
         account_label, account_label_source = _resolve_account_label(record)
         user_label, user_label_source = _resolve_user_label(record)
@@ -254,10 +277,32 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Time log count: {record['timelogs_count']}")
         if record.get("attachments_count") is not None:
             text_parts.append(f"Attachment count: {record['attachments_count']}")
+        if record.get("support_group_name"):
+            text_parts.append(f"Support group: {record['support_group_name']}")
+        if record.get("default_contract_name"):
+            text_parts.append(f"Contract: {record['default_contract_name']}")
+        if record.get("location_name"):
+            text_parts.append(f"Location: {record['location_name']}")
+        if record.get("confirmed_by_name"):
+            text_parts.append(f"Confirmed by: {record['confirmed_by_name']}")
+        if record.get("is_waiting_on_response") is not None:
+            text_parts.append(f"Waiting on response: {bool(record['is_waiting_on_response'])}")
+        if record.get("is_confirmed") is not None:
+            text_parts.append(f"Confirmed: {bool(record['is_confirmed'])}")
+        if record.get("is_resolved") is not None:
+            text_parts.append(f"Resolved flag: {bool(record['is_resolved'])}")
         if cleaned_next_step:
             text_parts.append(f"Next step: {cleaned_next_step}")
         if record.get("next_step_date"):
             text_parts.append(f"Next step date: {record['next_step_date']}")
+        if record.get("followup_date"):
+            text_parts.append(f"Follow-up date: {record['followup_date']}")
+        if cleaned_followup_note:
+            text_parts.append(f"Follow-up note: {cleaned_followup_note[:1200]}")
+        if record.get("request_completion_date"):
+            text_parts.append(f"Requested completion date: {record['request_completion_date']}")
+        if cleaned_request_completion_note:
+            text_parts.append(f"Requested completion note: {cleaned_request_completion_note[:1200]}")
         if cleaned_initial_post:
             text_parts.append(f"Issue summary: {cleaned_initial_post[:2400]}")
         if cleaned_detail_note:
@@ -315,18 +360,41 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "attachments": attachment_metadata,
                     "attachment_names": [item.get("name") for item in attachment_metadata if item.get("name")],
                     "has_attachments": bool(attachment_metadata),
-                    "detail_available": bool(record.get("detail_note") or record.get("workpad") or record.get("initial_response") or record.get("ticketlogs_count") or record.get("attachments_count")),
+                    "detail_available": bool(
+                        record.get("detail_note")
+                        or record.get("workpad")
+                        or record.get("initial_response")
+                        or record.get("ticketlogs_count")
+                        or record.get("attachments_count")
+                        or record.get("detail_initial_post")
+                        or record.get("detail_plain_initial_post")
+                        or record.get("followup_note")
+                        or record.get("request_completion_note")
+                        or record.get("support_group_name")
+                        or record.get("default_contract_name")
+                    ),
                     "cleaned_subject": cleaned_subject[:300] if cleaned_subject else None,
                     "cleaned_initial_post": cleaned_initial_post[:400] if cleaned_initial_post else None,
                     "cleaned_detail_note": cleaned_detail_note[:400] if cleaned_detail_note else None,
                     "cleaned_workpad": cleaned_workpad[:400] if cleaned_workpad else None,
+                    "cleaned_followup_note": cleaned_followup_note[:400] if cleaned_followup_note else None,
+                    "cleaned_request_completion_note": cleaned_request_completion_note[:400] if cleaned_request_completion_note else None,
                     "cleaned_next_step": cleaned_next_step[:300] if cleaned_next_step else None,
                     "next_step_date": record.get("next_step_date"),
-                    "has_next_step": bool(cleaned_next_step or record.get("next_step_date")),
+                    "followup_date": record.get("followup_date"),
+                    "request_completion_date": record.get("request_completion_date"),
+                    "has_next_step": bool(cleaned_next_step or record.get("next_step_date") or record.get("followup_date")),
                     "recent_log_types": recent_log_types,
                     "recent_log_types_csv": ", ".join(recent_log_types) if recent_log_types else None,
                     "initial_response_present": record.get("initial_response") is not None,
                     "user_email": record.get("user_email"),
+                    "support_group_name": record.get("support_group_name"),
+                    "default_contract_name": record.get("default_contract_name"),
+                    "location_name": record.get("location_name"),
+                    "confirmed_by_name": record.get("confirmed_by_name"),
+                    "is_waiting_on_response": bool(record.get("is_waiting_on_response")) if record.get("is_waiting_on_response") is not None else None,
+                    "is_resolved": bool(record.get("is_resolved")) if record.get("is_resolved") is not None else None,
+                    "is_confirmed": bool(record.get("is_confirmed")) if record.get("is_confirmed") is not None else None,
                     "account_label_source": account_label_source,
                     "user_label_source": user_label_source,
                     "technician_label_source": technician_label_source,

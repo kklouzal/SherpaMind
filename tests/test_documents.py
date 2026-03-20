@@ -23,8 +23,7 @@ def seed_fixture(db: Path) -> None:
             "class_name": "Hardware / Printer",
             "created_time": "2026-03-18T01:00:00Z",
             "updated_time": "2026-03-19T03:00:00Z",
-            "initial_post": "<p>Can you help with issue A?</p><br>This ticket was created via the email parser.",
-            "next_step": "Call back",
+            "initial_post": "",
         }, {
             "id": 102,
             "account_id": 2,
@@ -47,8 +46,21 @@ def seed_fixture(db: Path) -> None:
         db,
         [{
             "id": 101,
+            "plain_initial_post": "Can you help with issue A?\n\nThis ticket was created via the email parser.",
+            "next_step": "Call back",
             "workpad": "Internal note",
             "initial_response": True,
+            "followup_date": "2026-03-20T10:00:00Z",
+            "followup_note": "Waiting on user approval",
+            "request_completion_date": "2026-03-21T17:00:00Z",
+            "request_completion_note": "Finish after-hours maintenance window",
+            "support_group_name": "Managed Services",
+            "default_contract_name": "Gold",
+            "location_name": "HQ",
+            "confirmed_by_name": "Tech Lead",
+            "is_waiting_on_response": True,
+            "is_resolved": False,
+            "is_confirmed": True,
             "ticketlogs": [{"id": 501, "log_type": "Initial Post", "record_date": "2026-03-18T01:00:00Z", "plain_note": "printer broken"}],
             "timelogs": [],
             "attachments": [{"id": "a1", "name": "shot.png", "url": "https://example/shot.png", "size": 1234, "date": "2026-03-18T01:00:00Z"}],
@@ -70,6 +82,11 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "email parser" not in primary["text"].lower()
     assert "Internal note" in primary["text"]
     assert "printer broken" in primary["text"]
+    assert "Support group: Managed Services" in primary["text"]
+    assert "Contract: Gold" in primary["text"]
+    assert "Location: HQ" in primary["text"]
+    assert "Follow-up note: Waiting on user approval" in primary["text"]
+    assert "Requested completion note: Finish after-hours maintenance window" in primary["text"]
     assert "Attachments (metadata only)" in primary["text"]
     assert primary["metadata"]["attachments"][0]["name"] == "shot.png"
     assert primary["metadata"]["attachment_names"] == ["shot.png"]
@@ -78,7 +95,18 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["cleaned_subject"] == "Issue A"
     assert primary["metadata"]["cleaned_initial_post"] == "Can you help with issue A?"
     assert primary["metadata"]["cleaned_workpad"] == "Internal note"
+    assert primary["metadata"]["cleaned_followup_note"] == "Waiting on user approval"
+    assert primary["metadata"]["cleaned_request_completion_note"] == "Finish after-hours maintenance window"
     assert primary["metadata"]["cleaned_next_step"] == "Call back"
+    assert primary["metadata"]["followup_date"] == "2026-03-20T10:00:00Z"
+    assert primary["metadata"]["request_completion_date"] == "2026-03-21T17:00:00Z"
+    assert primary["metadata"]["support_group_name"] == "Managed Services"
+    assert primary["metadata"]["default_contract_name"] == "Gold"
+    assert primary["metadata"]["location_name"] == "HQ"
+    assert primary["metadata"]["confirmed_by_name"] == "Tech Lead"
+    assert primary["metadata"]["is_waiting_on_response"] is True
+    assert primary["metadata"]["is_resolved"] is False
+    assert primary["metadata"]["is_confirmed"] is True
     assert primary["metadata"]["has_next_step"] is True
     assert primary["metadata"]["recent_log_types"] == ["Initial Post"]
     assert primary["metadata"]["recent_log_types_csv"] == "Initial Post"
