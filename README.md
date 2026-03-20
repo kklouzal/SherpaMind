@@ -122,6 +122,10 @@ Important conservative controls include:
 - `SHERPAMIND_SEED_PAGE_SIZE`
 - `SHERPAMIND_SEED_MAX_PAGES`
 - `SHERPAMIND_SERVICE_*`
+- `SHERPAMIND_API_HOURLY_LIMIT`
+- `SHERPAMIND_API_BUDGET_WARN_RATIO`
+- `SHERPAMIND_API_BUDGET_CRITICAL_RATIO`
+- `SHERPAMIND_API_REQUEST_LOG_RETENTION_DAYS`
 
 ## Useful current commands
 
@@ -187,6 +191,8 @@ Current verified direction:
 ## Service model
 
 SherpaMind’s normal background behavior should come from the local backend service, not OpenClaw cron.
+
+The service tracks real SherpaDesk request usage in SQLite (`api_request_events`) and reports a rolling hourly usage budget so cadence can be tuned from measurements instead of guesswork. Lower-priority work can now back off when budget utilization gets high, and old request-event rows are pruned automatically by retention policy so the log stays bounded.
 
 The intended first-install flow is:
 1. `python3 scripts/bootstrap.py`

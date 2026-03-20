@@ -28,6 +28,9 @@ The backend service owns the periodic work directly:
 
 These run from internal Python timers, not OpenClaw cron.
 
+The service also tracks real SherpaDesk request usage in SQLite and can use rolling hourly budget utilization to defer lower-priority work before it rides the 600/hour line.
+Old request-event rows are pruned automatically by retention policy so the request log remains bounded.
+
 ## Install vs update behavior
 
 ### First install

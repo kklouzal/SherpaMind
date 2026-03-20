@@ -32,6 +32,10 @@ class Settings:
     service_public_snapshot_every_seconds: int = 1800
     service_doctor_every_seconds: int = 43200
     service_enrichment_limit: int = 25
+    api_hourly_limit: int = 600
+    api_budget_warn_ratio: float = 0.7
+    api_budget_critical_ratio: float = 0.85
+    api_request_log_retention_days: int = 14
 
 
 def _read_env_file(env_file: Path) -> dict[str, str]:
@@ -123,4 +127,8 @@ def load_settings() -> Settings:
         service_public_snapshot_every_seconds=int(_env_value("SHERPAMIND_SERVICE_PUBLIC_SNAPSHOT_EVERY_SECONDS", file_values, "1800") or "1800"),
         service_doctor_every_seconds=int(_env_value("SHERPAMIND_SERVICE_DOCTOR_EVERY_SECONDS", file_values, "43200") or "43200"),
         service_enrichment_limit=int(_env_value("SHERPAMIND_SERVICE_ENRICHMENT_LIMIT", file_values, "25") or "25"),
+        api_hourly_limit=int(_env_value("SHERPAMIND_API_HOURLY_LIMIT", file_values, "600") or "600"),
+        api_budget_warn_ratio=float(_env_value("SHERPAMIND_API_BUDGET_WARN_RATIO", file_values, "0.7") or "0.7"),
+        api_budget_critical_ratio=float(_env_value("SHERPAMIND_API_BUDGET_CRITICAL_RATIO", file_values, "0.85") or "0.85"),
+        api_request_log_retention_days=int(_env_value("SHERPAMIND_API_REQUEST_LOG_RETENTION_DAYS", file_values, "14") or "14"),
     )

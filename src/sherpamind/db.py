@@ -590,3 +590,14 @@ def record_api_request_event(
             ),
         )
         conn.commit()
+
+
+def prune_api_request_events(db_path: Path, retention_days: int) -> int:
+    initialize_db(db_path)
+    with connect(db_path) as conn:
+        cursor = conn.execute(
+            "DELETE FROM api_request_events WHERE julianday(recorded_at) < julianday('now', ?)",
+            (f'-{retention_days} days',),
+        )
+        conn.commit()
+        return int(cursor.rowcount)

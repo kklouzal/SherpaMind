@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sherpamind.db import initialize_db
+from sherpamind.db import initialize_db, record_api_request_event
 from sherpamind.service_runtime import run_pending_tasks
 from sherpamind.settings import Settings
 
@@ -30,6 +30,10 @@ def make_settings(tmp_path: Path) -> Settings:
         service_public_snapshot_every_seconds=999999,
         service_doctor_every_seconds=0,
         service_enrichment_limit=25,
+        api_hourly_limit=600,
+        api_budget_warn_ratio=0.7,
+        api_budget_critical_ratio=0.85,
+        api_request_log_retention_days=14,
     )
 
 
@@ -40,3 +44,13 @@ def test_run_pending_tasks_writes_service_state(monkeypatch, tmp_path: Path) -> 
     result = run_pending_tasks(settings)
     assert result['status'] == 'ok'
     assert (tmp_path / '.SherpaMind' / 'private' / 'service-state.json').exists()
+
+
+def test_run_pending_tasks_prunes_old_request_events(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
+    settings = make_settings(tmp_path)
+    settings = Settings(**{**settings.__dict__, 'api_request_log_retention_days': 0})
+    initialize_db(settings.db_path)
+    record_api_request_event(settings.db_path, method='GET', path='tickets', status_code=200, outcome='http_response')
+    result = run_pending_tasks(settings)
+    assert result['pruned_request_events'] >= 1

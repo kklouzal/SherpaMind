@@ -234,7 +234,7 @@ def search_ticket_document_chunks(db_path: Path, query: str, limit: int = 20) ->
     return [dict(row) for row in rows]
 
 
-def get_api_usage_summary(db_path: Path) -> dict:
+def get_api_usage_summary(db_path: Path, hourly_limit: int = 600) -> dict:
     initialize_db(db_path)
     with connect(db_path) as conn:
         last_hour = conn.execute(
@@ -258,11 +258,12 @@ def get_api_usage_summary(db_path: Path) -> dict:
             """
         ).fetchall()
     request_count = int(last_hour["request_count"] or 0)
+    hourly_limit = 600
     return {
         "requests_last_hour": request_count,
         "errors_last_hour": int(last_hour["error_count"] or 0),
-        "remaining_hourly_budget": max(0, 600 - request_count),
-        "budget_utilization_ratio": round(request_count / 600, 4),
+        "remaining_hourly_budget": max(0, hourly_limit - request_count),
+        "budget_utilization_ratio": round(request_count / hourly_limit, 4),
         "earliest_request_at": last_hour["earliest_at"],
         "latest_request_at": last_hour["latest_at"],
         "top_paths_last_hour": [dict(row) for row in top_paths],

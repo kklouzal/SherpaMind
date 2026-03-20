@@ -106,6 +106,8 @@ The service is intended to run as a user-level systemd unit (`sherpamind.service
 - Treat `ticket_documents` / `ticket_document_chunks` and public Markdown docs as replaceable derived caches
 - Regenerate and replace derived docs/chunks/artifacts for changed tickets so stale NL artifacts do not linger
 - Keep attachment handling metadata-only by default
+- Track real SherpaDesk request usage in SQLite and use it for budget-aware scheduling/backoff decisions
+- Prune old API request-event rows periodically so request logging does not grow unbounded
 - Clean up any old SherpaMind OpenClaw cron jobs; they are legacy refactor artifacts, not the intended runtime
 
 ## References

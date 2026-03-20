@@ -356,7 +356,12 @@ def dataset_summary() -> None:
 @app.command("report-api-usage")
 def report_api_usage() -> None:
     settings = load_settings()
-    print(json.dumps(get_api_usage_summary(settings.db_path), indent=2))
+    usage = get_api_usage_summary(settings.db_path)
+    usage["configured_hourly_limit"] = settings.api_hourly_limit
+    usage["configured_warn_ratio"] = settings.api_budget_warn_ratio
+    usage["configured_critical_ratio"] = settings.api_budget_critical_ratio
+    usage["configured_retention_days"] = settings.api_request_log_retention_days
+    print(json.dumps(usage, indent=2))
 
 
 @app.command("insight-snapshot")
