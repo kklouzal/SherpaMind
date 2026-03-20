@@ -55,6 +55,11 @@ Best source:
    - vector embeddings/index
 6. expose hybrid query commands for OpenClaw/tooling
 
+Current practical implementation now includes:
+- keyword/full-text style search over docs/chunks
+- metadata-rich embedding-ready exports
+- a lightweight local vector index/search layer for immediate similarity retrieval without external embedding APIs
+
 ## Recommended retrieval document types
 
 - ticket summary documents

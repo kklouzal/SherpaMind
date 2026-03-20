@@ -113,7 +113,10 @@ Possible future exception:
 - `python3 scripts/run.py materialize-ticket-docs`
 - `python3 scripts/run.py search-ticket-docs "printer"`
 - `python3 scripts/run.py search-ticket-chunks "printer"`
+- `python3 scripts/run.py search-vector-index "printer"`
 - `python3 scripts/run.py export-ticket-docs`
+- `python3 scripts/run.py export-embedding-chunks`
+- `python3 scripts/run.py export-embedding-manifest`
 - `python3 scripts/run.py generate-public-snapshot`
 
 ## Design rule

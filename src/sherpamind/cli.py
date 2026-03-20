@@ -514,6 +514,34 @@ def export_embedding_manifest_cmd(output_path: str = "", limit: int = 0) -> None
     print(json.dumps(result, indent=2))
 
 
+@app.command("build-vector-index")
+def build_vector_index_cmd(limit: int = 0, dims: int = 256) -> None:
+    settings = load_settings()
+    effective_limit = None if limit <= 0 else limit
+    result = build_vector_index(settings.db_path, dims=dims, limit=effective_limit)
+    print(json.dumps(result, indent=2))
+
+
+@app.command("search-vector-index")
+def search_vector_index_cmd(
+    query: str,
+    limit: int = 10,
+    account: str | None = None,
+    status: str | None = None,
+    technician: str | None = None,
+) -> None:
+    settings = load_settings()
+    rows = search_vector_index(
+        settings.db_path,
+        query_text=query,
+        limit=limit,
+        account=account,
+        status=status,
+        technician=technician,
+    )
+    print(json.dumps(rows, indent=2))
+
+
 @app.command("generate-public-snapshot")
 def generate_snapshot() -> None:
     settings = load_settings()

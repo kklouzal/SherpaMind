@@ -182,6 +182,9 @@ Important conservative controls include:
 - `python3 scripts/run.py export-ticket-docs`
 - `python3 scripts/run.py export-ticket-chunks`
 - `python3 scripts/run.py export-embedding-chunks`
+- `python3 scripts/run.py export-embedding-manifest`
+- `python3 scripts/run.py build-vector-index`
+- `python3 scripts/run.py search-vector-index`
 - `python3 scripts/run.py generate-public-snapshot`
 
 ## External API caution
