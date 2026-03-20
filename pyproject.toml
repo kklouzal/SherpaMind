@@ -8,9 +8,7 @@ version = "0.1.0"
 description = "Local-first SherpaDesk backend + OpenClaw skill-front system for rich capture and retrieval-preparation"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [
-  { name = "" }
-]
+authors = []
 dependencies = [
   "httpx>=0.27.0",
   "pydantic>=2.8.0",

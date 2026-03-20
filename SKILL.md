@@ -50,7 +50,7 @@ Start with structured commands:
 
 Examples:
 - open-ticket count → `report-status-counts`
-- technician backlog/load → `technician-summary "Kyle"`
+- technician backlog/load → `technician-summary "<technician>"`
 - account snapshot → `account-summary "<account>"`
 
 ### Fuzzy investigation, prior-art lookup, and support-history recall

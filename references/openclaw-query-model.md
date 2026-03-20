@@ -119,7 +119,7 @@ Possible future exception:
 - `python3 scripts/run.py search-ticket-chunks "printer"`
 - `python3 scripts/run.py search-vector-index "printer"`
 - `python3 scripts/run.py search-vector-index "printer" --account "<account>" --status Open`
-- `python3 scripts/run.py search-vector-index "printer" --technician "Kyle" --priority High --category Hardware`
+- `python3 scripts/run.py search-vector-index "printer" --technician "<technician>" --priority High --category Hardware`
 - `python3 scripts/run.py report-vector-index-status`
 - `python3 scripts/run.py export-ticket-docs`
 - `python3 scripts/run.py export-embedding-chunks`
