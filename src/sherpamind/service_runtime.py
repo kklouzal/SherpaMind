@@ -11,8 +11,10 @@ from .db import prune_api_request_events
 from .enrichment import enrich_priority_ticket_details
 from .ingest import sync_cold_closed_audit, sync_hot_open_tickets, sync_warm_closed_tickets
 from .paths import ensure_path_layout
+from .observability import generate_runtime_status_artifacts
 from .public_artifacts import generate_public_snapshot
 from .settings import Settings, load_settings
+from .vector_index import build_vector_index
 from .watch import watch_new_tickets
 
 
