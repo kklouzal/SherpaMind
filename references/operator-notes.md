@@ -36,6 +36,16 @@ Important conservative controls:
 
 If the project jumps straight to watcher/alerts before the data model and sync assumptions are solid, the entire local knowledge layer becomes untrustworthy.
 
+## Public-repo anonymization rule
+
+This repository is meant to remain safe for public sharing.
+
+When adding or updating operator notes, examples, live verification notes, or troubleshooting guidance:
+- keep identities anonymized
+- use placeholders for accounts, technicians, users, and organizations unless identity is strictly required
+- do not copy raw customer-facing data into tracked docs when a generalized description is enough
+- keep secrets, tokens, config values, and local runtime artifacts out of tracked files
+
 ## Practical safety rule
 
 If SherpaDesk starts behaving inconsistently, slow down instead of pushing harder:

@@ -47,6 +47,7 @@ If a change blurs those boundaries, it should be treated as architectural drift.
 - retrieval command strategy
 - factual workflow guidance
 - examples of how to query the prepared data
+- public-safe anonymized examples and reference material
 
 ### OpenClaw should own
 - interpretation

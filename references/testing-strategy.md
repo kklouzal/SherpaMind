@@ -21,6 +21,15 @@
 Because SherpaDesk is awkward and externally controlled, some truths may only be learnable through live probing.
 Those findings should be written down in this repository instead of living only in chat memory.
 
+## Public-fixture rule
+
+Tests and fixtures should stay public-safe.
+
+- use synthetic placeholder names and domains
+- avoid real customer/account/user/technician identities in test data
+- avoid embedding live sensitive payloads when a reduced synthetic fixture proves the behavior just as well
+- prefer `example.com`, placeholder ticket subjects, and obviously fake names in fixtures
+
 ## Rule
 
 Do not assume a green local unit test suite means the SherpaDesk API contract is understood correctly.

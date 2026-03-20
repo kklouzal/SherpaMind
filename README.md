@@ -22,6 +22,20 @@ That split matters:
 
 SherpaMind is not meant to hardcode brittle conclusions into the backend. It is meant to make SherpaDesk data easy to trust, inspect, search, and reason over.
 
+## Public-repo anonymization rule
+
+This repository is intended to be safe for public distribution.
+
+Treat anonymization as a standing development rule:
+
+- keep secrets, tokens, and local runtime state out of the repo
+- keep customer/account/user/technician examples anonymized in docs, tests, fixtures, and comments
+- prefer placeholders like `<account>`, `<technician>`, `Acme`, `User One`, and `Tech One` over real names
+- keep any live validation notes or API observations generalized unless specific identities are strictly necessary
+- if a change adds new documentation, examples, fixtures, or reference material, scrub it before commit rather than cleaning it up later
+
+Assume future autonomous development should preserve public-safe, anonymous examples by default.
+
 ## What SherpaMind does
 
 SherpaMind currently covers five major areas:

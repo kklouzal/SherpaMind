@@ -40,6 +40,7 @@ We also have negative findings that matter:
 - page ordering looks recent-ish, but has not yet been proven to be a strict monotonic `updated_time` sort
 
 Account-specific identifiers and secrets should remain local-only and should not be committed to this public repo.
+Examples and verification notes in this repository should stay anonymized unless identity is absolutely necessary.
 
 ## Project rule
 

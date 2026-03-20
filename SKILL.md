@@ -25,6 +25,17 @@ python3 scripts/run.py <command> [args...]
 Do not invent alternate runtime paths.
 Do not treat OpenClaw as the background scheduler for this backend.
 
+## Public-safe development rule
+
+Treat this repo as public-facing.
+When editing docs, examples, references, tests, fixtures, or comments:
+- keep examples anonymized
+- prefer placeholders like `<account>` and `<technician>`
+- do not commit real customer/account/user/technician identifiers unless there is a very strong reason and the user explicitly wants that tradeoff
+- keep secrets and local runtime state out of the repo
+
+If new reference material or development notes are added, scrub them before commit rather than relying on a later cleanup pass.
+
 ## Choose the lightest path that answers the question
 
 ### Exact facts, counts, status, and workload
