@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sherpamind.enrichment import enrich_priority_ticket_details
+from sherpamind.enrichment import _candidate_ticket_rows, enrich_priority_ticket_details
 from sherpamind.settings import Settings
 from sherpamind.db import initialize_db, upsert_ticket_details, upsert_tickets, connect
 
@@ -64,8 +64,8 @@ def test_enrichment_prioritizes_unenriched_open_tickets(tmp_path: Path, monkeypa
     settings = make_settings(tmp_path)
     initialize_db(settings.db_path)
     upsert_tickets(settings.db_path, [
-        {'id': 101, 'subject': 'Open A', 'status': 'Open', 'created_time': '2026-03-19T01:00:00Z', 'updated_time': '2026-03-19T02:00:00Z'},
-        {'id': 102, 'subject': 'Open B', 'status': 'Open', 'created_time': '2026-03-19T01:00:00Z', 'updated_time': '2026-03-19T01:30:00Z'},
+        {'id': 101, 'subject': 'Open A', 'status': 'Open', 'priority_name': 'High', 'created_time': '2026-03-19T01:00:00Z', 'updated_time': '2026-03-19T02:00:00Z'},
+        {'id': 102, 'subject': 'Open B', 'status': 'Open', 'priority_name': 'Normal', 'created_time': '2026-03-19T01:00:00Z', 'updated_time': '2026-03-19T01:30:00Z'},
     ])
     upsert_ticket_details(settings.db_path, [{'id': 101, 'ticketlogs': [], 'timelogs': [], 'attachments': []}])
     seen = []
@@ -78,3 +78,50 @@ def test_enrichment_prioritizes_unenriched_open_tickets(tmp_path: Path, monkeypa
     monkeypatch.setattr('sherpamind.enrichment._build_client', lambda settings: RecordingClient())
     enrich_priority_ticket_details(settings, limit=1, materialize_docs=False)
     assert seen == ['tickets/102']
+
+
+def test_candidate_selection_spreads_cold_coverage_to_undercovered_categories(tmp_path: Path) -> None:
+    db = tmp_path / 'sherpamind.sqlite3'
+    initialize_db(db)
+    upsert_tickets(db, [
+        {
+            'id': 201,
+            'subject': 'Covered category detail seed',
+            'status': 'Closed',
+            'priority_name': 'Normal',
+            'class_name': 'Hardware / Printer',
+            'account_id': 1,
+            'tech_id': 11,
+            'created_time': '2025-01-01T01:00:00Z',
+            'updated_time': '2025-01-01T02:00:00Z',
+            'closed_time': '2025-01-01T03:00:00Z',
+        },
+        {
+            'id': 202,
+            'subject': 'Same covered category',
+            'status': 'Closed',
+            'priority_name': 'High',
+            'class_name': 'Hardware / Printer',
+            'account_id': 1,
+            'tech_id': 11,
+            'created_time': '2025-01-02T01:00:00Z',
+            'updated_time': '2025-01-02T02:00:00Z',
+            'closed_time': '2025-01-02T03:00:00Z',
+        },
+        {
+            'id': 203,
+            'subject': 'Undercovered software ticket',
+            'status': 'Closed',
+            'priority_name': 'Normal',
+            'class_name': 'Software / Line of Business',
+            'account_id': 2,
+            'tech_id': 12,
+            'created_time': '2025-01-03T01:00:00Z',
+            'updated_time': '2025-01-03T02:00:00Z',
+            'closed_time': '2025-01-03T03:00:00Z',
+        },
+    ])
+    upsert_ticket_details(db, [{'id': 201, 'ticketlogs': [], 'timelogs': [], 'attachments': []}])
+
+    candidates = _candidate_ticket_rows(db, limit=1)
+    assert [row['id'] for row in candidates] == ['203']

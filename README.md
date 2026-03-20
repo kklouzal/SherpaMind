@@ -64,6 +64,7 @@ SherpaMind currently covers five major areas:
    - performs rolling cold closed-ticket audits
    - backfills technician stub rows from stable ticket payload names when the standalone technicians endpoint is thinner than real ticket assignee history
    - enriches a bounded priority ticket set through single-ticket detail fetches
+   - biases cold-detail enrichment toward under-covered categories/accounts/technicians so historical retrieval depth broadens instead of clustering only around the newest cold tickets
    - stores ticket logs and attachment metadata from detail responses
 
 3. **Retrieval preparation**

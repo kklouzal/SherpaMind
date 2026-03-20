@@ -26,6 +26,11 @@ The backend service owns the periodic work directly:
 - public snapshot generation loop
 - periodic service-state/health marker updates
 
+The priority enrichment loop should stay retrieval-oriented rather than purely recency-oriented:
+- open tickets first
+- recently closed tickets next
+- then broaden historical detail coverage across under-covered categories/accounts/technicians so the retrieval corpus gets deeper breadth over time instead of repeatedly clustering around one narrow slice of recent history
+
 These run from internal Python timers, not OpenClaw cron.
 
 The service also tracks real SherpaDesk request usage in SQLite and can use rolling hourly budget utilization to defer lower-priority work before it rides the 600/hour line.

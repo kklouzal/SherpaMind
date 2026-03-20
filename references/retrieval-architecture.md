@@ -50,11 +50,12 @@ Best source:
 2. normalize linked entities and stable ticket/comment metadata
 3. build retrieval documents from tickets, comments, accounts, users, and derived summaries
 4. carry stable workflow/state metadata forward with those documents (subject cleanup, user/account/technician linkage, human-readable entity labels, label-source provenance, recent log types, next-step hints, request-completion/follow-up cues, contract/confirmation context, account-location and department context, intake-channel/handling flags, attachment presence, resolution highlights)
-5. chunk long text where needed
-6. index documents into:
+5. widen bounded detail enrichment in a retrieval-aware way so historical detail coverage spreads across under-covered categories/accounts/technicians instead of overfitting only to the most recent cold tickets
+6. chunk long text where needed
+7. index documents into:
    - FTS/keyword search
    - vector embeddings/index
-7. expose hybrid query commands for OpenClaw/tooling
+8. expose hybrid query commands for OpenClaw/tooling
 
 Current practical implementation now includes:
 - keyword/full-text style search over references/chunks
