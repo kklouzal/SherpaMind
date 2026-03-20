@@ -175,6 +175,8 @@ Important conservative controls include:
 - `python3 scripts/run.py search-ticket-docs`
 - `python3 scripts/run.py search-ticket-chunks`
 - `python3 scripts/run.py export-ticket-docs`
+- `python3 scripts/run.py export-ticket-chunks`
+- `python3 scripts/run.py export-embedding-chunks`
 - `python3 scripts/run.py generate-public-snapshot`
 
 ## External API caution

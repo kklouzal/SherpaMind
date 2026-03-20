@@ -487,6 +487,16 @@ def export_ticket_chunks_cmd(output_path: str = "", limit: int = 0) -> None:
     print(json.dumps(result, indent=2))
 
 
+@app.command("export-embedding-chunks")
+def export_embedding_chunks_cmd(output_path: str = "", limit: int = 0) -> None:
+    settings = load_settings()
+    paths = ensure_path_layout()
+    effective_limit = None if limit <= 0 else limit
+    resolved_output = Path(output_path) if output_path else (paths.exports_root / "embedding-ticket-chunks.jsonl")
+    result = export_embedding_ready_chunks(settings.db_path, resolved_output, limit=effective_limit)
+    print(json.dumps(result, indent=2))
+
+
 @app.command("generate-public-snapshot")
 def generate_snapshot() -> None:
     settings = load_settings()

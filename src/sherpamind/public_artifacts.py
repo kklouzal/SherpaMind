@@ -178,8 +178,11 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "- `stale-open-tickets.md`",
         "- `recent-account-activity.md`",
         "- `recent-technician-load.md`",
+        f"- account docs: `{account_dir}`",
+        f"- technician docs: `{technician_dir}`",
         "",
         "These are derived/public artifacts for OpenClaw-friendly access. Canonical truth remains in `.SherpaMind/private/`.",
+        "The matching vector-ready export lives under `.SherpaMind/public/exports/embedding-ticket-chunks.jsonl` when generated.",
     ]
     index_path.write_text("\n".join(index_md) + "\n")
 
