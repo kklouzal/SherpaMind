@@ -20,7 +20,7 @@ def seed_fixture(db: Path) -> None:
             "subject": "Issue A",
             "status": "Open",
             "priority_name": "High",
-            "creation_category_name": "Hardware",
+            "class_name": "Hardware / Printer",
             "created_time": "2026-03-18T01:00:00Z",
             "updated_time": "2026-03-19T03:00:00Z",
             "initial_post": "<p>Can you help with issue A?</p><br>This ticket was created via the email parser.",
@@ -54,6 +54,9 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "printer broken" in docs[0]["text"]
     assert "Attachments (metadata only)" in docs[0]["text"]
     assert docs[0]["metadata"]["attachments"][0]["name"] == "shot.png"
+    assert docs[0]["metadata"]["category"] == "Hardware / Printer"
+    assert docs[0]["metadata"]["cleaned_initial_post"] == "Can you help with issue A?"
+    assert docs[0]["metadata"]["detail_available"] is True
 
     chunks = build_ticket_document_chunks(docs)
     assert chunks[0]["chunk_id"].startswith("ticket:101:chunk:")

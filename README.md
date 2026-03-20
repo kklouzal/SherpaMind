@@ -87,9 +87,13 @@ Implemented:
 
 Still not implemented:
 - broad full-history detail enrichment across the entire corpus
-- semantic/vector index sidecar
 - native outbound watcher alert routing
 - richer attachment/image analysis flows (intentionally deferred and opt-in only)
+
+Recently strengthened:
+- local vector index/search over ticket chunks for immediate semantic retrieval
+- retrieval-readiness observability via `report-vector-index-status`, `report-enrichment-coverage`, and generated runtime/public status artifacts
+- richer ticket-document metadata coverage tracking so backend runs can see category/issue-summary/resolution-summary coverage instead of guessing
 
 ## Bootstrap and configuration
 
@@ -168,6 +172,7 @@ Important conservative controls include:
 - `python3 scripts/run.py dataset-summary`
 - `python3 scripts/run.py insight-snapshot`
 - `python3 scripts/run.py report-ticket-counts`
+- `python3 scripts/run.py report-enrichment-coverage`
 - `python3 scripts/run.py report-status-counts`
 - `python3 scripts/run.py report-priority-counts`
 - `python3 scripts/run.py report-technician-counts`

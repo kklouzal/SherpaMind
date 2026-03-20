@@ -53,6 +53,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                json_extract(t.raw_json, '$.initial_post') AS initial_post,
                json_extract(t.raw_json, '$.plain_initial_post') AS plain_initial_post,
                json_extract(t.raw_json, '$.creation_category_name') AS creation_category_name,
+               json_extract(t.raw_json, '$.class_name') AS class_name,
+               json_extract(t.raw_json, '$.submission_category') AS submission_category,
                json_extract(t.raw_json, '$.resolution_category_name') AS resolution_category_name,
                td.workpad,
                td.note AS detail_note,
@@ -118,12 +120,18 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         cleaned_workpad = normalize_ticket_text(record.get("workpad"))
         cleaned_recent_logs = normalize_ticket_text(record.get("recent_log_text"))
         resolution_summary = summarize_resolution_from_logs(record.get("recent_log_text"))
+        normalized_category = (
+            record.get("category")
+            or record.get("creation_category_name")
+            or record.get("class_name")
+            or record.get("submission_category")
+        )
 
         text_parts = [
             f"Ticket #{record['id']}: {record.get('subject') or '(no subject)'}",
             f"Status: {record.get('status') or 'unknown'}",
             f"Priority: {record.get('priority') or 'unknown'}",
-            f"Category: {record.get('category') or record.get('creation_category_name') or 'unknown'}",
+            f"Category: {normalized_category or 'unknown'}",
             f"Account: {record.get('account') or 'unknown'}",
             f"User: {record.get('user_name') or record.get('user_email') or 'unknown'}",
             f"Technician: {record.get('technician') or 'unassigned'}",
@@ -193,12 +201,16 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                 "content_hash": _content_hash(text),
                 "metadata": {
                     "priority": record.get("priority"),
-                    "category": record.get("category") or record.get("creation_category_name"),
+                    "category": normalized_category,
+                    "class_name": record.get("class_name"),
+                    "submission_category": record.get("submission_category"),
+                    "resolution_category": record.get("resolution_category_name"),
                     "closed_at": record.get("closed_at"),
                     "ticketlogs_count": record.get("ticketlogs_count"),
                     "timelogs_count": record.get("timelogs_count"),
                     "attachments_count": record.get("attachments_count"),
                     "attachments": attachment_metadata,
+                    "detail_available": bool(record.get("detail_note") or record.get("workpad") or record.get("initial_response") or record.get("ticketlogs_count") or record.get("attachments_count")),
                     "cleaned_initial_post": cleaned_initial_post[:400] if cleaned_initial_post else None,
                     "resolution_summary": resolution_summary,
                 },

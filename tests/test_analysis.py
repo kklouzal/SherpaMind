@@ -129,6 +129,9 @@ def test_analysis_reports(tmp_path: Path) -> None:
     assert usage["requests_last_hour"] == 1
     assert coverage["ticket_details_covered"] == 1
     assert coverage["open_detail_coverage"] == 1
+    assert coverage["retrieval"]["ticket_documents"] == 1
+    assert coverage["retrieval"]["ticket_document_chunks"] == 1
+    assert coverage["metadata"]["priority_docs"] == 0
     assert summary["counts"]["tickets"] == 3
     assert summary["counts"]["ticket_logs"] == 1
     assert summary["counts"]["ticket_attachments"] == 1

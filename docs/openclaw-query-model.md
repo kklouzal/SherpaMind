@@ -100,6 +100,7 @@ Possible future exception:
 
 ### Structured insight commands
 - `python3 scripts/run.py insight-snapshot`
+- `python3 scripts/run.py report-enrichment-coverage`
 - `python3 scripts/run.py report-ticket-counts`
 - `python3 scripts/run.py report-status-counts`
 - `python3 scripts/run.py report-priority-counts`
@@ -128,6 +129,12 @@ Possible future exception:
 
 Do not force the LLM to parse raw SherpaDesk JSON blobs unless necessary.
 Whenever a field becomes operationally useful more than once, promote it into:
+
+SherpaMind should also expose enough observability that OpenClaw can trust the retrieval layer before leaning on it heavily. In practice that means coverage/freshness/readiness outputs should make it easy to see:
+- how much of the corpus has detail enrichment
+- whether ticket docs/chunks cover the full ticket set
+- whether important retrieval metadata (category, issue summary, resolution summary) is materially populated
+- whether chunk sizes look sane for vector/semantic use
 - a real SQLite column/table
 - a reusable structural query
 - the ticket document/chunk materialization layer

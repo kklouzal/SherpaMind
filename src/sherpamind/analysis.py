@@ -288,20 +288,101 @@ def get_enrichment_coverage(db_path: Path) -> dict:
               AND julianday(REPLACE(substr(t.closed_at, 1, 19), 'T', ' ')) >= julianday('now', '-7 days')
             """
         ).fetchone()["c"]
+        retrieval = conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM ticket_documents) AS ticket_documents,
+                (SELECT COUNT(*) FROM ticket_document_chunks) AS ticket_document_chunks,
+                (SELECT COUNT(DISTINCT ticket_id) FROM ticket_document_chunks) AS chunk_ticket_coverage,
+                (SELECT COALESCE(AVG(LENGTH(text)), 0) FROM ticket_document_chunks) AS avg_chunk_chars,
+                (SELECT COALESCE(MAX(LENGTH(text)), 0) FROM ticket_document_chunks) AS max_chunk_chars,
+                (SELECT COUNT(*) FROM ticket_document_chunks WHERE LENGTH(text) < 200) AS tiny_chunk_count,
+                (SELECT COUNT(*) FROM ticket_document_chunks WHERE LENGTH(text) > 1800) AS over_target_chunk_count,
+                (SELECT COUNT(*) FROM ticket_document_chunks WHERE chunk_index > 0) AS multi_chunk_rows
+            """
+        ).fetchone()
+        metadata = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS total_documents,
+                SUM(CASE WHEN json_extract(raw_json, '$.metadata.priority') IS NOT NULL AND json_extract(raw_json, '$.metadata.priority') != '' THEN 1 ELSE 0 END) AS priority_docs,
+                SUM(CASE WHEN json_extract(raw_json, '$.metadata.category') IS NOT NULL AND json_extract(raw_json, '$.metadata.category') != '' THEN 1 ELSE 0 END) AS category_docs,
+                SUM(CASE WHEN json_extract(raw_json, '$.metadata.cleaned_initial_post') IS NOT NULL AND json_extract(raw_json, '$.metadata.cleaned_initial_post') != '' THEN 1 ELSE 0 END) AS issue_summary_docs,
+                SUM(CASE WHEN json_extract(raw_json, '$.metadata.resolution_summary') IS NOT NULL AND json_extract(raw_json, '$.metadata.resolution_summary') != '' THEN 1 ELSE 0 END) AS resolution_summary_docs,
+                SUM(CASE WHEN json_extract(raw_json, '$.metadata.detail_available') = 1 THEN 1 ELSE 0 END) AS detail_available_docs,
+                SUM(CASE WHEN json_extract(raw_json, '$.metadata.attachments_count') IS NOT NULL THEN 1 ELSE 0 END) AS attachment_count_docs
+            FROM ticket_documents
+            """
+        ).fetchone()
     total_tickets = int(totals["total_tickets"] or 0)
     open_tickets = int(totals["open_tickets"] or 0)
     closed_tickets = int(totals["closed_tickets"] or 0)
+    detail_count = int(detail or 0)
+    log_count = int(logs or 0)
+    attachment_count = int(attachments or 0)
+    open_detail_count = int(open_detail or 0)
+    warm_detail_count = int(warm_detail or 0)
+    document_count = int(retrieval["ticket_documents"] or 0)
+    chunk_count = int(retrieval["ticket_document_chunks"] or 0)
+    chunk_ticket_coverage = int(retrieval["chunk_ticket_coverage"] or 0)
+    total_documents = int(metadata["total_documents"] or 0)
     return {
         "total_tickets": total_tickets,
         "open_tickets": open_tickets,
         "closed_tickets": closed_tickets,
-        "ticket_details_covered": int(detail),
-        "ticket_logs_covered": int(logs),
-        "ticket_attachments_covered": int(attachments),
-        "detail_coverage_ratio": round((int(detail) / total_tickets), 4) if total_tickets else 0.0,
-        "open_detail_coverage": int(open_detail),
-        "open_detail_coverage_ratio": round((int(open_detail) / open_tickets), 4) if open_tickets else 0.0,
-        "warm_detail_coverage": int(warm_detail),
+        "ticket_details_covered": detail_count,
+        "ticket_logs_covered": log_count,
+        "ticket_attachments_covered": attachment_count,
+        "detail_coverage_ratio": round((detail_count / total_tickets), 4) if total_tickets else 0.0,
+        "open_detail_coverage": open_detail_count,
+        "open_detail_coverage_ratio": round((open_detail_count / open_tickets), 4) if open_tickets else 0.0,
+        "warm_detail_coverage": warm_detail_count,
+        "warm_detail_coverage_ratio": round((warm_detail_count / closed_tickets), 4) if closed_tickets else 0.0,
+        "document_coverage_ratio": round((document_count / total_tickets), 4) if total_tickets else 0.0,
+        "chunk_ticket_coverage_ratio": round((chunk_ticket_coverage / total_tickets), 4) if total_tickets else 0.0,
+        "tickets": {
+            "total": total_tickets,
+            "open": open_tickets,
+            "closed": closed_tickets,
+        },
+        "enrichment": {
+            "ticket_details_covered": detail_count,
+            "ticket_logs_covered": log_count,
+            "ticket_attachments_covered": attachment_count,
+            "detail_coverage_ratio": round((detail_count / total_tickets), 4) if total_tickets else 0.0,
+            "open_detail_coverage": open_detail_count,
+            "open_detail_coverage_ratio": round((open_detail_count / open_tickets), 4) if open_tickets else 0.0,
+            "warm_detail_coverage": warm_detail_count,
+            "warm_detail_coverage_ratio": round((warm_detail_count / closed_tickets), 4) if closed_tickets else 0.0,
+            "detail_backlog": max(total_tickets - detail_count, 0),
+        },
+        "retrieval": {
+            "ticket_documents": document_count,
+            "ticket_document_chunks": chunk_count,
+            "document_coverage_ratio": round((document_count / total_tickets), 4) if total_tickets else 0.0,
+            "chunk_ticket_coverage": chunk_ticket_coverage,
+            "chunk_ticket_coverage_ratio": round((chunk_ticket_coverage / total_tickets), 4) if total_tickets else 0.0,
+            "multi_chunk_rows": int(retrieval["multi_chunk_rows"] or 0),
+            "avg_chunk_chars": round(float(retrieval["avg_chunk_chars"] or 0), 1),
+            "max_chunk_chars": int(retrieval["max_chunk_chars"] or 0),
+            "tiny_chunk_count": int(retrieval["tiny_chunk_count"] or 0),
+            "over_target_chunk_count": int(retrieval["over_target_chunk_count"] or 0),
+        },
+        "metadata": {
+            "total_documents": total_documents,
+            "priority_docs": int(metadata["priority_docs"] or 0),
+            "priority_coverage_ratio": round((int(metadata["priority_docs"] or 0) / total_documents), 4) if total_documents else 0.0,
+            "category_docs": int(metadata["category_docs"] or 0),
+            "category_coverage_ratio": round((int(metadata["category_docs"] or 0) / total_documents), 4) if total_documents else 0.0,
+            "issue_summary_docs": int(metadata["issue_summary_docs"] or 0),
+            "issue_summary_coverage_ratio": round((int(metadata["issue_summary_docs"] or 0) / total_documents), 4) if total_documents else 0.0,
+            "resolution_summary_docs": int(metadata["resolution_summary_docs"] or 0),
+            "resolution_summary_coverage_ratio": round((int(metadata["resolution_summary_docs"] or 0) / total_documents), 4) if total_documents else 0.0,
+            "detail_available_docs": int(metadata["detail_available_docs"] or 0),
+            "detail_available_coverage_ratio": round((int(metadata["detail_available_docs"] or 0) / total_documents), 4) if total_documents else 0.0,
+            "attachment_count_docs": int(metadata["attachment_count_docs"] or 0),
+            "attachment_count_coverage_ratio": round((int(metadata["attachment_count_docs"] or 0) / total_documents), 4) if total_documents else 0.0,
+        },
     }
 
 

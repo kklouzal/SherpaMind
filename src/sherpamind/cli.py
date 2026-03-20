@@ -9,6 +9,7 @@ from rich import print
 from .analysis import (
     get_api_usage_summary,
     get_dataset_summary,
+    get_enrichment_coverage,
     get_insight_snapshot,
     list_open_ticket_ages,
     list_recent_account_activity,
