@@ -39,6 +39,12 @@ def _strip_reply_tail(lines: list[str]) -> list[str]:
             break
         if lower.startswith('on ') and ' wrote:' in lower:
             break
+        if lower.startswith('________________________________'):
+            break
+        if lower.startswith('-----original message-----'):
+            break
+        if lower.startswith('begin forwarded message'):
+            break
         kept.append(line)
     return kept
 

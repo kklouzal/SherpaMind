@@ -185,6 +185,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "",
         "These are derived/public artifacts for OpenClaw-friendly access. Canonical truth remains in `.SherpaMind/private/`.",
         "The matching vector-ready export lives under `.SherpaMind/public/exports/embedding-ticket-chunks.jsonl` when generated.",
+        "The matching vector export manifest lives under `.SherpaMind/public/exports/embedding-ticket-chunks.manifest.json` when generated.",
     ]
     index_path.write_text("\n".join(index_md) + "\n")
 

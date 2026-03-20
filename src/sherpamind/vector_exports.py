@@ -6,7 +6,7 @@ from pathlib import Path
 from .db import connect
 
 
-def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int | None = None) -> dict:
+def _load_rows(db_path: Path, limit: int | None = None) -> list[dict]:
     query = """
         SELECT c.chunk_id,
                c.doc_id,
@@ -22,7 +22,11 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                json_extract(d.raw_json, '$.metadata.priority') AS priority,
                json_extract(d.raw_json, '$.metadata.category') AS category,
                json_extract(d.raw_json, '$.metadata.closed_at') AS closed_at,
-               json_extract(d.raw_json, '$.metadata.attachments_count') AS attachments_count
+               json_extract(d.raw_json, '$.metadata.attachments_count') AS attachments_count,
+               json_extract(d.raw_json, '$.metadata.ticketlogs_count') AS ticketlogs_count,
+               json_extract(d.raw_json, '$.metadata.timelogs_count') AS timelogs_count,
+               json_extract(d.raw_json, '$.metadata.cleaned_initial_post') AS cleaned_initial_post,
+               json_extract(d.raw_json, '$.metadata.resolution_summary') AS resolution_summary
         FROM ticket_document_chunks c
         JOIN ticket_documents d ON d.doc_id = c.doc_id
         ORDER BY c.ticket_id DESC, c.chunk_index ASC
@@ -34,12 +38,15 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
 
     with connect(db_path) as conn:
         rows = conn.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
 
+
+def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int | None = None) -> dict:
+    rows = _load_rows(db_path, limit=limit)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     count = 0
     with output_path.open("w", encoding="utf-8") as f:
-        for row in rows:
-            record = dict(row)
+        for record in rows:
             payload = {
                 "id": record["chunk_id"],
                 "text": record["text"],
@@ -70,7 +77,22 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
         "output_path": str(output_path),
         "chunk_count": count,
     }
-   "status": "ok",
+
+
+def export_embedding_manifest(db_path: Path, output_path: Path, limit: int | None = None) -> dict:
+    rows = _load_rows(db_path, limit=limit)
+    manifest = {
+        "chunk_count": len(rows),
+        "latest_updated_at": max((row.get("updated_at") for row in rows if row.get("updated_at")), default=None),
+        "accounts": sorted({row.get("account") for row in rows if row.get("account")}),
+        "technicians": sorted({row.get("technician") for row in rows if row.get("technician")}),
+        "statuses": sorted({row.get("status") for row in rows if row.get("status")}),
+        "content_hashes": [row.get("content_hash") for row in rows],
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    return {
+        "status": "ok",
         "output_path": str(output_path),
-        "chunk_count": count,
+        "chunk_count": len(rows),
     }

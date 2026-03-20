@@ -2,11 +2,10 @@ import json
 from pathlib import Path
 
 from sherpamind.db import initialize_db, replace_ticket_document_chunks, replace_ticket_documents
-from sherpamind.vector_exports import export_embedding_ready_chunks
+from sherpamind.vector_exports import export_embedding_manifest, export_embedding_ready_chunks
 
 
-def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
-    db = tmp_path / "sherpamind.sqlite3"
+def seed(db: Path) -> None:
     initialize_db(db)
     replace_ticket_documents(
         db,
@@ -44,6 +43,11 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
         }],
         synced_at="2026-03-19T01:00:00Z",
     )
+
+
+def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    seed(db)
     output = tmp_path / "embedding.jsonl"
     result = export_embedding_ready_chunks(db, output)
     assert result["status"] == "ok"
@@ -53,3 +57,14 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["priority"] == "High"
     assert row["metadata"]["ticketlogs_count"] == 5
     assert row["metadata"]["resolution_summary"] == "Closed successfully"
+
+
+def test_export_embedding_manifest(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    seed(db)
+    output = tmp_path / "manifest.json"
+    result = export_embedding_manifest(db, output)
+    assert result["status"] == "ok"
+    manifest = json.loads(output.read_text())
+    assert manifest["chunk_count"] == 1
+    assert manifest["accounts"] == ["Acme"]

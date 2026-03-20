@@ -16,6 +16,12 @@ def test_normalize_ticket_text_strips_quoted_reply_tail() -> None:
     assert cleaned == "Current update"
 
 
+def test_normalize_ticket_text_strips_forwarded_message_tail() -> None:
+    raw = "Current update\n-----Original Message-----\nFrom: someone@example.com"
+    cleaned = normalize_ticket_text(raw)
+    assert cleaned == "Current update"
+
+
 def test_summarize_resolution_from_logs_returns_first_segment() -> None:
     text = "Closed successfully --- older note"
     assert summarize_resolution_from_logs(text).startswith("Closed successfully")
