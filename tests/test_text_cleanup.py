@@ -10,6 +10,12 @@ def test_normalize_ticket_text_strips_html_parser_noise_and_urls() -> None:
     assert "https://" not in cleaned
 
 
+def test_normalize_ticket_text_strips_quoted_reply_tail() -> None:
+    raw = "Current update\n\nOn Tue, someone wrote:\n> quoted reply"
+    cleaned = normalize_ticket_text(raw)
+    assert cleaned == "Current update"
+
+
 def test_summarize_resolution_from_logs_returns_first_segment() -> None:
     text = "Closed successfully --- older note"
     assert summarize_resolution_from_logs(text).startswith("Closed successfully")

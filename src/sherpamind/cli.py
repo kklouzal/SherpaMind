@@ -25,7 +25,7 @@ from .analysis import (
 )
 from .automation import doctor_automation, remove_managed_cron_jobs
 from .client import SherpaDeskClient
-from .documents import export_ticket_documents, materialize_ticket_documents
+from .documents import export_ticket_chunks, export_ticket_documents, materialize_ticket_documents
 from .enrichment import enrich_priority_ticket_details
 from .migrate import archive_legacy_state, migrate_legacy_state
 from .paths import ensure_path_layout
@@ -474,6 +474,16 @@ def export_ticket_docs(output_path: str = "", limit: int = 0) -> None:
     effective_limit = None if limit <= 0 else limit
     resolved_output = Path(output_path) if output_path else (paths.exports_root / "ticket-docs.jsonl")
     result = export_ticket_documents(settings.db_path, resolved_output, limit=effective_limit)
+    print(json.dumps(result, indent=2))
+
+
+@app.command("export-ticket-chunks")
+def export_ticket_chunks_cmd(output_path: str = "", limit: int = 0) -> None:
+    settings = load_settings()
+    paths = ensure_path_layout()
+    effective_limit = None if limit <= 0 else limit
+    resolved_output = Path(output_path) if output_path else (paths.exports_root / "ticket-chunks.jsonl")
+    result = export_ticket_chunks(settings.db_path, resolved_output, limit=effective_limit)
     print(json.dumps(result, indent=2))
 
 

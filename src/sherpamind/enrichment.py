@@ -31,32 +31,34 @@ def _build_client(settings: Settings) -> SherpaDeskClient:
     )
 
 
-def _candidate_ticket_ids(db_path, limit: int) -> list[str]:
+def _candidate_ticket_rows(db_path, limit: int) -> list[dict]:
     from .db import connect
 
     with connect(db_path) as conn:
         rows = conn.execute(
             """
             WITH prioritized AS (
-                SELECT id,
+                SELECT t.id,
                        CASE
-                           WHEN status = 'Open' THEN 0
-                           WHEN status = 'Closed'
-                                AND closed_at IS NOT NULL
-                                AND julianday(REPLACE(substr(closed_at, 1, 19), 'T', ' ')) >= julianday('now', '-7 days') THEN 1
+                           WHEN t.status = 'Open' THEN 0
+                           WHEN t.status = 'Closed'
+                                AND t.closed_at IS NOT NULL
+                                AND julianday(REPLACE(substr(t.closed_at, 1, 19), 'T', ' ')) >= julianday('now', '-7 days') THEN 1
                            ELSE 2
                        END AS bucket,
-                       COALESCE(updated_at, created_at) AS activity_at
-                FROM tickets
+                       CASE WHEN td.ticket_id IS NULL THEN 0 ELSE 1 END AS has_detail,
+                       COALESCE(t.updated_at, t.created_at) AS activity_at
+                FROM tickets t
+                LEFT JOIN ticket_details td ON td.ticket_id = t.id
             )
-            SELECT id
+            SELECT id, bucket, has_detail, activity_at
             FROM prioritized
-            ORDER BY bucket ASC, activity_at DESC, id DESC
+            ORDER BY bucket ASC, has_detail ASC, activity_at DESC, id DESC
             LIMIT ?
             """,
             (limit,),
         ).fetchall()
-    return [str(row['id']) for row in rows]
+    return [dict(row) for row in rows]
 
 
 def enrich_priority_ticket_details(settings: Settings, limit: int = 50, materialize_docs: bool = True) -> EnrichmentResult:
@@ -70,7 +72,8 @@ def enrich_priority_ticket_details(settings: Settings, limit: int = 50, material
     run_id = start_ingest_run(settings.db_path, mode='enrich_priority_ticket_details', notes=f'limit={limit}')
     try:
         client = _build_client(settings)
-        ticket_ids = _candidate_ticket_ids(settings.db_path, limit=limit)
+        candidates = _candidate_ticket_rows(settings.db_path, limit=limit)
+        ticket_ids = [str(row['id']) for row in candidates]
         details = []
         synced_at = now_iso()
         for ticket_id in ticket_ids:
@@ -83,6 +86,10 @@ def enrich_priority_ticket_details(settings: Settings, limit: int = 50, material
         stats = {
             'candidate_ticket_count': len(ticket_ids),
             'enriched_ticket_count': len(details),
+            'unenriched_candidates': sum(1 for row in candidates if row['has_detail'] == 0),
+            'open_candidates': sum(1 for row in candidates if row['bucket'] == 0),
+            'warm_candidates': sum(1 for row in candidates if row['bucket'] == 1),
+            'cold_candidates': sum(1 for row in candidates if row['bucket'] == 2),
             'synced_at': synced_at,
             'materialized_documents': doc_stats['document_count'] if doc_stats else None,
         }

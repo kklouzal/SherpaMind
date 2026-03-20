@@ -16,6 +16,7 @@ NOTICE_RE = re.compile(r"NOTICE:.*", re.IGNORECASE)
 BITDEFENDER_RE = re.compile(r"https?://lsems\.gravityzone\.bitdefender\.com/scan/\S+", re.IGNORECASE)
 MAILTO_RE = re.compile(r"mailto:[^\s>]+", re.IGNORECASE)
 URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
+REPLY_HEADER_RE = re.compile(r"^(on .+ wrote:|from:|sent:|to:|subject:)\s*$", re.IGNORECASE)
 SIGNATURE_MARKERS = [
     "NOTICE:",
     "This message is intended exclusively",
@@ -23,7 +24,23 @@ SIGNATURE_MARKERS = [
     "LT.agency",
     "Patrol Division",
     "Police Department",
+    "Sent from my",
+    "Get Outlook for",
 ]
+
+
+def _strip_reply_tail(lines: list[str]) -> list[str]:
+    kept: list[str] = []
+    for line in lines:
+        lower = line.lower().strip()
+        if line.startswith('>'):
+            break
+        if REPLY_HEADER_RE.match(lower):
+            break
+        if lower.startswith('on ') and ' wrote:' in lower:
+            break
+        kept.append(line)
+    return kept
 
 
 def normalize_ticket_text(value: str | None) -> str:
@@ -50,6 +67,7 @@ def normalize_ticket_text(value: str | None) -> str:
         if any(marker.lower() in line.lower() for marker in SIGNATURE_MARKERS):
             break
         lines.append(line)
+    lines = _strip_reply_tail(lines)
     text = "\n".join(lines)
     text = MULTIBLANK_RE.sub("\n\n", text).strip()
     return text

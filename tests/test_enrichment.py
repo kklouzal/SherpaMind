@@ -2,7 +2,7 @@ from pathlib import Path
 
 from sherpamind.enrichment import enrich_priority_ticket_details
 from sherpamind.settings import Settings
-from sherpamind.db import initialize_db, upsert_tickets, connect
+from sherpamind.db import initialize_db, upsert_ticket_details, upsert_tickets, connect
 
 
 class FakeClient:
@@ -58,3 +58,23 @@ def test_enrich_priority_ticket_details_populates_detail_tables(tmp_path: Path, 
     assert detail_count == 2
     assert log_count == 2
     assert doc_count >= 2
+
+
+def test_enrichment_prioritizes_unenriched_open_tickets(tmp_path: Path, monkeypatch) -> None:
+    settings = make_settings(tmp_path)
+    initialize_db(settings.db_path)
+    upsert_tickets(settings.db_path, [
+        {'id': 101, 'subject': 'Open A', 'status': 'Open', 'created_time': '2026-03-19T01:00:00Z', 'updated_time': '2026-03-19T02:00:00Z'},
+        {'id': 102, 'subject': 'Open B', 'status': 'Open', 'created_time': '2026-03-19T01:00:00Z', 'updated_time': '2026-03-19T01:30:00Z'},
+    ])
+    upsert_ticket_details(settings.db_path, [{'id': 101, 'ticketlogs': [], 'timelogs': [], 'attachments': []}])
+    seen = []
+
+    class RecordingClient(FakeClient):
+        def get(self, path, params=None):
+            seen.append(path)
+            return super().get(path, params=params)
+
+    monkeypatch.setattr('sherpamind.enrichment._build_client', lambda settings: RecordingClient())
+    enrich_priority_ticket_details(settings, limit=1, materialize_docs=False)
+    assert seen == ['tickets/102']

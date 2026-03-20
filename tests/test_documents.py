@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from sherpamind.db import initialize_db, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
-from sherpamind.documents import build_ticket_document_chunks, build_ticket_documents, export_ticket_documents, materialize_ticket_documents
+from sherpamind.documents import build_ticket_document_chunks, build_ticket_documents, export_ticket_chunks, export_ticket_documents, materialize_ticket_documents
 
 
 def seed_fixture(db: Path) -> None:
@@ -57,6 +57,7 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
 
     chunks = build_ticket_document_chunks(docs)
     assert chunks[0]["chunk_id"].startswith("ticket:101:chunk:")
+    assert chunks[0]["account"] == "Acme"
 
     materialized = materialize_ticket_documents(db)
     assert materialized["status"] == "ok"
@@ -66,6 +67,12 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     result = export_ticket_documents(db, output)
     assert result["status"] == "ok"
     assert result["document_count"] == 1
+
+    chunk_output = tmp_path / "ticket-chunks.jsonl"
+    chunk_result = export_ticket_chunks(db, chunk_output)
+    assert chunk_result["status"] == "ok"
+    assert chunk_result["chunk_count"] >= 1
+
     lines = output.read_text().splitlines()
     assert len(lines) == 1
     assert json.loads(lines[0])["doc_id"] == "ticket:101"

@@ -47,6 +47,9 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                COALESCE(u.display_name, t.user_id) AS user_name,
                COALESCE(u.email, json_extract(t.raw_json, '$.user_email')) AS user_email,
                COALESCE(te.display_name, t.assigned_technician_id) AS technician,
+               t.account_id,
+               t.user_id,
+               t.assigned_technician_id,
                json_extract(t.raw_json, '$.initial_post') AS initial_post,
                json_extract(t.raw_json, '$.plain_initial_post') AS plain_initial_post,
                json_extract(t.raw_json, '$.creation_category_name') AS creation_category_name,
@@ -114,8 +117,6 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         cleaned_detail_note = normalize_ticket_text(record.get("detail_note"))
         cleaned_workpad = normalize_ticket_text(record.get("workpad"))
         cleaned_recent_logs = normalize_ticket_text(record.get("recent_log_text"))
-        # Keep this lightweight and source-grounded: a trimmed excerpt from recent log text,
-        # not a model-authored or heavily interpretive conclusion.
         resolution_summary = summarize_resolution_from_logs(record.get("recent_log_text"))
 
         text_parts = [
@@ -181,9 +182,13 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                 "ticket_id": record["id"],
                 "status": record.get("status"),
                 "account": record.get("account"),
+                "account_id": record.get("account_id"),
                 "user_name": record.get("user_name"),
+                "user_id": record.get("user_id"),
                 "technician": record.get("technician"),
+                "technician_id": record.get("assigned_technician_id"),
                 "updated_at": record.get("updated_at"),
+                "created_at": record.get("created_at"),
                 "text": text,
                 "content_hash": _content_hash(text),
                 "metadata": {
@@ -212,9 +217,16 @@ def build_ticket_document_chunks(docs: list[dict]) -> list[dict]:
                     "chunk_id": f"{doc['doc_id']}:chunk:{idx}",
                     "doc_id": doc["doc_id"],
                     "ticket_id": doc["ticket_id"],
+                    "account": doc.get("account"),
+                    "account_id": doc.get("account_id"),
+                    "status": doc.get("status"),
+                    "technician": doc.get("technician"),
+                    "technician_id": doc.get("technician_id"),
                     "chunk_index": idx,
                     "text": chunk_text,
                     "content_hash": _content_hash(chunk_text),
+                    "updated_at": doc.get("updated_at"),
+                    "created_at": doc.get("created_at"),
                 }
             )
     return chunks
@@ -244,4 +256,18 @@ def export_ticket_documents(db_path: Path, output_path: Path, limit: int | None 
         "status": "ok",
         "output_path": str(output_path),
         "document_count": len(docs),
+    }
+
+
+def export_ticket_chunks(db_path: Path, output_path: Path, limit: int | None = None) -> dict:
+    docs = build_ticket_documents(db_path, limit=limit)
+    chunks = build_ticket_document_chunks(docs)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as f:
+        for chunk in chunks:
+            f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
+    return {
+        "status": "ok",
+        "output_path": str(output_path),
+        "chunk_count": len(chunks),
     }
