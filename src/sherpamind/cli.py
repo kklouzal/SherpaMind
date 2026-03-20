@@ -22,6 +22,7 @@ from .analysis import (
     search_ticket_document_chunks,
     search_ticket_documents,
 )
+from .automation import doctor_automation, reconcile_automation
 from .client import SherpaDeskClient
 from .documents import export_ticket_documents, materialize_ticket_documents
 from .enrichment import enrich_priority_ticket_details
@@ -142,6 +143,7 @@ def doctor() -> None:
             "db_path": str(settings.db_path),
         },
         "checks": checks,
+        "automation": doctor_automation(),
     }, indent=2))
 
 
@@ -153,7 +155,7 @@ def migrate_state() -> None:
 
 
 @app.command("setup")
-def setup(migrate_legacy: bool = True, initialize_db_only: bool = False) -> None:
+def setup(migrate_legacy: bool = True, initialize_db_only: bool = False, install_automation: bool = True) -> None:
     settings = load_settings()
     paths = ensure_path_layout()
     steps = []
@@ -168,6 +170,12 @@ def setup(migrate_legacy: bool = True, initialize_db_only: bool = False) -> None
             steps.append({"public_snapshot": snapshot})
         except Exception as exc:
             steps.append({"public_snapshot_error": f"{type(exc).__name__}: {exc}"})
+    if install_automation:
+        try:
+            automation = reconcile_automation()
+            steps.append({"automation": automation})
+        except Exception as exc:
+            steps.append({"automation_error": f"{type(exc).__name__}: {exc}"})
     print(json.dumps({
         "status": "ok",
         "message": "SherpaMind setup flow completed.",
@@ -179,6 +187,12 @@ def setup(migrate_legacy: bool = True, initialize_db_only: bool = False) -> None
             "python3 scripts/run.py seed",
         ],
     }, indent=2))
+
+
+@app.command("reconcile-automation")
+def reconcile_jobs() -> None:
+    result = reconcile_automation()
+    print(json.dumps(result, indent=2))
 
 
 @app.command("discover-orgs")

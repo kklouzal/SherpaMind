@@ -178,6 +178,28 @@ Current documented direction:
 
 See `docs/delta-sync-strategy.md` for the reasoning and proposed lane design.
 
+## Install vs update behavior
+
+### First install
+The intended first-install flow is:
+1. `python3 scripts/bootstrap.py`
+2. `python3 scripts/run.py setup`
+3. `python3 scripts/run.py configure --api-key <token>`
+4. `python3 scripts/run.py discover-orgs`
+5. `python3 scripts/run.py configure --org-key <org> --instance-key <instance>`
+6. `python3 scripts/run.py seed`
+7. `python3 scripts/run.py generate-public-snapshot`
+
+### Update / re-bootstrap
+On update, SherpaMind should **reconcile**, not duplicate:
+- keep `.SherpaMind/private` and `.SherpaMind/public` intact
+- preserve config and SQLite data
+- rerun `bootstrap.py` safely to refresh the skill-local venv if needed
+- rerun `setup` or `reconcile-automation` to ensure expected cron jobs exist and duplicates are removed
+- rely on `doctor` to verify the runtime, config, DB, legacy-state presence, and managed automation state
+
+Cron job management is intentionally **manifest + reconcile** based. Managed SherpaMind jobs are recreated by stable name so updates do not accumulate duplicates.
+
 ## Open questions
 
 - Best long-term breadth/cadence for full-corpus detail enrichment without wasting API budget

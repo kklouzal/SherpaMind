@@ -103,6 +103,8 @@ SherpaMind can also materialize OpenClaw-friendly Markdown under `.SherpaMind/pu
 - `recent-account-activity.md`
 - `recent-technician-load.md`
 
+These are generated/replaced artifacts, not append-only memory files.
+
 ## Design rule
 
 Do not force the LLM to parse raw SherpaDesk JSON blobs unless necessary.
