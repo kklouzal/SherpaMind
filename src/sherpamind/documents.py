@@ -9,7 +9,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 3
+DOCUMENT_MATERIALIZATION_VERSION = 4
 
 
 def _content_hash(text: str) -> str:
@@ -137,6 +137,47 @@ def _chunk_text(text: str, target_chars: int = 1800) -> list[str]:
     return [chunk for chunk in chunks if chunk]
 
 
+def _parse_recent_logs(value: str | None) -> list[dict[str, Any]]:
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in parsed:
+        if isinstance(item, dict):
+            rows.append(item)
+    return rows
+
+
+def _derive_recent_log_cues(logs: list[dict[str, Any]]) -> dict[str, Any]:
+    waiting_log = None
+    response_log = None
+    resolution_log = None
+    for log in logs:
+        cleaned_note = normalize_ticket_text(log.get("plain_note") or log.get("note"))
+        log_type = str(log.get("log_type") or "").strip().lower()
+        log_record = {
+            "log_type": log.get("log_type"),
+            "record_date": log.get("record_date"),
+            "cleaned_note": cleaned_note,
+        }
+        if waiting_log is None and cleaned_note and (bool(log.get("is_waiting")) or log_type == "waiting on response"):
+            waiting_log = log_record
+        if response_log is None and cleaned_note and log_type in {"response", "initial post", "initial log", "log entry"}:
+            response_log = log_record
+        if resolution_log is None and cleaned_note and log_type in {"closed", "close log"}:
+            resolution_log = log_record
+    return {
+        "waiting_log": waiting_log,
+        "response_log": response_log,
+        "resolution_log": resolution_log,
+    }
+
+
 def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict]:
     query = """
         SELECT t.id,
@@ -223,6 +264,26 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                ) AS recent_log_types,
                (
                    SELECT json_group_array(json_object(
+                       'id', tl.id,
+                       'log_type', tl.log_type,
+                       'record_date', tl.record_date,
+                       'plain_note', tl.plain_note,
+                       'note', tl.note,
+                       'is_waiting', tl.is_waiting,
+                       'is_tech_only', tl.is_tech_only,
+                       'user_email', tl.user_email,
+                       'user_name', tl.user_name
+                   ))
+                   FROM (
+                       SELECT id, log_type, record_date, plain_note, note, is_waiting, is_tech_only, user_email, user_name
+                       FROM ticket_logs
+                       WHERE ticket_id = t.id
+                       ORDER BY record_date DESC, id DESC
+                       LIMIT 8
+                   ) tl
+               ) AS recent_logs_json,
+               (
+                   SELECT json_group_array(json_object(
                        'id', ta.id,
                        'name', ta.name,
                        'size', ta.size,
@@ -260,10 +321,20 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         )
         cleaned_detail_note = normalize_ticket_text(record.get("detail_note"))
         cleaned_workpad = normalize_ticket_text(record.get("workpad"))
-        cleaned_followup_note = normalize_ticket_text(record.get("followup_note"))
+        recent_logs = _parse_recent_logs(record.get("recent_logs_json"))
+        log_cues = _derive_recent_log_cues(recent_logs)
+        waiting_log = log_cues["waiting_log"]
+        response_log = log_cues["response_log"]
+        resolution_log = log_cues["resolution_log"]
+        cleaned_followup_note = normalize_ticket_text(_first_present(record.get("followup_note"), waiting_log["cleaned_note"] if waiting_log else None))
+        followup_date = _first_present(record.get("followup_date"), waiting_log["record_date"] if waiting_log else None)
         cleaned_request_completion_note = normalize_ticket_text(record.get("request_completion_note"))
         cleaned_recent_logs = normalize_ticket_text(record.get("recent_log_text"))
-        resolution_summary = summarize_resolution_from_logs(record.get("recent_log_text"))
+        cleaned_latest_response_note = normalize_ticket_text(response_log["cleaned_note"] if response_log else None)
+        latest_response_date = response_log["record_date"] if response_log else None
+        cleaned_resolution_log_note = normalize_ticket_text(resolution_log["cleaned_note"] if resolution_log else None)
+        resolution_log_date = resolution_log["record_date"] if resolution_log else None
+        resolution_summary = cleaned_resolution_log_note[:600] if cleaned_resolution_log_note else summarize_resolution_from_logs(record.get("recent_log_text"))
         normalized_category = (
             record.get("category")
             or record.get("creation_category_name")
@@ -334,8 +405,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Next step: {cleaned_next_step}")
         if record.get("next_step_date"):
             text_parts.append(f"Next step date: {record['next_step_date']}")
-        if record.get("followup_date"):
-            text_parts.append(f"Follow-up date: {record['followup_date']}")
+        if followup_date:
+            text_parts.append(f"Follow-up date: {followup_date}")
         if cleaned_followup_note:
             text_parts.append(f"Follow-up note: {cleaned_followup_note[:1200]}")
         if record.get("request_completion_date"):
@@ -348,10 +419,18 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Internal note: {cleaned_detail_note[:1600]}")
         if cleaned_workpad:
             text_parts.append(f"Workpad summary: {cleaned_workpad[:1600]}")
+        if latest_response_date:
+            text_parts.append(f"Latest response date: {latest_response_date}")
+        if cleaned_latest_response_note:
+            text_parts.append(f"Latest response note: {cleaned_latest_response_note[:1600]}")
         if record.get("recent_log_types"):
             text_parts.append(f"Recent log types: {record['recent_log_types']}")
         if cleaned_recent_logs:
             text_parts.append(f"Recent log summary: {cleaned_recent_logs[:2400]}")
+        if resolution_log_date:
+            text_parts.append(f"Resolution log date: {resolution_log_date}")
+        if cleaned_resolution_log_note:
+            text_parts.append(f"Resolution log note: {cleaned_resolution_log_note[:1600]}")
         if resolution_summary:
             text_parts.append(f"Resolution/activity highlight: {resolution_summary}")
         if record.get("resolution_category_name"):
@@ -426,10 +505,14 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "cleaned_followup_note": cleaned_followup_note[:400] if cleaned_followup_note else None,
                     "cleaned_request_completion_note": cleaned_request_completion_note[:400] if cleaned_request_completion_note else None,
                     "cleaned_next_step": cleaned_next_step[:300] if cleaned_next_step else None,
+                    "cleaned_latest_response_note": cleaned_latest_response_note[:400] if cleaned_latest_response_note else None,
+                    "latest_response_date": latest_response_date,
+                    "cleaned_resolution_log_note": cleaned_resolution_log_note[:400] if cleaned_resolution_log_note else None,
+                    "resolution_log_date": resolution_log_date,
                     "next_step_date": record.get("next_step_date"),
-                    "followup_date": record.get("followup_date"),
+                    "followup_date": followup_date,
                     "request_completion_date": record.get("request_completion_date"),
-                    "has_next_step": bool(cleaned_next_step or record.get("next_step_date") or record.get("followup_date")),
+                    "has_next_step": bool(cleaned_next_step or record.get("next_step_date") or followup_date or cleaned_followup_note),
                     "recent_log_types": recent_log_types,
                     "recent_log_types_csv": ", ".join(recent_log_types) if recent_log_types else None,
                     "initial_response_present": record.get("initial_response") is not None,

@@ -72,7 +72,7 @@ SherpaMind currently covers five major areas:
    - normalizes ticket text into cleaner retrieval-ready summaries
    - normalizes account/user/technician labels so retrieval/vector facets prefer human-readable names over raw numeric IDs when ticket payloads provide them
    - promotes ticket-observed technician labels into canonical stub rows when that is the cleanest stable source available, so technician-facing summaries/filter facets stay readable even when endpoint coverage is thin
-   - carries workflow/state metadata such as subject, user email, recent log types, next-step hints, contract/confirmation context, account-location and department context, intake-channel/handling flags, request-completion cues, attachment presence, resolution highlights, and label-source provenance into derived artifacts
+   - carries workflow/state metadata such as subject, user email, recent log types, derived waiting/follow-up cues, derived latest-response and closure cues from ticket logs, next-step hints, contract/confirmation context, account-location and department context, intake-channel/handling flags, request-completion cues, attachment presence, resolution highlights, and label-source provenance into derived artifacts
    - chunks long documents deterministically
    - supports keyword/text search over docs and chunks
    - exports metadata-rich embedding-ready chunk payloads

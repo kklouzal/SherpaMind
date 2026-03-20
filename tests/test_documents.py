@@ -83,7 +83,11 @@ def seed_fixture(db: Path) -> None:
             "is_waiting_on_response": True,
             "is_resolved": False,
             "is_confirmed": True,
-            "ticketlogs": [{"id": 501, "log_type": "Initial Post", "record_date": "2026-03-18T01:00:00Z", "plain_note": "printer broken"}],
+            "ticketlogs": [
+                {"id": 503, "log_type": "Closed", "record_date": "2026-03-19T06:30:00Z", "plain_note": "Closed after printer service restored"},
+                {"id": 502, "log_type": "Waiting on Response", "record_date": "2026-03-19T06:00:00Z", "plain_note": "Waiting on user approval"},
+                {"id": 501, "log_type": "Initial Post", "record_date": "2026-03-18T01:00:00Z", "plain_note": "printer broken"}
+            ],
             "timelogs": [],
             "attachments": [{"id": "a1", "name": "shot.png", "url": "https://example/shot.png", "size": 1234, "date": "2026-03-18T01:00:00Z"}],
         }],
@@ -113,6 +117,10 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Handled by call centre: False" in primary["text"]
     assert "Confirmed date: 2026-03-19T05:00:00Z" in primary["text"]
     assert "Follow-up note: Waiting on user approval" in primary["text"]
+    assert "Latest response date: 2026-03-18T01:00:00Z" in primary["text"]
+    assert "Latest response note: printer broken" in primary["text"]
+    assert "Resolution log date: 2026-03-19T06:30:00Z" in primary["text"]
+    assert "Resolution log note: Closed after printer service restored" in primary["text"]
     assert "Requested completion note: Finish after-hours maintenance window" in primary["text"]
     assert "Attachments (metadata only)" in primary["text"]
     assert primary["metadata"]["attachments"][0]["name"] == "shot.png"
@@ -125,6 +133,10 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["cleaned_followup_note"] == "Waiting on user approval"
     assert primary["metadata"]["cleaned_request_completion_note"] == "Finish after-hours maintenance window"
     assert primary["metadata"]["cleaned_next_step"] == "Call back"
+    assert primary["metadata"]["cleaned_latest_response_note"] == "printer broken"
+    assert primary["metadata"]["latest_response_date"] == "2026-03-18T01:00:00Z"
+    assert primary["metadata"]["cleaned_resolution_log_note"] == "Closed after printer service restored"
+    assert primary["metadata"]["resolution_log_date"] == "2026-03-19T06:30:00Z"
     assert primary["metadata"]["followup_date"] == "2026-03-20T10:00:00Z"
     assert primary["metadata"]["request_completion_date"] == "2026-03-21T17:00:00Z"
     assert primary["metadata"]["support_group_name"] == "Managed Services"
@@ -140,8 +152,8 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["is_resolved"] is False
     assert primary["metadata"]["is_confirmed"] is True
     assert primary["metadata"]["has_next_step"] is True
-    assert primary["metadata"]["recent_log_types"] == ["Initial Post"]
-    assert primary["metadata"]["recent_log_types_csv"] == "Initial Post"
+    assert primary["metadata"]["recent_log_types"] == ["Closed", "Waiting on Response", "Initial Post"]
+    assert primary["metadata"]["recent_log_types_csv"] == "Closed, Waiting on Response, Initial Post"
     assert primary["metadata"]["initial_response_present"] is True
     assert primary["metadata"]["user_email"] == "alice@example.com"
     assert primary["metadata"]["detail_available"] is True

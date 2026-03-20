@@ -31,6 +31,10 @@ def seed(db: Path) -> None:
                 "cleaned_followup_note": "Waiting on customer reply",
                 "cleaned_request_completion_note": "Complete during maintenance window",
                 "cleaned_next_step": "Call back tomorrow",
+                "cleaned_latest_response_note": "We are checking now",
+                "latest_response_date": "2026-03-19T09:15:00Z",
+                "cleaned_resolution_log_note": "Closed after maintenance",
+                "resolution_log_date": "2026-03-19T10:00:00Z",
                 "followup_date": "2026-03-20T10:00:00Z",
                 "request_completion_date": "2026-03-21T17:00:00Z",
                 "has_next_step": True,
@@ -89,6 +93,10 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["cleaned_followup_note"] == "Waiting on customer reply"
     assert row["metadata"]["cleaned_request_completion_note"] == "Complete during maintenance window"
     assert row["metadata"]["cleaned_next_step"] == "Call back tomorrow"
+    assert row["metadata"]["cleaned_latest_response_note"] == "We are checking now"
+    assert row["metadata"]["latest_response_date"] == "2026-03-19T09:15:00Z"
+    assert row["metadata"]["cleaned_resolution_log_note"] == "Closed after maintenance"
+    assert row["metadata"]["resolution_log_date"] == "2026-03-19T10:00:00Z"
     assert row["metadata"]["followup_date"] == "2026-03-20T10:00:00Z"
     assert row["metadata"]["request_completion_date"] == "2026-03-21T17:00:00Z"
     assert row["metadata"]["support_group_name"] == "Managed Services"
@@ -124,6 +132,8 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["filter_facets"]["priorities"] == ["High"]
     assert summary["metadata_coverage"]["cleaned_subject"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_followup_note"]["chunks"] == 1
+    assert summary["metadata_coverage"]["cleaned_latest_response_note"]["chunks"] == 1
+    assert summary["metadata_coverage"]["cleaned_resolution_log_note"]["chunks"] == 1
     assert summary["metadata_coverage"]["support_group_name"]["chunks"] == 1
     assert summary["metadata_coverage"]["account_location_name"]["chunks"] == 1
     assert summary["metadata_coverage"]["department_key"]["chunks"] == 1
