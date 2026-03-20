@@ -28,6 +28,7 @@ def make_settings(tmp_path: Path) -> Settings:
         service_cold_closed_every_seconds=999999,
         service_enrichment_every_seconds=999999,
         service_public_snapshot_every_seconds=999999,
+        service_vector_refresh_every_seconds=0,
         service_doctor_every_seconds=0,
         service_enrichment_limit=25,
         api_hourly_limit=600,
@@ -54,3 +55,11 @@ def test_run_pending_tasks_prunes_old_request_events(monkeypatch, tmp_path: Path
     record_api_request_event(settings.db_path, method='GET', path='tickets', status_code=200, outcome='http_response')
     result = run_pending_tasks(settings)
     assert result['pruned_request_events'] >= 1
+
+
+def test_run_pending_tasks_builds_vector_index(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
+    settings = make_settings(tmp_path)
+    initialize_db(settings.db_path)
+    result = run_pending_tasks(settings)
+    assert result['status'] == 'ok'

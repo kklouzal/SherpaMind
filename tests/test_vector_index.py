@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from sherpamind.db import initialize_db, replace_ticket_document_chunks, replace_ticket_documents
-from sherpamind.vector_index import build_vector_index, search_vector_index, vectorize_text
+from sherpamind.vector_index import build_vector_index, get_vector_index_status, search_vector_index, vectorize_text
 
 
 def seed(db: Path) -> None:
@@ -34,6 +34,8 @@ def test_build_and_search_vector_index(tmp_path: Path) -> None:
     seed(db)
     result = build_vector_index(db, dims=32)
     assert result["status"] == "ok"
+    status = get_vector_index_status(db)
+    assert status["indexed_chunks"] == 2
     rows = search_vector_index(db, "printer", limit=5)
     assert rows[0]["ticket_id"] == "101"
     filtered = search_vector_index(db, "issue", limit=5, account="Beta", status="Closed")

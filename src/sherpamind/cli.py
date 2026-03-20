@@ -522,6 +522,12 @@ def build_vector_index_cmd(limit: int = 0, dims: int = 256) -> None:
     print(json.dumps(result, indent=2))
 
 
+@app.command("report-vector-index-status")
+def report_vector_index_status() -> None:
+    settings = load_settings()
+    print(json.dumps(get_vector_index_status(settings.db_path), indent=2))
+
+
 @app.command("search-vector-index")
 def search_vector_index_cmd(
     query: str,

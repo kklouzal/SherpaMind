@@ -39,8 +39,7 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return sum(x * y for x, y in zip(a, b))
 
 
-def build_vector_index(db_path: Path, dims: int = DEFAULT_DIMS, limit: int | None = None) -> dict[str, Any]:
-    initialize_db(db_path)
+def _load_chunk_rows(db_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
     query = """
         SELECT chunk_id, doc_id, ticket_id, text, content_hash
         FROM ticket_document_chunks
@@ -52,8 +51,26 @@ def build_vector_index(db_path: Path, dims: int = DEFAULT_DIMS, limit: int | Non
         params = (limit,)
     with connect(db_path) as conn:
         rows = conn.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def build_vector_index(db_path: Path, dims: int = DEFAULT_DIMS, limit: int | None = None) -> dict[str, Any]:
+    initialize_db(db_path)
+    rows = _load_chunk_rows(db_path, limit=limit)
+    current_ids = {row["chunk_id"] for row in rows}
+    inserted_or_updated = 0
+    skipped_unchanged = 0
+    with connect(db_path) as conn:
+        existing = {
+            row["chunk_id"]: dict(row)
+            for row in conn.execute("SELECT chunk_id, content_hash, dims FROM vector_chunk_index").fetchall()
+        }
         synced_at = now_iso()
         for row in rows:
+            current = existing.get(row["chunk_id"])
+            if current and current.get("content_hash") == row.get("content_hash") and int(current.get("dims") or 0) == dims:
+                skipped_unchanged += 1
+                continue
             vector = vectorize_text(row["text"], dims=dims)
             conn.execute(
                 """
@@ -77,8 +94,35 @@ def build_vector_index(db_path: Path, dims: int = DEFAULT_DIMS, limit: int | Non
                     synced_at,
                 ),
             )
+            inserted_or_updated += 1
+        stale_ids = [chunk_id for chunk_id in existing if chunk_id not in current_ids]
+        if stale_ids:
+            placeholders = ",".join("?" for _ in stale_ids)
+            conn.execute(f"DELETE FROM vector_chunk_index WHERE chunk_id IN ({placeholders})", stale_ids)
         conn.commit()
-    return {"status": "ok", "indexed_chunks": len(rows), "dims": dims}
+    return {
+        "status": "ok",
+        "indexed_chunks": len(rows),
+        "inserted_or_updated": inserted_or_updated,
+        "skipped_unchanged": skipped_unchanged,
+        "deleted_stale": len([chunk_id for chunk_id in existing if chunk_id not in current_ids]),
+        "dims": dims,
+    }
+
+
+def get_vector_index_status(db_path: Path) -> dict[str, Any]:
+    initialize_db(db_path)
+    with connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS indexed_chunks,
+                   MIN(synced_at) AS earliest_sync_at,
+                   MAX(synced_at) AS latest_sync_at,
+                   MAX(dims) AS dims
+            FROM vector_chunk_index
+            """
+        ).fetchone()
+    return dict(row)
 
 
 def search_vector_index(
