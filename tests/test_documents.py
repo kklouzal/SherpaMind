@@ -25,6 +25,21 @@ def seed_fixture(db: Path) -> None:
             "updated_time": "2026-03-19T03:00:00Z",
             "initial_post": "<p>Can you help with issue A?</p><br>This ticket was created via the email parser.",
             "next_step": "Call back",
+        }, {
+            "id": 102,
+            "account_id": 2,
+            "user_id": 12,
+            "tech_id": 999,
+            "account_name": "Raw Account",
+            "user_firstname": "Bob",
+            "user_lastname": "Jones",
+            "technician_firstname": "Queue",
+            "technician_lastname": "Owner",
+            "subject": "Issue B",
+            "status": "Open",
+            "priority_name": "Low",
+            "created_time": "2026-03-18T02:00:00Z",
+            "updated_time": "2026-03-19T04:00:00Z"
         }],
         synced_at="2026-03-19T01:00:00Z",
     )
@@ -46,31 +61,49 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     db = tmp_path / "sherpamind.sqlite3"
     seed_fixture(db)
     docs = build_ticket_documents(db)
-    assert docs[0]["doc_id"] == "ticket:101"
-    assert "Issue A" in docs[0]["text"]
-    assert "Issue summary:" in docs[0]["text"]
-    assert "email parser" not in docs[0]["text"].lower()
-    assert "Internal note" in docs[0]["text"]
-    assert "printer broken" in docs[0]["text"]
-    assert "Attachments (metadata only)" in docs[0]["text"]
-    assert docs[0]["metadata"]["attachments"][0]["name"] == "shot.png"
-    assert docs[0]["metadata"]["attachment_names"] == ["shot.png"]
-    assert docs[0]["metadata"]["has_attachments"] is True
-    assert docs[0]["metadata"]["category"] == "Hardware / Printer"
-    assert docs[0]["metadata"]["cleaned_subject"] == "Issue A"
-    assert docs[0]["metadata"]["cleaned_initial_post"] == "Can you help with issue A?"
-    assert docs[0]["metadata"]["cleaned_workpad"] == "Internal note"
-    assert docs[0]["metadata"]["cleaned_next_step"] == "Call back"
-    assert docs[0]["metadata"]["has_next_step"] is True
-    assert docs[0]["metadata"]["recent_log_types"] == ["Initial Post"]
-    assert docs[0]["metadata"]["recent_log_types_csv"] == "Initial Post"
-    assert docs[0]["metadata"]["initial_response_present"] is True
-    assert docs[0]["metadata"]["user_email"] == "alice@example.com"
-    assert docs[0]["metadata"]["detail_available"] is True
+    docs_by_id = {doc["ticket_id"]: doc for doc in docs}
+
+    primary = docs_by_id["101"]
+    assert primary["doc_id"] == "ticket:101"
+    assert "Issue A" in primary["text"]
+    assert "Issue summary:" in primary["text"]
+    assert "email parser" not in primary["text"].lower()
+    assert "Internal note" in primary["text"]
+    assert "printer broken" in primary["text"]
+    assert "Attachments (metadata only)" in primary["text"]
+    assert primary["metadata"]["attachments"][0]["name"] == "shot.png"
+    assert primary["metadata"]["attachment_names"] == ["shot.png"]
+    assert primary["metadata"]["has_attachments"] is True
+    assert primary["metadata"]["category"] == "Hardware / Printer"
+    assert primary["metadata"]["cleaned_subject"] == "Issue A"
+    assert primary["metadata"]["cleaned_initial_post"] == "Can you help with issue A?"
+    assert primary["metadata"]["cleaned_workpad"] == "Internal note"
+    assert primary["metadata"]["cleaned_next_step"] == "Call back"
+    assert primary["metadata"]["has_next_step"] is True
+    assert primary["metadata"]["recent_log_types"] == ["Initial Post"]
+    assert primary["metadata"]["recent_log_types_csv"] == "Initial Post"
+    assert primary["metadata"]["initial_response_present"] is True
+    assert primary["metadata"]["user_email"] == "alice@example.com"
+    assert primary["metadata"]["detail_available"] is True
+    assert primary["metadata"]["account_label_source"] == "joined"
+    assert primary["metadata"]["user_label_source"] == "joined"
+    assert primary["metadata"]["technician_label_source"] == "joined"
+
+    fallback = docs_by_id["102"]
+    assert fallback["account"] == "Raw Account"
+    assert fallback["user_name"] == "Bob Jones"
+    assert fallback["technician"] == "Queue Owner"
+    assert "Account: Raw Account" in fallback["text"]
+    assert "User: Bob Jones" in fallback["text"]
+    assert "Technician: Queue Owner" in fallback["text"]
+    assert fallback["metadata"]["account_label_source"] == "raw"
+    assert fallback["metadata"]["user_label_source"] == "raw"
+    assert fallback["metadata"]["technician_label_source"] == "raw"
 
     chunks = build_ticket_document_chunks(docs)
-    assert chunks[0]["chunk_id"].startswith("ticket:101:chunk:")
-    assert chunks[0]["account"] == "Acme"
+    chunks_by_ticket = {chunk["ticket_id"]: chunk for chunk in chunks}
+    assert chunks_by_ticket["101"]["chunk_id"].startswith("ticket:101:chunk:")
+    assert chunks_by_ticket["101"]["account"] == "Acme"
 
     materialized = materialize_ticket_documents(db)
     assert materialized["status"] == "ok"
@@ -79,7 +112,7 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     output = tmp_path / "ticket-docs.jsonl"
     result = export_ticket_documents(db, output)
     assert result["status"] == "ok"
-    assert result["document_count"] == 1
+    assert result["document_count"] == 2
 
     chunk_output = tmp_path / "ticket-chunks.jsonl"
     chunk_result = export_ticket_chunks(db, chunk_output)
@@ -87,5 +120,6 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert chunk_result["chunk_count"] >= 1
 
     lines = output.read_text().splitlines()
-    assert len(lines) == 1
-    assert json.loads(lines[0])["doc_id"] == "ticket:101"
+    assert len(lines) == 2
+    exported_ids = {json.loads(line)["doc_id"] for line in lines}
+    assert exported_ids == {"ticket:101", "ticket:102"}

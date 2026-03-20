@@ -42,6 +42,9 @@ def _load_rows(db_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
                json_extract(d.raw_json, '$.metadata.recent_log_types_csv') AS recent_log_types,
                json_extract(d.raw_json, '$.metadata.initial_response_present') AS initial_response_present,
                json_extract(d.raw_json, '$.metadata.user_email') AS user_email,
+               json_extract(d.raw_json, '$.metadata.account_label_source') AS account_label_source,
+               json_extract(d.raw_json, '$.metadata.user_label_source') AS user_label_source,
+               json_extract(d.raw_json, '$.metadata.technician_label_source') AS technician_label_source,
                json_extract(d.raw_json, '$.metadata.has_attachments') AS has_attachments,
                json_extract(d.raw_json, '$.metadata.has_next_step') AS has_next_step,
                json_extract(d.raw_json, '$.metadata.resolution_summary') AS resolution_summary,
@@ -82,6 +85,9 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                     "user_email": record["user_email"],
                     "technician": record["technician"],
                     "technician_id": record["technician_id"],
+                    "account_label_source": record["account_label_source"],
+                    "user_label_source": record["user_label_source"],
+                    "technician_label_source": record["technician_label_source"],
                     "priority": record["priority"],
                     "category": record["category"],
                     "closed_at": record["closed_at"],
@@ -163,6 +169,20 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
             "ratio": round(covered / chunk_count, 4) if chunk_count else 0.0,
         }
 
+    label_source_summary = {}
+    for field in ("account_label_source", "user_label_source", "technician_label_source"):
+        counts: dict[str, int] = {}
+        for row in rows:
+            value = row.get(field) or "missing"
+            counts[str(value)] = counts.get(str(value), 0) + 1
+        label_source_summary[field] = {
+            key: {
+                "chunks": value,
+                "ratio": round(value / chunk_count, 4) if chunk_count else 0.0,
+            }
+            for key, value in sorted(counts.items())
+        }
+
     return {
         "chunk_count": chunk_count,
         "document_count": len(document_ids),
@@ -195,6 +215,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
             "category_count": len(categories),
         },
         "metadata_coverage": metadata_coverage,
+        "label_source_summary": label_source_summary,
         "vector_index": vector,
         "content_hash_summary": {
             "present_count": sum(1 for row in rows if _present(row.get("content_hash"))),

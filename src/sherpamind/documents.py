@@ -18,6 +18,85 @@ def _split_csv_values(value: str | None) -> list[str]:
     return [part.strip() for part in value.split(',') if part and part.strip()]
 
 
+def _first_present(*values: str | None) -> str | None:
+    for value in values:
+        if value is None:
+            continue
+        cleaned = str(value).strip()
+        if cleaned:
+            return cleaned
+    return None
+
+
+def _looks_like_identifier(value: str | None) -> bool:
+    if value is None:
+        return False
+    candidate = value.strip()
+    return bool(candidate) and candidate.isdigit()
+
+
+def _join_name_parts(*parts: str | None) -> str | None:
+    joined = " ".join(part.strip() for part in parts if part and part.strip())
+    return joined or None
+
+
+def _resolve_account_label(record: dict) -> tuple[str | None, str]:
+    joined_name = _first_present(record.get("account"))
+    raw_name = _first_present(record.get("raw_account_name"), record.get("raw_account_location_name"))
+    account_id = _first_present(record.get("account_id"))
+    if joined_name and not _looks_like_identifier(joined_name):
+        return joined_name, "joined"
+    if raw_name:
+        return raw_name, "raw"
+    if joined_name:
+        return joined_name, "joined"
+    if account_id:
+        return account_id, "id"
+    return None, "missing"
+
+
+def _resolve_user_label(record: dict) -> tuple[str | None, str]:
+    joined_name = _first_present(record.get("user_name"))
+    raw_name = _first_present(
+        record.get("raw_user_name"),
+        _join_name_parts(record.get("raw_user_firstname"), record.get("raw_user_lastname")),
+        record.get("raw_user_fullname"),
+    )
+    user_email = _first_present(record.get("user_email"), record.get("raw_user_email"))
+    user_id = _first_present(record.get("user_id"))
+    if joined_name and not _looks_like_identifier(joined_name):
+        return joined_name, "joined"
+    if raw_name:
+        return raw_name, "raw"
+    if user_email:
+        return user_email, "email"
+    if joined_name:
+        return joined_name, "joined"
+    if user_id:
+        return user_id, "id"
+    return None, "missing"
+
+
+def _resolve_technician_label(record: dict) -> tuple[str | None, str]:
+    joined_name = _first_present(record.get("technician"))
+    raw_name = _first_present(
+        record.get("raw_assigned_technician_name"),
+        record.get("raw_technician_name"),
+        record.get("raw_tech_name"),
+        _join_name_parts(record.get("raw_technician_firstname"), record.get("raw_technician_lastname")),
+    )
+    technician_id = _first_present(record.get("assigned_technician_id"))
+    if joined_name and not _looks_like_identifier(joined_name):
+        return joined_name, "joined"
+    if raw_name:
+        return raw_name, "raw"
+    if joined_name:
+        return joined_name, "joined"
+    if technician_id:
+        return technician_id, "id"
+    return None, "missing"
+
+
 def _chunk_text(text: str, target_chars: int = 1800) -> list[str]:
     if len(text) <= target_chars:
         return [text]
@@ -56,6 +135,18 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                t.account_id,
                t.user_id,
                t.assigned_technician_id,
+               json_extract(t.raw_json, '$.account_name') AS raw_account_name,
+               json_extract(t.raw_json, '$.account_location_name') AS raw_account_location_name,
+               json_extract(t.raw_json, '$.user_name') AS raw_user_name,
+               json_extract(t.raw_json, '$.user_fullname') AS raw_user_fullname,
+               json_extract(t.raw_json, '$.user_firstname') AS raw_user_firstname,
+               json_extract(t.raw_json, '$.user_lastname') AS raw_user_lastname,
+               json_extract(t.raw_json, '$.user_email') AS raw_user_email,
+               json_extract(t.raw_json, '$.tech_name') AS raw_tech_name,
+               json_extract(t.raw_json, '$.technician_name') AS raw_technician_name,
+               json_extract(t.raw_json, '$.assigned_technician_name') AS raw_assigned_technician_name,
+               json_extract(t.raw_json, '$.technician_firstname') AS raw_technician_firstname,
+               json_extract(t.raw_json, '$.technician_lastname') AS raw_technician_lastname,
                json_extract(t.raw_json, '$.initial_post') AS initial_post,
                json_extract(t.raw_json, '$.plain_initial_post') AS plain_initial_post,
                json_extract(t.raw_json, '$.creation_category_name') AS creation_category_name,
@@ -135,15 +226,18 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         cleaned_subject = normalize_ticket_text(record.get("subject"))
         cleaned_next_step = normalize_ticket_text(record.get("next_step"))
         recent_log_types = _split_csv_values(record.get("recent_log_types"))
+        account_label, account_label_source = _resolve_account_label(record)
+        user_label, user_label_source = _resolve_user_label(record)
+        technician_label, technician_label_source = _resolve_technician_label(record)
 
         text_parts = [
             f"Ticket #{record['id']}: {record.get('subject') or '(no subject)'}",
             f"Status: {record.get('status') or 'unknown'}",
             f"Priority: {record.get('priority') or 'unknown'}",
             f"Category: {normalized_category or 'unknown'}",
-            f"Account: {record.get('account') or 'unknown'}",
-            f"User: {record.get('user_name') or record.get('user_email') or 'unknown'}",
-            f"Technician: {record.get('technician') or 'unassigned'}",
+            f"Account: {account_label or 'unknown'}",
+            f"User: {user_label or 'unknown'}",
+            f"Technician: {technician_label or 'unassigned'}",
             f"Created: {record.get('created_at') or 'unknown'}",
             f"Updated: {record.get('updated_at') or 'unknown'}",
             f"Closed: {record.get('closed_at') or 'not closed'}",
@@ -198,11 +292,11 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                 "doc_id": f"ticket:{record['id']}",
                 "ticket_id": record["id"],
                 "status": record.get("status"),
-                "account": record.get("account"),
+                "account": account_label,
                 "account_id": record.get("account_id"),
-                "user_name": record.get("user_name"),
+                "user_name": user_label,
                 "user_id": record.get("user_id"),
-                "technician": record.get("technician"),
+                "technician": technician_label,
                 "technician_id": record.get("assigned_technician_id"),
                 "updated_at": record.get("updated_at"),
                 "created_at": record.get("created_at"),
@@ -233,6 +327,9 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "recent_log_types_csv": ", ".join(recent_log_types) if recent_log_types else None,
                     "initial_response_present": record.get("initial_response") is not None,
                     "user_email": record.get("user_email"),
+                    "account_label_source": account_label_source,
+                    "user_label_source": user_label_source,
+                    "technician_label_source": technician_label_source,
                     "resolution_summary": resolution_summary,
                     "has_resolution_summary": bool(resolution_summary),
                 },

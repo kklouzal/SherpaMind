@@ -137,6 +137,7 @@ SherpaMind should also expose enough observability that OpenClaw can trust the r
 - how much of the corpus has detail enrichment
 - whether ticket references/chunks cover the full ticket set
 - whether important retrieval metadata (category, cleaned subject, issue summary, next-step hints, recent log types, resolution summary, attachment presence) is materially populated
+- whether account/user/technician labels are arriving as human-readable names versus raw-ID fallbacks so metadata filters stay clean
 - whether chunk sizes look sane for vector/semantic use
 - a real SQLite column/table
 - a reusable structural query

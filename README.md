@@ -68,7 +68,8 @@ SherpaMind currently covers five major areas:
 3. **Retrieval preparation**
    - materializes ticket documents from canonical rows
    - normalizes ticket text into cleaner retrieval-ready summaries
-   - carries workflow/state metadata such as subject, user email, recent log types, next-step hints, attachment presence, and resolution highlights into derived artifacts
+   - normalizes account/user/technician labels so retrieval/vector facets prefer human-readable names over raw numeric IDs when ticket payloads provide them
+   - carries workflow/state metadata such as subject, user email, recent log types, next-step hints, attachment presence, resolution highlights, and label-source provenance into derived artifacts
    - chunks long documents deterministically
    - supports keyword/text search over docs and chunks
    - exports metadata-rich embedding-ready chunk payloads

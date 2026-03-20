@@ -32,6 +32,9 @@ def seed(db: Path) -> None:
                 "recent_log_types_csv": "Initial Post, Response",
                 "initial_response_present": True,
                 "user_email": "alice@example.com",
+                "account_label_source": "raw",
+                "user_label_source": "email",
+                "technician_label_source": "joined",
                 "resolution_summary": "Closed successfully",
                 "has_resolution_summary": True,
             },
@@ -69,6 +72,9 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["has_next_step"] is True
     assert row["metadata"]["recent_log_types"] == "Initial Post, Response"
     assert row["metadata"]["user_email"] == "alice@example.com"
+    assert row["metadata"]["account_label_source"] == "raw"
+    assert row["metadata"]["user_label_source"] == "email"
+    assert row["metadata"]["technician_label_source"] == "joined"
     assert row["metadata"]["resolution_summary"] == "Closed successfully"
     assert row["metadata"]["has_resolution_summary"] is True
 
@@ -83,6 +89,9 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["filter_facets"]["accounts"] == ["Acme"]
     assert summary["filter_facets"]["priorities"] == ["High"]
     assert summary["metadata_coverage"]["cleaned_subject"]["chunks"] == 1
+    assert summary["label_source_summary"]["account_label_source"]["raw"]["chunks"] == 1
+    assert summary["label_source_summary"]["user_label_source"]["email"]["chunks"] == 1
+    assert summary["label_source_summary"]["technician_label_source"]["joined"]["chunks"] == 1
     assert summary["metadata_coverage"]["has_attachments"]["ratio"] == 1.0
     assert summary["vector_index"]["total_chunk_rows"] == 1
     assert summary["content_hash_summary"]["present_count"] == 1
@@ -98,3 +107,4 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     assert manifest["chunk_count"] == 1
     assert manifest["filter_facets"]["accounts"] == ["Acme"]
     assert manifest["metadata_coverage"]["resolution_summary"]["chunks"] == 1
+    assert manifest["label_source_summary"]["account_label_source"]["raw"]["chunks"] == 1
