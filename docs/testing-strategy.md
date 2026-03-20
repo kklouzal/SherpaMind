@@ -4,9 +4,12 @@
 
 ### Unit tests
 - database schema/bootstrap
+- path/layout resolution
+- skill-local config loading/writing
 - sync state helpers
 - data transformation helpers
 - query/report helpers
+- public artifact generation
 
 ### Integration-style tests
 - mocked API client behavior

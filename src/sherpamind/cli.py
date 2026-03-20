@@ -25,7 +25,9 @@ from .analysis import (
 from .client import SherpaDeskClient
 from .documents import export_ticket_documents, materialize_ticket_documents
 from .enrichment import enrich_priority_ticket_details
+from .migrate import migrate_legacy_state
 from .paths import ensure_path_layout
+from .public_artifacts import generate_public_snapshot
 from .ingest import (
     seed_all,
     sync_cold_closed_audit,
@@ -116,11 +118,15 @@ def configure(
 def doctor() -> None:
     settings = load_settings()
     paths = ensure_path_layout()
+    legacy_db = paths.workspace_root / "state" / "sherpamind.sqlite3"
+    legacy_watch = paths.workspace_root / "state" / "watch_state.json"
     checks = {
         "env_file_exists": paths.env_file.exists(),
         "runtime_venv_exists": paths.runtime_venv.exists(),
         "db_exists": settings.db_path.exists(),
         "watch_state_exists": settings.watch_state_path.exists(),
+        "legacy_db_exists": legacy_db.exists(),
+        "legacy_watch_state_exists": legacy_watch.exists(),
         "api_key_present": bool(settings.api_key),
         "org_key_present": bool(settings.org_key),
         "instance_key_present": bool(settings.instance_key),
@@ -137,6 +143,13 @@ def doctor() -> None:
         },
         "checks": checks,
     }, indent=2))
+
+
+@app.command("migrate-legacy-state")
+def migrate_state() -> None:
+    paths = ensure_path_layout()
+    result = migrate_legacy_state(paths.workspace_root)
+    print(json.dumps(result.__dict__, indent=2))
 
 
 @app.command("discover-orgs")
@@ -307,6 +320,13 @@ def export_ticket_docs(output_path: str = "", limit: int = 0) -> None:
     effective_limit = None if limit <= 0 else limit
     resolved_output = Path(output_path) if output_path else (paths.exports_root / "ticket-docs.jsonl")
     result = export_ticket_documents(settings.db_path, resolved_output, limit=effective_limit)
+    print(json.dumps(result, indent=2))
+
+
+@app.command("generate-public-snapshot")
+def generate_snapshot() -> None:
+    settings = load_settings()
+    result = generate_public_snapshot(settings.db_path)
     print(json.dumps(result, indent=2))
 
 

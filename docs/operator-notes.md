@@ -11,22 +11,26 @@ Before changing API logic, consult:
 
 ## Local environment
 
-Expected configuration comes from environment variables documented in:
-- `.env.example`
+Expected configuration comes from:
+- `.SherpaMind/private/config.env` for skill-local persistent config
+- process environment overrides when needed
+- `.env.example` as the public reference template
 
 Important conservative controls:
+- `SHERPAMIND_WORKSPACE_ROOT`
 - `SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS`
 - `SHERPAMIND_REQUEST_TIMEOUT_SECONDS`
 
 ## Suggested operator workflow
 
-1. verify credentials/config
-2. initialize local DB
-3. test one endpoint carefully
-4. document observed behavior
-5. implement seed incrementally
-6. add delta sync only after seed assumptions are proven
-7. add watcher only after seed/delta correctness is credible
+1. bootstrap the skill-local runtime
+2. run `doctor`
+3. migrate legacy state if upgrading from an older repo-local install
+4. verify credentials/config
+5. initialize local DB / seed carefully
+6. test one endpoint carefully when expanding behavior
+7. document observed behavior
+8. add broader sync/enrichment only after assumptions are proven
 
 ## Why this order matters
 

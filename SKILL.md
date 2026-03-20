@@ -45,12 +45,15 @@ Examples:
 
 ```bash
 python3 scripts/run.py workspace-layout
+python3 scripts/run.py doctor
+python3 scripts/run.py migrate-legacy-state
 python3 scripts/run.py discover-orgs
 python3 scripts/run.py seed
 python3 scripts/run.py watch
 python3 scripts/run.py enrich-priority-ticket-details --limit 25
 python3 scripts/run.py insight-snapshot
 python3 scripts/run.py search-ticket-docs printer --limit 5
+python3 scripts/run.py generate-public-snapshot
 ```
 
 ## Onboarding flow
@@ -58,10 +61,11 @@ python3 scripts/run.py search-ticket-docs printer --limit 5
 Typical first-run sequence:
 1. `python3 scripts/bootstrap.py`
 2. `python3 scripts/run.py doctor`
-3. `python3 scripts/run.py configure --api-key <token>`
-4. `python3 scripts/run.py discover-orgs`
-5. `python3 scripts/run.py configure --org-key <org> --instance-key <instance>`
-6. `python3 scripts/run.py seed`
+3. `python3 scripts/run.py migrate-legacy-state` (if upgrading from an older repo-local install)
+4. `python3 scripts/run.py configure --api-key <token>`
+5. `python3 scripts/run.py discover-orgs`
+6. `python3 scripts/run.py configure --org-key <org> --instance-key <instance>`
+7. `python3 scripts/run.py seed`
 
 ## Important operating rules
 

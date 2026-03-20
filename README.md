@@ -149,6 +149,7 @@ Important conservative controls include:
 
 - `python3 scripts/run.py workspace-layout`
 - `python3 scripts/run.py doctor`
+- `python3 scripts/run.py migrate-legacy-state`
 - `python3 scripts/run.py configure`
 - `python3 scripts/run.py discover-orgs`
 - `python3 scripts/run.py seed`

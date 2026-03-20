@@ -33,13 +33,23 @@ SherpaMind needs all three behaviors, so the durable design is **SQLite + retrie
 - `accounts`
 - `users`
 - `tickets`
+- `ticket_details`
+- `ticket_attachments` (metadata only by default)
+- `ticket_logs`
+- `ticket_time_logs`
+- `ticket_documents`
+- `ticket_document_chunks`
 - `ticket_comments`
 - `technicians`
 - `sync_state`
 - `ingest_runs`
 
 ### Adjacent local state
-- filesystem-backed watcher state (`state/watch_state.json` by default)
+- `.SherpaMind/private/watch_state.json`
+- `.SherpaMind/private/config.env`
+- `.SherpaMind/private/runtime/venv`
+- `.SherpaMind/public/exports/`
+- `.SherpaMind/public/docs/`
 
 ### Design principles
 - preserve raw-ish source fields where useful
