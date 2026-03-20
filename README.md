@@ -11,9 +11,9 @@ SherpaMind is a local-first SherpaDesk ingest, sync, enrichment, analysis, and O
    - Capture tickets and their useful related entities.
    - Build a durable, queryable local knowledge base.
 
-2. **Ongoing delta sync**
-   - Keep the local dataset current by periodically ingesting new/updated records.
-   - Make it easy for AI and operators to reason over current support/account activity.
+2. **Ongoing backend sync**
+   - Keep the local dataset current through a long-running Python backend service.
+   - Avoid spending model tokens on periodic work that belongs in a local backend.
 
 3. **Analytical access**
    - Support questions like:
@@ -26,16 +26,16 @@ SherpaMind is a local-first SherpaDesk ingest, sync, enrichment, analysis, and O
    - Materialize ticket documents/chunks and public Markdown artifacts for natural-language access.
    - Keep canonical truth in SQLite while exposing easy-to-consume derived views.
 
-5. **New-ticket watcher**
-   - Detect newly created tickets on a schedule.
-   - Produce alert-ready structured summaries and analysis.
-   - Suggest likely next questions and possible solution directions.
-
 ## Architecture
 
 SherpaMind is being refactored into a **distributable skill** with a split runtime/storage model:
-- `.SherpaMind/private/` — canonical/private skill state (SQLite, watcher state, runtime venv, config)
+- `.SherpaMind/private/` — canonical/private skill state (SQLite, watcher state, runtime venv, config, logs, service state)
 - `.SherpaMind/public/` — derived OpenClaw-friendly artifacts (Markdown snapshots, exports, similar cacheable outputs)
+
+Runtime architecture:
+- **user-level systemd service** for automatic host startup
+- **internal Python timers/loops** for hot/warm/cold sync, enrichment, and public artifact refresh
+- **OpenClaw** used for querying/consuming outputs, not for pretending to be the backend scheduler
 
 Data architecture:
 - **SQLite** as the canonical structured system of record
@@ -48,9 +48,11 @@ Data architecture:
 - `scripts/run.py` — stable runtime entrypoint through the skill-local venv
 - `sherpamind.client` — SherpaDesk API client
 - `sherpamind.db` — SQLite schema, migrations, and repository helpers
-- `sherpamind.ingest` — initial seed and delta sync logic
+- `sherpamind.ingest` — initial seed and explicit sync lane logic
 - `sherpamind.enrichment` — bounded detail enrichment for high-priority tickets
-- `sherpamind.watch` — new-ticket polling and alert payload generation
+- `sherpamind.watch` — open-ticket polling/change detection
+- `sherpamind.service_runtime` — long-running backend loop with internal timers
+- `sherpamind.service_manager` — user-level service installation/status helpers
 - `sherpamind.analysis` — reusable analytical queries and derived views
 - `sherpamind.documents` — ticket document/chunk materialization for retrieval/search
 - `sherpamind.public_artifacts` — generated Markdown/public artifacts under `.SherpaMind/public/docs`
@@ -58,11 +60,11 @@ Data architecture:
 
 ## Current status
 
-SherpaMind is now beyond scaffold stage and has working live read-only integration against the real SherpaDesk account.
+SherpaMind has working live read-only integration against the real SherpaDesk account and is being transitioned from a repo-style tool into a self-contained skill with a local backend service model.
 
 Implemented:
 - initial live seed into SQLite for accounts, users, technicians, and tickets
-- tiered delta lanes for hot open tickets, warm recently closed tickets, and cold rolling closed audits
+- explicit sync lane logic for hot open tickets, warm recently closed tickets, and cold rolling closed audits
 - watcher polling with local open-ticket state tracking
 - selective priority-ticket detail enrichment
 - ticket log ingestion from single-ticket detail responses
@@ -70,7 +72,7 @@ Implemented:
 - materialized ticket documents and deterministic ticket-document chunks for retrieval/query use
 - generated public Markdown artifacts under `.SherpaMind/public/docs`
 - structured insight/report commands plus text/chunk search commands
-- skill-local bootstrap, runtime, config, doctor, and legacy migration flow
+- skill-local bootstrap, runtime, config, doctor, legacy migration, and service management flow
 
 Still not implemented:
 - broad full-history detail enrichment across the entire corpus
@@ -105,8 +107,11 @@ python3 scripts/run.py workspace-layout
 python3 scripts/run.py doctor
 python3 scripts/run.py setup
 python3 scripts/run.py migrate-legacy-state
+python3 scripts/run.py cleanup-legacy-cron
 python3 scripts/run.py configure --api-key <token>
 python3 scripts/run.py discover-orgs
+python3 scripts/run.py install-service
+python3 scripts/run.py service-status
 ```
 
 Environment variables are documented in `.env.example`.
@@ -116,14 +121,27 @@ Important conservative controls include:
 - `SHERPAMIND_REQUEST_TIMEOUT_SECONDS`
 - `SHERPAMIND_SEED_PAGE_SIZE`
 - `SHERPAMIND_SEED_MAX_PAGES`
+- `SHERPAMIND_SERVICE_*`
 
 ## Useful current commands
 
+### Lifecycle / service
 - `python3 scripts/run.py workspace-layout`
 - `python3 scripts/run.py doctor`
 - `python3 scripts/run.py setup`
 - `python3 scripts/run.py migrate-legacy-state`
+- `python3 scripts/run.py cleanup-legacy-cron`
 - `python3 scripts/run.py configure`
+- `python3 scripts/run.py install-service`
+- `python3 scripts/run.py uninstall-service`
+- `python3 scripts/run.py start-service`
+- `python3 scripts/run.py stop-service`
+- `python3 scripts/run.py restart-service`
+- `python3 scripts/run.py service-status`
+- `python3 scripts/run.py service-run`
+- `python3 scripts/run.py service-run-once`
+
+### Sync / enrichment / queries
 - `python3 scripts/run.py discover-orgs`
 - `python3 scripts/run.py seed`
 - `python3 scripts/run.py watch`
@@ -166,21 +184,10 @@ Current verified direction:
 - normal API access uses `{org_key}-{instance_key}:{api_token}` Basic auth
 - stated rate limit is `600 requests/hour`
 
-## Delta sync direction
+## Service model
 
-SherpaDesk currently looks better suited to **tiered recency rescans** than to a clean server-side dirty-record pull.
+SherpaMind’s normal background behavior should come from the local backend service, not OpenClaw cron.
 
-Current documented direction:
-- new/open active slice refreshed about every 5 minutes
-- maintain a local set of currently observed open ticket IDs
-- closed tickets newer than 7 days treated as warm and reconciled every few hours
-- older closed history audited in small rolling batches
-
-See `docs/delta-sync-strategy.md` for the reasoning and proposed lane design.
-
-## Install vs update behavior
-
-### First install
 The intended first-install flow is:
 1. `python3 scripts/bootstrap.py`
 2. `python3 scripts/run.py setup`
@@ -188,17 +195,16 @@ The intended first-install flow is:
 4. `python3 scripts/run.py discover-orgs`
 5. `python3 scripts/run.py configure --org-key <org> --instance-key <instance>`
 6. `python3 scripts/run.py seed`
-7. `python3 scripts/run.py generate-public-snapshot`
+7. `python3 scripts/run.py install-service`
+8. `python3 scripts/run.py generate-public-snapshot`
 
-### Update / re-bootstrap
-On update, SherpaMind should **reconcile**, not duplicate:
-- keep `.SherpaMind/private` and `.SherpaMind/public` intact
-- preserve config and SQLite data
-- rerun `bootstrap.py` safely to refresh the skill-local venv if needed
-- rerun `setup` or `reconcile-automation` to ensure expected cron jobs exist and duplicates are removed
-- rely on `doctor` to verify the runtime, config, DB, legacy-state presence, and managed automation state
-
-Cron job management is intentionally **manifest + reconcile** based. Managed SherpaMind jobs are recreated by stable name so updates do not accumulate duplicates.
+On update / re-bootstrap:
+- preserve `.SherpaMind/private` and `.SherpaMind/public`
+- rerun bootstrap safely to refresh the skill-local venv if needed
+- rerun `doctor`
+- migrate legacy state if needed
+- install/restart the user service idempotently
+- clean up any legacy SherpaMind OpenClaw cron jobs
 
 ## Open questions
 

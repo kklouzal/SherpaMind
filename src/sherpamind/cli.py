@@ -22,13 +22,23 @@ from .analysis import (
     search_ticket_document_chunks,
     search_ticket_documents,
 )
-from .automation import doctor_automation, reconcile_automation
+from .automation import doctor_automation, remove_managed_cron_jobs
 from .client import SherpaDeskClient
 from .documents import export_ticket_documents, materialize_ticket_documents
 from .enrichment import enrich_priority_ticket_details
 from .migrate import migrate_legacy_state
 from .paths import ensure_path_layout
 from .public_artifacts import generate_public_snapshot
+from .service_manager import (
+    doctor_service,
+    install_service,
+    restart_service,
+    service_status,
+    start_service,
+    stop_service,
+    uninstall_service,
+)
+from .service_runtime import run_pending_tasks, run_service_loop
 from .ingest import (
     seed_all,
     sync_cold_closed_audit,
@@ -79,6 +89,8 @@ def workspace_layout() -> None:
         "exports_root": str(paths.exports_root),
         "docs_root": str(paths.docs_root),
         "env_file": str(paths.env_file),
+        "service_log": str(paths.service_log),
+        "service_state_file": str(paths.service_state_file),
     }, indent=2))
 
 
@@ -141,9 +153,12 @@ def doctor() -> None:
             "env_file": str(paths.env_file),
             "runtime_venv": str(paths.runtime_venv),
             "db_path": str(settings.db_path),
+            "service_log": str(paths.service_log),
+            "service_state_file": str(paths.service_state_file),
         },
         "checks": checks,
-        "automation": doctor_automation(),
+        "service": doctor_service(),
+        "legacy_cron": doctor_automation(),
     }, indent=2))
 
 
@@ -154,8 +169,19 @@ def migrate_state() -> None:
     print(json.dumps(result.__dict__, indent=2))
 
 
+@app.command("cleanup-legacy-cron")
+def cleanup_legacy_cron() -> None:
+    result = remove_managed_cron_jobs()
+    print(json.dumps(result.__dict__, indent=2))
+
+
 @app.command("setup")
-def setup(migrate_legacy: bool = True, initialize_db_only: bool = False, install_automation: bool = True) -> None:
+def setup(
+    migrate_legacy: bool = True,
+    initialize_db_only: bool = False,
+    install_service_now: bool = True,
+    cleanup_legacy_cron_now: bool = True,
+) -> None:
     settings = load_settings()
     paths = ensure_path_layout()
     steps = []
@@ -164,18 +190,24 @@ def setup(migrate_legacy: bool = True, initialize_db_only: bool = False, install
         steps.append({"migration": migration.__dict__})
     initialize_db(settings.db_path)
     steps.append({"init_db": str(settings.db_path)})
+    if cleanup_legacy_cron_now:
+        try:
+            cleanup = remove_managed_cron_jobs()
+            steps.append({"legacy_cron_cleanup": cleanup.__dict__})
+        except Exception as exc:
+            steps.append({"legacy_cron_cleanup_error": f"{type(exc).__name__}: {exc}"})
     if not initialize_db_only and settings.db_path.exists():
         try:
             snapshot = generate_public_snapshot(settings.db_path)
             steps.append({"public_snapshot": snapshot})
         except Exception as exc:
             steps.append({"public_snapshot_error": f"{type(exc).__name__}: {exc}"})
-    if install_automation:
+    if install_service_now:
         try:
-            automation = reconcile_automation()
-            steps.append({"automation": automation})
+            service = install_service(start_now=True)
+            steps.append({"service_install": service.__dict__})
         except Exception as exc:
-            steps.append({"automation_error": f"{type(exc).__name__}: {exc}"})
+            steps.append({"service_install_error": f"{type(exc).__name__}: {exc}"})
     print(json.dumps({
         "status": "ok",
         "message": "SherpaMind setup flow completed.",
@@ -189,10 +221,50 @@ def setup(migrate_legacy: bool = True, initialize_db_only: bool = False, install
     }, indent=2))
 
 
-@app.command("reconcile-automation")
-def reconcile_jobs() -> None:
-    result = reconcile_automation()
-    print(json.dumps(result, indent=2))
+@app.command("install-service")
+def install_service_cmd(start_now: bool = True) -> None:
+    result = install_service(start_now=start_now)
+    print(json.dumps(result.__dict__, indent=2))
+
+
+@app.command("uninstall-service")
+def uninstall_service_cmd(stop_now: bool = True) -> None:
+    result = uninstall_service(stop_now=stop_now)
+    print(json.dumps(result.__dict__, indent=2))
+
+
+@app.command("start-service")
+def start_service_cmd() -> None:
+    result = start_service()
+    print(json.dumps(result.__dict__, indent=2))
+
+
+@app.command("stop-service")
+def stop_service_cmd() -> None:
+    result = stop_service()
+    print(json.dumps(result.__dict__, indent=2))
+
+
+@app.command("restart-service")
+def restart_service_cmd() -> None:
+    result = restart_service()
+    print(json.dumps(result.__dict__, indent=2))
+
+
+@app.command("service-status")
+def service_status_cmd() -> None:
+    print(json.dumps(service_status(), indent=2))
+
+
+@app.command("service-run")
+def service_run() -> None:
+    raise SystemExit(run_service_loop())
+
+
+@app.command("service-run-once")
+def service_run_once() -> None:
+    settings = load_settings()
+    print(json.dumps(run_pending_tasks(settings), indent=2))
 
 
 @app.command("discover-orgs")

@@ -4,6 +4,11 @@
 
 Make SherpaMind naturally usable from OpenClaw for open-ended questions without forcing the LLM to reverse-engineer raw SherpaDesk payloads every time.
 
+## Runtime stance
+
+SherpaMind’s background syncing/enrichment should come from its local Python backend service.
+OpenClaw’s job is to query, inspect, summarize, and reason over SherpaMind outputs — not to burn tokens on acting like the periodic backend scheduler.
+
 ## Current local data layers
 
 ### 1. Canonical structured tables
@@ -25,6 +30,16 @@ Use for natural-language recall and fuzzy investigation:
 - `ticket_document_chunks`
 
 These are derived from canonical tables and are **replaceable caches**, not source-of-truth memory.
+
+### 3. Public markdown artifacts
+Use for quick human/agent inspection under `.SherpaMind/public/docs/`, including:
+- `index.md`
+- `insight-snapshot.md`
+- `stale-open-tickets.md`
+- `recent-account-activity.md`
+- `recent-technician-load.md`
+
+These are generated/replaced artifacts, not append-only memory files.
 
 ## How OpenClaw should reason about SherpaMind data
 
@@ -54,8 +69,8 @@ OpenClaw-facing NL artifacts must never become unmanaged side files.
 
 Rules:
 - canonical truth lives in structured SQLite tables
-- materialized docs/chunks are derived caches
-- when a ticket changes, regenerate its docs/chunks by stable identity
+- materialized docs/chunks/public snapshots are derived caches
+- when a ticket changes, regenerate its docs/chunks/artifacts by stable identity
 - replace old docs/chunks for that ticket
 - delete stale chunks that no longer belong to the current materialization
 
@@ -63,7 +78,7 @@ This prevents old stale natural-language support artifacts from lingering after 
 
 ## Attachment rule
 
-By default, SherpaMind should store **attachment metadata only**:
+By default, SherpaMind stores **attachment metadata only**:
 - attachment id
 - filename
 - URL/reference
@@ -76,34 +91,30 @@ Possible future exception:
 
 ## Current OpenClaw-friendly command surface
 
+### Service/lifecycle commands
+- `python3 scripts/run.py doctor`
+- `python3 scripts/run.py service-status`
+- `python3 scripts/run.py service-run-once`
+- `python3 scripts/run.py generate-public-snapshot`
+
 ### Structured insight commands
-- `sherpamind insight-snapshot`
-- `sherpamind report-ticket-counts`
-- `sherpamind report-status-counts`
-- `sherpamind report-priority-counts`
-- `sherpamind report-technician-counts`
-- `sherpamind report-ticket-log-types`
-- `sherpamind report-attachment-summary`
-- `sherpamind open-ticket-ages`
-- `sherpamind recent-account-activity`
-- `sherpamind recent-technician-load`
+- `python3 scripts/run.py insight-snapshot`
+- `python3 scripts/run.py report-ticket-counts`
+- `python3 scripts/run.py report-status-counts`
+- `python3 scripts/run.py report-priority-counts`
+- `python3 scripts/run.py report-technician-counts`
+- `python3 scripts/run.py report-ticket-log-types`
+- `python3 scripts/run.py report-attachment-summary`
+- `python3 scripts/run.py open-ticket-ages`
+- `python3 scripts/run.py recent-account-activity`
+- `python3 scripts/run.py recent-technician-load`
 
 ### Retrieval-oriented commands
-- `sherpamind materialize-ticket-docs`
-- `sherpamind search-ticket-docs "printer"`
-- `sherpamind search-ticket-chunks "printer"`
-- `sherpamind export-ticket-docs`
-- `sherpamind generate-public-snapshot`
-
-### Public markdown artifacts
-SherpaMind can also materialize OpenClaw-friendly Markdown under `.SherpaMind/public/docs/`, including:
-- `index.md`
-- `insight-snapshot.md`
-- `stale-open-tickets.md`
-- `recent-account-activity.md`
-- `recent-technician-load.md`
-
-These are generated/replaced artifacts, not append-only memory files.
+- `python3 scripts/run.py materialize-ticket-docs`
+- `python3 scripts/run.py search-ticket-docs "printer"`
+- `python3 scripts/run.py search-ticket-chunks "printer"`
+- `python3 scripts/run.py export-ticket-docs`
+- `python3 scripts/run.py generate-public-snapshot`
 
 ## Design rule
 
@@ -112,5 +123,6 @@ Whenever a field becomes operationally useful more than once, promote it into:
 - a real SQLite column/table
 - a reusable analysis query
 - the ticket document/chunk materialization layer
+- or a generated public artifact if it helps OpenClaw/humans inspect the state quickly
 
 That is how SherpaMind becomes naturally queryable instead of technically queryable only in theory.

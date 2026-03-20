@@ -25,6 +25,13 @@ class Settings:
     warm_closed_pages: int
     warm_closed_days: int
     cold_closed_pages_per_run: int
+    service_hot_open_every_seconds: int = 300
+    service_warm_closed_every_seconds: int = 14400
+    service_cold_closed_every_seconds: int = 86400
+    service_enrichment_every_seconds: int = 7200
+    service_public_snapshot_every_seconds: int = 1800
+    service_doctor_every_seconds: int = 43200
+    service_enrichment_limit: int = 25
 
 
 def _read_env_file(env_file: Path) -> dict[str, str]:
@@ -109,4 +116,11 @@ def load_settings() -> Settings:
         warm_closed_pages=int(_env_value("SHERPAMIND_WARM_CLOSED_PAGES", file_values, "10") or "10"),
         warm_closed_days=int(_env_value("SHERPAMIND_WARM_CLOSED_DAYS", file_values, "7") or "7"),
         cold_closed_pages_per_run=int(_env_value("SHERPAMIND_COLD_CLOSED_PAGES_PER_RUN", file_values, "2") or "2"),
+        service_hot_open_every_seconds=int(_env_value("SHERPAMIND_SERVICE_HOT_OPEN_EVERY_SECONDS", file_values, "300") or "300"),
+        service_warm_closed_every_seconds=int(_env_value("SHERPAMIND_SERVICE_WARM_CLOSED_EVERY_SECONDS", file_values, "14400") or "14400"),
+        service_cold_closed_every_seconds=int(_env_value("SHERPAMIND_SERVICE_COLD_CLOSED_EVERY_SECONDS", file_values, "86400") or "86400"),
+        service_enrichment_every_seconds=int(_env_value("SHERPAMIND_SERVICE_ENRICHMENT_EVERY_SECONDS", file_values, "7200") or "7200"),
+        service_public_snapshot_every_seconds=int(_env_value("SHERPAMIND_SERVICE_PUBLIC_SNAPSHOT_EVERY_SECONDS", file_values, "1800") or "1800"),
+        service_doctor_every_seconds=int(_env_value("SHERPAMIND_SERVICE_DOCTOR_EVERY_SECONDS", file_values, "43200") or "43200"),
+        service_enrichment_limit=int(_env_value("SHERPAMIND_SERVICE_ENRICHMENT_LIMIT", file_values, "25") or "25"),
     )

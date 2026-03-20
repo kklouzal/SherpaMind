@@ -28,6 +28,15 @@ def test_load_settings_reads_seed_controls(monkeypatch, tmp_path: Path) -> None:
     assert settings.seed_max_pages == 3
 
 
+def test_load_settings_reads_service_controls(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("SHERPAMIND_SERVICE_HOT_OPEN_EVERY_SECONDS", "123")
+    monkeypatch.setenv("SHERPAMIND_SERVICE_ENRICHMENT_LIMIT", "77")
+    settings = load_settings()
+    assert settings.service_hot_open_every_seconds == 123
+    assert settings.service_enrichment_limit == 77
+
+
 def test_write_config_env_is_loaded(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
     env_file = write_config_env(api_key="secret", org_key="org1", instance_key="inst1")
