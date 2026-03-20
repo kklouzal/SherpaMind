@@ -38,6 +38,7 @@ Use for quick human/agent inspection under `.SherpaMind/public/docs/`, including
 - `stale-open-tickets.md`
 - `recent-account-activity.md`
 - `recent-technician-load.md`
+- `runtime/status.md`
 
 These are generated/replaced artifacts, not append-only memory files.
 
@@ -114,10 +115,14 @@ Possible future exception:
 - `python3 scripts/run.py search-ticket-docs "printer"`
 - `python3 scripts/run.py search-ticket-chunks "printer"`
 - `python3 scripts/run.py search-vector-index "printer"`
+- `python3 scripts/run.py search-vector-index "printer" --account "<account>" --status Open`
+- `python3 scripts/run.py search-vector-index "printer" --technician "Kyle" --priority High --category Hardware`
+- `python3 scripts/run.py report-vector-index-status`
 - `python3 scripts/run.py export-ticket-docs`
 - `python3 scripts/run.py export-embedding-chunks`
 - `python3 scripts/run.py export-embedding-manifest`
 - `python3 scripts/run.py generate-public-snapshot`
+- `python3 scripts/run.py generate-runtime-status`
 
 ## Design rule
 

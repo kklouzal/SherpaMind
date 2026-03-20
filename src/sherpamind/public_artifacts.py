@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .analysis import (
     get_dataset_summary,
+    get_enrichment_coverage,
     list_open_ticket_ages,
     list_recent_account_activity,
     list_recent_tickets,
@@ -13,6 +14,7 @@ from .analysis import (
     list_ticket_attachment_summary,
     list_ticket_counts_by_status,
 )
+from .freshness import get_sync_freshness
 from .paths import ensure_path_layout
 from .summaries import get_account_summary, get_technician_summary
 
@@ -22,10 +24,15 @@ def _markdown_table(rows: list[dict], columns: list[tuple[str, str]]) -> str:
         return "_No data available._"
     header = "| " + " | ".join(label for _, label in columns) + " |"
     sep = "| " + " | ".join("---" for _ in columns) + " |"
-    body = []
-    for row in rows:
-        body.append("| " + " | ".join(str(row.get(key, "")) for key, _ in columns) + " |")
+    body = [
+        "| " + " | ".join(str(row.get(key, "")) for key, _ in columns) + " |"
+        for row in rows
+    ]
     return "\n".join([header, sep, *body])
+
+
+def _safe_doc_name(name: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in name)[:80]
 
 
 def generate_public_snapshot(db_path: Path) -> dict:
@@ -42,8 +49,13 @@ def generate_public_snapshot(db_path: Path) -> dict:
     attachment_summary = list_ticket_attachment_summary(db_path, limit=10)
     recent_tickets = list_recent_tickets(db_path, limit=10)
 
+    account_dir = paths.docs_root / "accounts"
+    technician_dir = paths.docs_root / "technicians"
+    account_dir.mkdir(parents=True, exist_ok=True)
+    technician_dir.mkdir(parents=True, exist_ok=True)
+
     snapshot_path = paths.docs_root / "insight-snapshot.md"
-    md = [
+    snapshot_md = [
         "# SherpaMind Public Insight Snapshot",
         "",
         f"Generated: `{generated_at}`",
@@ -52,6 +64,18 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "",
         "```json",
         json.dumps(dataset_summary, indent=2),
+        "```",
+        "",
+        "## Enrichment coverage",
+        "",
+        "```json",
+        json.dumps(enrichment_coverage, indent=2),
+        "```",
+        "",
+        "## Sync freshness",
+        "",
+        "```json",
+        json.dumps(sync_freshness, indent=2),
         "```",
         "",
         "## Status counts",
@@ -116,7 +140,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "- Canonical truth remains in `.SherpaMind/private/sherpamind.sqlite3`.",
         "- Attachment bodies are not downloaded by default; this snapshot reflects metadata only.",
     ]
-    snapshot_path.write_text("\n".join(md) + "\n")
+    snapshot_path.write_text("\n".join(snapshot_md) + "\n")
 
     stale_open_path = paths.docs_root / "stale-open-tickets.md"
     stale_open_md = [
@@ -169,6 +193,103 @@ def generate_public_snapshot(db_path: Path) -> dict:
     ]
     technician_load_path.write_text("\n".join(technician_load_md) + "\n")
 
+    generated_files = [
+        str(snapshot_path),
+        str(stale_open_path),
+        str(account_activity_path),
+        str(technician_load_path),
+    ]
+
+    for account_name in [
+        row.get("account")
+        for row in account_activity[:5]
+        if row.get("account") and row.get("account") != "unknown"
+    ]:
+        summary = get_account_summary(db_path, account_name)
+        if summary.get("status") != "ok":
+            continue
+        path = account_dir / f"{_safe_doc_name(account_name)}.md"
+        lines = [
+            f"# Account Summary: {summary['account']['name']}",
+            "",
+            f"Generated: `{generated_at}`",
+            "",
+            "## Stats",
+            "",
+            "```json",
+            json.dumps(summary["stats"], indent=2),
+            "```",
+            "",
+            "## Open tickets",
+            "",
+            _markdown_table(summary["open_tickets"], [
+                ("id", "Ticket ID"),
+                ("subject", "Subject"),
+                ("priority", "Priority"),
+                ("updated_at", "Updated"),
+            ]),
+            "",
+            "## Recent tickets",
+            "",
+            _markdown_table(summary["recent_tickets"], [
+                ("id", "Ticket ID"),
+                ("subject", "Subject"),
+                ("status", "Status"),
+                ("updated_at", "Updated"),
+            ]),
+            "",
+            "## Recent log types",
+            "",
+            _markdown_table(summary["recent_log_types"], [("log_type", "Log Type"), ("log_count", "Count")]),
+        ]
+        path.write_text("\n".join(lines) + "\n")
+        generated_files.append(str(path))
+
+    for technician_name in [
+        row.get("technician")
+        for row in technician_load[:5]
+        if row.get("technician") and row.get("technician") != "unassigned"
+    ]:
+        summary = get_technician_summary(db_path, technician_name)
+        if summary.get("status") != "ok":
+            continue
+        path = technician_dir / f"{_safe_doc_name(technician_name)}.md"
+        lines = [
+            f"# Technician Summary: {summary['technician']['display_name']}",
+            "",
+            f"Generated: `{generated_at}`",
+            "",
+            "## Stats",
+            "",
+            "```json",
+            json.dumps(summary["stats"], indent=2),
+            "```",
+            "",
+            "## Open tickets",
+            "",
+            _markdown_table(summary["open_tickets"], [
+                ("id", "Ticket ID"),
+                ("subject", "Subject"),
+                ("priority", "Priority"),
+                ("updated_at", "Updated"),
+            ]),
+            "",
+            "## Recent tickets",
+            "",
+            _markdown_table(summary["recent_tickets"], [
+                ("id", "Ticket ID"),
+                ("subject", "Subject"),
+                ("status", "Status"),
+                ("updated_at", "Updated"),
+            ]),
+            "",
+            "## Recent log types",
+            "",
+            _markdown_table(summary["recent_log_types"], [("log_type", "Log Type"), ("log_count", "Count")]),
+        ]
+        path.write_text("\n".join(lines) + "\n")
+        generated_files.append(str(path))
+
     index_path = paths.docs_root / "index.md"
     index_md = [
         "# SherpaMind Public Docs Index",
@@ -188,98 +309,11 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "The matching vector export manifest lives under `.SherpaMind/public/exports/embedding-ticket-chunks.manifest.json` when generated.",
     ]
     index_path.write_text("\n".join(index_md) + "\n")
-
-    account_dir = paths.docs_root / "accounts"
-    technician_dir = paths.docs_root / "technicians"
-    account_dir.mkdir(parents=True, exist_ok=True)
-    technician_dir.mkdir(parents=True, exist_ok=True)
-
-    generated_files = [
-        str(index_path),
-        str(snapshot_path),
-        str(stale_open_path),
-        str(account_activity_path),
-        str(technician_load_path),
-    ]
-
-    for account_name in [row.get('account') for row in account_activity[:5] if row.get('account') and row.get('account') != 'unknown']:
-        summary = get_account_summary(db_path, account_name)
-        if summary.get('status') != 'ok':
-            continue
-        safe_name = ''.join(ch if ch.isalnum() or ch in ('-', '_') else '_' for ch in account_name)[:80]
-        path = account_dir / f"{safe_name}.md"
-        lines = [
-            f"# Account Summary: {summary['account']['name']}",
-            "",
-            f"Generated: `{generated_at}`",
-            "",
-            "## Stats",
-            "",
-            "```json",
-            json.dumps(summary['stats'], indent=2),
-            "```",
-            "",
-            "## Open tickets",
-            "",
-            _markdown_table(summary['open_tickets'], [
-                ('id', 'Ticket ID'), ('subject', 'Subject'), ('priority', 'Priority'), ('updated_at', 'Updated')
-            ]),
-            "",
-            "## Recent tickets",
-            "",
-            _markdown_table(summary['recent_tickets'], [
-                ('id', 'Ticket ID'), ('subject', 'Subject'), ('status', 'Status'), ('updated_at', 'Updated')
-            ]),
-            "",
-            "## Recent log types",
-            "",
-            _markdown_table(summary['recent_log_types'], [('log_type', 'Log Type'), ('log_count', 'Count')]),
-        ]
-        path.write_text('\n'.join(lines) + '\n')
-        generated_files.append(str(path))
-
-    for technician_name in [row.get('technician') for row in technician_load[:5] if row.get('technician') and row.get('technician') != 'unassigned']:
-        summary = get_technician_summary(db_path, technician_name)
-        if summary.get('status') != 'ok':
-            continue
-        safe_name = ''.join(ch if ch.isalnum() or ch in ('-', '_') else '_' for ch in technician_name)[:80]
-        path = technician_dir / f"{safe_name}.md"
-        lines = [
-            f"# Technician Summary: {summary['technician']['display_name']}",
-            "",
-            f"Generated: `{generated_at}`",
-            "",
-            "## Stats",
-            "",
-            "```json",
-            json.dumps(summary['stats'], indent=2),
-            "```",
-            "",
-            "## Open tickets",
-            "",
-            _markdown_table(summary['open_tickets'], [
-                ('id', 'Ticket ID'), ('subject', 'Subject'), ('priority', 'Priority'), ('updated_at', 'Updated')
-            ]),
-            "",
-            "## Recent tickets",
-            "",
-            _markdown_table(summary['recent_tickets'], [
-                ('id', 'Ticket ID'), ('subject', 'Subject'), ('status', 'Status'), ('updated_at', 'Updated')
-            ]),
-            "",
-            "## Recent log types",
-            "",
-            _markdown_table(summary['recent_log_types'], [('log_type', 'Log Type'), ('log_count', 'Count')]),
-        ]
-        path.write_text('\n'.join(lines) + '\n')
-        generated_files.append(str(path))
+    generated_files.insert(0, str(index_path))
 
     return {
         "status": "ok",
         "output_path": str(snapshot_path),
         "generated_at": generated_at,
-        "generated_files": generated_files,
-    }
-    "generated_at": generated_at,
         "generated_files": generated_files,
     }

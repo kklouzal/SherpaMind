@@ -45,7 +45,7 @@ def _load_chunk_rows(db_path: Path, limit: int | None = None) -> list[dict[str, 
         FROM ticket_document_chunks
         ORDER BY ticket_id DESC, chunk_index ASC
     """
-    params: tuple = ()
+    params: tuple[Any, ...] = ()
     if limit is not None:
         query += " LIMIT ?"
         params = (limit,)
@@ -90,7 +90,7 @@ def build_vector_index(db_path: Path, dims: int = DEFAULT_DIMS, limit: int | Non
                     row["ticket_id"],
                     json.dumps(vector),
                     dims,
-                    row["content_hash"],
+                    row.get("content_hash"),
                     synced_at,
                 ),
             )
@@ -105,7 +105,7 @@ def build_vector_index(db_path: Path, dims: int = DEFAULT_DIMS, limit: int | Non
         "indexed_chunks": len(rows),
         "inserted_or_updated": inserted_or_updated,
         "skipped_unchanged": skipped_unchanged,
-        "deleted_stale": len([chunk_id for chunk_id in existing if chunk_id not in current_ids]),
+        "deleted_stale": len(stale_ids),
         "dims": dims,
     }
 
@@ -113,16 +113,52 @@ def build_vector_index(db_path: Path, dims: int = DEFAULT_DIMS, limit: int | Non
 def get_vector_index_status(db_path: Path) -> dict[str, Any]:
     initialize_db(db_path)
     with connect(db_path) as conn:
-        row = conn.execute(
+        totals = conn.execute(
             """
-            SELECT COUNT(*) AS indexed_chunks,
-                   MIN(synced_at) AS earliest_sync_at,
-                   MAX(synced_at) AS latest_sync_at,
-                   MAX(dims) AS dims
-            FROM vector_chunk_index
+            SELECT
+                (SELECT COUNT(*) FROM ticket_document_chunks) AS total_chunk_rows,
+                (SELECT COUNT(*) FROM vector_chunk_index) AS indexed_chunks,
+                (SELECT MIN(synced_at) FROM vector_chunk_index) AS earliest_sync_at,
+                (SELECT MAX(synced_at) FROM vector_chunk_index) AS latest_sync_at,
+                (SELECT COUNT(DISTINCT dims) FROM vector_chunk_index) AS distinct_dims,
+                (SELECT MIN(dims) FROM vector_chunk_index) AS min_dims,
+                (SELECT MAX(dims) FROM vector_chunk_index) AS max_dims,
+                (
+                    SELECT COUNT(*)
+                    FROM vector_chunk_index v
+                    LEFT JOIN ticket_document_chunks c ON c.chunk_id = v.chunk_id
+                    WHERE c.chunk_id IS NULL
+                ) AS dangling_index_rows,
+                (
+                    SELECT COUNT(*)
+                    FROM ticket_document_chunks c
+                    LEFT JOIN vector_chunk_index v ON v.chunk_id = c.chunk_id
+                    WHERE v.chunk_id IS NULL
+                ) AS missing_index_rows,
+                (
+                    SELECT COUNT(*)
+                    FROM vector_chunk_index v
+                    JOIN ticket_document_chunks c ON c.chunk_id = v.chunk_id
+                    WHERE COALESCE(v.content_hash, '') != COALESCE(c.content_hash, '')
+                ) AS outdated_content_rows
             """
         ).fetchone()
-    return dict(row)
+    indexed_chunks = int(totals["indexed_chunks"] or 0)
+    total_chunk_rows = int(totals["total_chunk_rows"] or 0)
+    ready_ratio = round(indexed_chunks / total_chunk_rows, 6) if total_chunk_rows else 0.0
+    return {
+        "indexed_chunks": indexed_chunks,
+        "total_chunk_rows": total_chunk_rows,
+        "ready_ratio": ready_ratio,
+        "earliest_sync_at": totals["earliest_sync_at"],
+        "latest_sync_at": totals["latest_sync_at"],
+        "distinct_dims": int(totals["distinct_dims"] or 0),
+        "min_dims": totals["min_dims"],
+        "max_dims": totals["max_dims"],
+        "dangling_index_rows": int(totals["dangling_index_rows"] or 0),
+        "missing_index_rows": int(totals["missing_index_rows"] or 0),
+        "outdated_content_rows": int(totals["outdated_content_rows"] or 0),
+    }
 
 
 def search_vector_index(
@@ -132,6 +168,8 @@ def search_vector_index(
     account: str | None = None,
     status: str | None = None,
     technician: str | None = None,
+    priority: str | None = None,
+    category: str | None = None,
 ) -> list[dict[str, Any]]:
     initialize_db(db_path)
     with connect(db_path) as conn:
@@ -162,7 +200,9 @@ def search_vector_index(
             f"""
             SELECT v.chunk_id, v.doc_id, v.ticket_id, v.vector_json, v.content_hash,
                    c.chunk_index, c.text,
-                   d.account, d.status, d.technician, d.updated_at
+                   d.account, d.status, d.technician, d.updated_at,
+                   json_extract(d.raw_json, '$.metadata.priority') AS priority,
+                   json_extract(d.raw_json, '$.metadata.category') AS category
             FROM vector_chunk_index v
             JOIN ticket_document_chunks c ON c.chunk_id = v.chunk_id
             JOIN ticket_documents d ON d.doc_id = v.doc_id
@@ -185,6 +225,8 @@ def search_vector_index(
                 "account": row["account"],
                 "status": row["status"],
                 "technician": row["technician"],
+                "priority": row["priority"],
+                "category": row["category"],
                 "updated_at": row["updated_at"],
                 "content_hash": row["content_hash"],
                 "score": round(score, 6),

@@ -14,7 +14,7 @@ def _load_rows(db_path: Path, limit: int | None = None) -> list[dict]:
                c.chunk_index,
                c.text,
                c.content_hash,
-               c.updated_at,
+               d.updated_at,
                d.status,
                d.account,
                d.user_name,

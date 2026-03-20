@@ -36,7 +36,30 @@ def test_build_and_search_vector_index(tmp_path: Path) -> None:
     assert result["status"] == "ok"
     status = get_vector_index_status(db)
     assert status["indexed_chunks"] == 2
+    assert status["total_chunk_rows"] == 2
+    assert status["ready_ratio"] == 1.0
+    assert status["missing_index_rows"] == 0
+    assert status["outdated_content_rows"] == 0
     rows = search_vector_index(db, "printer", limit=5)
     assert rows[0]["ticket_id"] == "101"
+    assert rows[0]["priority"] == "High"
     filtered = search_vector_index(db, "issue", limit=5, account="Beta", status="Closed", priority="Low", category="Soft")
     assert filtered[0]["ticket_id"] == "102"
+
+
+def test_vector_index_status_detects_outdated_rows(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    seed(db)
+    build_vector_index(db, dims=32)
+    replace_ticket_document_chunks(
+        db,
+        [
+            {"chunk_id": "ticket:101:chunk:0", "doc_id": "ticket:101", "ticket_id": 101, "chunk_index": 0, "text": "Printer issue changed", "content_hash": "changed"},
+            {"chunk_id": "ticket:102:chunk:0", "doc_id": "ticket:102", "ticket_id": 102, "chunk_index": 0, "text": "Outlook email sync issue", "content_hash": "b"},
+        ],
+        synced_at="2026-03-19T02:00:00Z",
+    )
+    status = get_vector_index_status(db)
+    assert status["indexed_chunks"] == 2
+    assert status["missing_index_rows"] == 0
+    assert status["outdated_content_rows"] == 1

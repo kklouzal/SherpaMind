@@ -139,11 +139,15 @@ Use these for investigative/natural-language recall:
 - `python3 scripts/run.py search-ticket-chunks "<query>" --account "<account>"`
 - `python3 scripts/run.py search-ticket-chunks "<query>" --status Open`
 - `python3 scripts/run.py search-ticket-chunks "<query>" --technician "<technician>"`
+- `python3 scripts/run.py search-vector-index "<query>"`
+- `python3 scripts/run.py search-vector-index "<query>" --account "<account>" --status Open`
+- `python3 scripts/run.py search-vector-index "<query>" --technician "<technician>" --priority High --category "Hardware"`
 
 Examples:
-- "Have we seen this printer problem before?" → `search-ticket-chunks printer`
+- "Have we seen this printer problem before?" → start with `search-ticket-chunks printer`, then widen with `search-vector-index printer` if keyword recall looks thin
 - "Show me Outlook-related tickets for <account>" → `search-ticket-chunks Outlook --account "<account>"`
 - "What context do we have around tickets Kyle touched related to MFA?" → `search-ticket-chunks MFA --technician "Kyle"`
+- "Find semantically similar high-priority hardware issues" → `search-vector-index printer --priority High --category Hardware`
 
 ### C. Use public artifacts for quick factual context
 Read from `.SherpaMind/public/docs/` when a concise factual derived artifact is enough:
@@ -152,6 +156,7 @@ Read from `.SherpaMind/public/docs/` when a concise factual derived artifact is 
 - `stale-open-tickets.md`
 - `recent-account-activity.md`
 - `recent-technician-load.md`
+- `runtime/status.md`
 - `accounts/*.md`
 - `technicians/*.md`
 

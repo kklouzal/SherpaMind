@@ -176,6 +176,16 @@ CREATE TABLE IF NOT EXISTS api_request_events (
     attempt_kind TEXT,
     raw_json TEXT
 );
+
+CREATE TABLE IF NOT EXISTS vector_chunk_index (
+    chunk_id TEXT PRIMARY KEY,
+    doc_id TEXT NOT NULL,
+    ticket_id TEXT NOT NULL,
+    vector_json TEXT NOT NULL,
+    dims INTEGER NOT NULL,
+    content_hash TEXT,
+    synced_at TEXT NOT NULL
+);
 """
 
 

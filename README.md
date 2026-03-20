@@ -187,6 +187,7 @@ Important conservative controls include:
 - `python3 scripts/run.py report-vector-index-status`
 - `python3 scripts/run.py search-vector-index`
 - `python3 scripts/run.py generate-public-snapshot`
+- `python3 scripts/run.py generate-runtime-status`
 
 ## External API caution
 
@@ -210,6 +211,8 @@ Current verified direction:
 SherpaMind’s normal background behavior should come from the local backend service, not OpenClaw cron.
 
 The service tracks real SherpaDesk request usage in SQLite (`api_request_events`) and reports a rolling hourly usage budget so cadence can be tuned from measurements instead of guesswork. Lower-priority work can now back off when budget utilization gets high, and old request-event rows are pruned automatically by retention policy so the log stays bounded.
+
+Vector readiness is observable locally instead of being a black box: `report-vector-index-status` now reports total chunk coverage, ready ratio, dimension consistency, missing index rows, dangling index rows, and outdated-content rows so backend runs can prove whether retrieval artifacts are current before OpenClaw leans on vector search.
 
 The intended first-install flow is:
 1. `python3 scripts/bootstrap.py`

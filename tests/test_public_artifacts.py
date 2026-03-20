@@ -40,6 +40,8 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     output = Path(result["output_path"])
     text = output.read_text()
     assert "SherpaMind Public Insight Snapshot" in text
+    assert "Enrichment coverage" in text
+    assert "Sync freshness" in text
     assert "Attachment metadata summary" in text
     assert ".SherpaMind/private/sherpamind.sqlite3" in text
     assert len(result["generated_files"]) >= 5

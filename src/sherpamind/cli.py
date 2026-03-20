@@ -30,6 +30,7 @@ from .freshness import get_sync_freshness
 from .enrichment import enrich_priority_ticket_details
 from .migrate import archive_legacy_state, migrate_legacy_state
 from .paths import ensure_path_layout
+from .observability import generate_runtime_status_artifacts
 from .public_artifacts import generate_public_snapshot
 from .service_manager import (
     doctor_service,
@@ -50,6 +51,7 @@ from .ingest import (
 )
 from .settings import load_settings, write_config_env
 from .summaries import get_account_summary, get_technician_summary
+from .vector_index import build_vector_index, get_vector_index_status, search_vector_index
 from .watch import watch_new_tickets
 from .db import initialize_db
 
@@ -535,6 +537,8 @@ def search_vector_index_cmd(
     account: str | None = None,
     status: str | None = None,
     technician: str | None = None,
+    priority: str | None = None,
+    category: str | None = None,
 ) -> None:
     settings = load_settings()
     rows = search_vector_index(
@@ -544,6 +548,8 @@ def search_vector_index_cmd(
         account=account,
         status=status,
         technician=technician,
+        priority=priority,
+        category=category,
     )
     print(json.dumps(rows, indent=2))
 
@@ -563,14 +569,4 @@ def generate_runtime_status() -> None:
 
 
 if __name__ == "__main__":
-    app()
- == "__main__":
-    app()
-lic_snapshot(settings.db_path)
-    print(json.dumps(result, indent=2))
-
-
-if __name__ == "__main__":
-    app()
- == "__main__":
     app()

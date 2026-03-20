@@ -30,6 +30,7 @@ class Settings:
     service_cold_closed_every_seconds: int = 86400
     service_enrichment_every_seconds: int = 7200
     service_public_snapshot_every_seconds: int = 1800
+    service_vector_refresh_every_seconds: int = 1800
     service_doctor_every_seconds: int = 43200
     service_enrichment_limit: int = 25
     api_hourly_limit: int = 600
