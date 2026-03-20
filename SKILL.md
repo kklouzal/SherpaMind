@@ -117,4 +117,8 @@ Read these when needed:
 - `docs/delta-sync-strategy.md` — hot/warm/cold sync lane design
 - `docs/api-reference.md` — verified API behavior and caveats
 - `docs/automation.md` — service/install/update/health model
+del.md` — OpenClaw-facing query/retrieval design
+- `docs/delta-sync-strategy.md` — hot/warm/cold sync lane design
+- `docs/api-reference.md` — verified API behavior and caveats
+- `docs/automation.md` — service/install/update/health model
 odel

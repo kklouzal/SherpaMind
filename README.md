@@ -15,16 +15,15 @@ SherpaMind is a local-first SherpaDesk ingest, sync, enrichment, analysis, and O
    - Keep the local dataset current through a long-running Python backend service.
    - Avoid spending model tokens on periodic work that belongs in a local backend.
 
-3. **Analytical access**
-   - Support questions like:
-     - common issue types by account or user
-     - response/close times by account, user, or technician
-     - recurring problem themes
-     - resolution patterns and operational bottlenecks
+3. **Rich source capture and structure**
+   - Pull down as much useful SherpaDesk source data as practical without breaking rate/safety constraints.
+   - Preserve strong structured metadata and deep ticket history where available.
+   - Keep the stored data rich enough that OpenClaw can answer open-ended questions later.
 
 4. **OpenClaw-friendly retrieval**
    - Materialize ticket documents/chunks and public Markdown artifacts for natural-language access.
    - Keep canonical truth in SQLite while exposing easy-to-consume derived views.
+   - Focus on clean structure, cleanup, chunking, and retrieval quality rather than hardcoded interpretation.
 
 ## Architecture
 
@@ -41,6 +40,13 @@ Data architecture:
 - **SQLite** as the canonical structured system of record
 - **materialized ticket documents/chunks** as replaceable retrieval caches for OpenClaw
 - a future **semantic/vector sidecar** when the current SQL + docs/chunks stack needs deeper semantic recall
+
+North star:
+- maximize rich source capture
+- improve cleanup/normalization
+- preserve strong metadata and history
+- generate clean, replaceable retrieval artifacts
+- let OpenClaw perform the interpretation at query time instead of hardcoding brittle conclusions into SherpaMind
 
 ### Main components
 - `SKILL.md` — skill entry instructions and operating contract
@@ -218,4 +224,6 @@ On update / re-bootstrap:
 - Best long-term breadth/cadence for full-corpus detail enrichment without wasting API budget
 - Whether SherpaDesk exposes additional useful comment/history/detail surfaces beyond the currently captured ticket detail + ticket log structures
 - Preferred notification channel for native watcher alerts
+- When to introduce the semantic/vector sidecar on top of the current SQLite + materialized-doc/chunk design
+l for native watcher alerts
 - When to introduce the semantic/vector sidecar on top of the current SQLite + materialized-doc/chunk design

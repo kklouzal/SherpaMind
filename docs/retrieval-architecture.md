@@ -38,8 +38,8 @@ Best source:
 ### Fuzzy problem-solving questions
 Examples:
 - have we seen something like this before?
-- what kinds of issues cluster around this product?
 - what past tickets look semantically similar to this new issue?
+- what historical context is most relevant to this ticket?
 
 Best source:
 - vector/semantic retrieval, ideally with SQL metadata filters layered on top
@@ -59,11 +59,19 @@ Best source:
 
 - ticket summary documents
 - ticket conversation/comment chunks
-- account-level issue summary documents
+- account-level factual summary documents
 - user-level support history summaries
-- resolution-pattern / known-fix synthesized documents
+- technician-level factual summary documents
+
+Avoid prematurely synthesizing strongly interpretive "known-fix" or theme conclusions until the retrieval layer and source coverage are strong enough to support them well.
 
 ## Important rule
 
 Do not let the retrieval layer become the only source of truth.
+Derived retrieval artifacts should be rebuildable from canonical local data.
+Derived retrieval artifacts should be rebuildable from canonical local data.
+ Important rule
+
+Do not let the retrieval layer become the only source of truth.
+Derived retrieval artifacts should be rebuildable from canonical local data.
 Derived retrieval artifacts should be rebuildable from canonical local data.

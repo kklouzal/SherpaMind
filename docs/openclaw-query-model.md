@@ -121,8 +121,14 @@ Possible future exception:
 Do not force the LLM to parse raw SherpaDesk JSON blobs unless necessary.
 Whenever a field becomes operationally useful more than once, promote it into:
 - a real SQLite column/table
-- a reusable analysis query
+- a reusable structural query
 - the ticket document/chunk materialization layer
+- or a generated public artifact if it helps OpenClaw/humans inspect the state quickly
+
+If a proposed feature mainly hardcodes conclusions that OpenClaw could derive at query time from well-prepared data, prefer better data preparation over baking that interpretation into SherpaMind.
+
+That is how SherpaMind becomes naturally queryable instead of technically queryable only in theory.
+r
 - or a generated public artifact if it helps OpenClaw/humans inspect the state quickly
 
 That is how SherpaMind becomes naturally queryable instead of technically queryable only in theory.

@@ -4,6 +4,9 @@ from pathlib import Path
 
 from .db import connect
 
+# Summary helpers in this module are intentionally factual/structural.
+# They should organize and expose data for OpenClaw, not pre-interpret it too aggressively.
+
 
 def get_account_summary(db_path: Path, account_query: str, limit_open: int = 10, limit_recent: int = 10) -> dict:
     with connect(db_path) as conn:

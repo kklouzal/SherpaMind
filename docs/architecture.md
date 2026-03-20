@@ -23,7 +23,7 @@ A retrieval sidecar should sit beside SQLite for:
 ### Why hybrid beats vector-only
 - SQL is better for exact counts, timings, ownership, and reproducible reporting
 - full-text is better for exact string matching, IDs, product names, and error text
-- vectors are better for fuzzy theme/similarity lookups
+- vectors are better for fuzzy contextual/similarity lookups
 
 SherpaMind needs all three behaviors, so the durable design is **SQLite + retrieval sidecar**, not one or the other.
 

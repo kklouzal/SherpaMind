@@ -114,6 +114,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         cleaned_detail_note = normalize_ticket_text(record.get("detail_note"))
         cleaned_workpad = normalize_ticket_text(record.get("workpad"))
         cleaned_recent_logs = normalize_ticket_text(record.get("recent_log_text"))
+        # Keep this lightweight and source-grounded: a trimmed excerpt from recent log text,
+        # not a model-authored or heavily interpretive conclusion.
         resolution_summary = summarize_resolution_from_logs(record.get("recent_log_text"))
 
         text_parts = [
