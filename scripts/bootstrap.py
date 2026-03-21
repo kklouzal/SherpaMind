@@ -24,7 +24,13 @@ def repo_root() -> Path:
 
 
 def workspace_root() -> Path:
-    return Path(os.getenv("SHERPAMIND_WORKSPACE_ROOT", os.getcwd())).resolve()
+    explicit = os.getenv("SHERPAMIND_WORKSPACE_ROOT")
+    if explicit:
+        return Path(explicit).resolve()
+    repo = repo_root().resolve()
+    if repo.parent.name == "skills":
+        return repo.parent.parent.resolve()
+    return Path.cwd().resolve()
 
 
 def sherpamind_root() -> Path:

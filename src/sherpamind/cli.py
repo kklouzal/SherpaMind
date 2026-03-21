@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict, is_dataclass
 import json
 from pathlib import Path
 
@@ -58,6 +59,16 @@ from .watch import watch_new_tickets
 from .db import backfill_ticket_technician_stubs, initialize_db
 
 app = typer.Typer(help="SherpaMind CLI")
+
+
+def _json_ready(value):
+    if is_dataclass(value):
+        return _json_ready(asdict(value))
+    if isinstance(value, dict):
+        return {key: _json_ready(inner) for key, inner in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_ready(inner) for inner in value]
+    return value
 
 
 def _build_client() -> SherpaDeskClient:
@@ -292,7 +303,7 @@ def service_run() -> None:
 @app.command("service-run-once")
 def service_run_once() -> None:
     settings = load_settings()
-    print(json.dumps(run_pending_tasks(settings), indent=2))
+    print(json.dumps(_json_ready(run_pending_tasks(settings)), indent=2))
 
 
 @app.command("discover-orgs")

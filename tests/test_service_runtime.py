@@ -2,6 +2,8 @@ import json
 import time
 from pathlib import Path
 
+from sherpamind.cli import _json_ready
+
 from sherpamind.db import initialize_db, record_api_request_event, replace_ticket_document_chunks, replace_ticket_documents, upsert_tickets
 from sherpamind.service_runtime import run_pending_tasks
 from sherpamind.settings import Settings
@@ -48,6 +50,18 @@ def test_run_pending_tasks_writes_service_state(monkeypatch, tmp_path: Path) -> 
     result = run_pending_tasks(settings)
     assert result['status'] == 'ok'
     assert (tmp_path / '.SherpaMind' / 'private' / 'service-state.json').exists()
+
+
+def test_json_ready_normalizes_dataclasses(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
+    settings = make_settings(tmp_path)
+    initialize_db(settings.db_path)
+    payload = _json_ready(run_pending_tasks(settings))
+    json.dumps(payload)
+    hot_open = next(item for item in payload['results'] if item['task'] == 'hot_open')
+    watch_result, sync_result = hot_open['result']
+    assert watch_result['status'] == 'needs_config'
+    assert sync_result['status'] == 'needs_config'
 
 
 def test_run_pending_tasks_prunes_old_request_events(monkeypatch, tmp_path: Path) -> None:

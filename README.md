@@ -106,7 +106,7 @@ Observed capability evidence includes:
 - successful local vector indexing with **12,081 indexed chunks** and an observed ready state of **0 missing**, **0 dangling**, and **0 outdated** index rows at the latest validation point
 - successful request-budget tracking showing observed runtime behavior well below the documented `600 requests/hour` ceiling during normal service activity
 - successful generated public artifact output under `.SherpaMind/public/docs/`
-- successful local automated validation with the current test suite passing (`54 passed` in the latest run)
+- successful local automated validation with the current test suite passing (`59 passed` in the latest run)
 - successful service-backed runtime operation on a Linux host using the documented user-level `systemd` model
 
 These figures are evidence from real observed runs, not guaranteed fixed installation outcomes. Exact counts will vary by target SherpaDesk account, sync timing, and local runtime state, but the project has been proven in live use to perform the ingest, sync, enrichment, retrieval-preparation, artifact-generation, and validation behaviors described here.
@@ -431,6 +431,8 @@ Bootstrapping the local runtime:
 ```bash
 python3 scripts/bootstrap.py
 ```
+
+When SherpaMind is installed under an OpenClaw `skills/` directory, the default runtime root auto-resolves to the parent workspace so `.SherpaMind/` lives at the workspace level instead of inside the repo checkout.
 
 This creates the main skill-local layout:
 

@@ -1,7 +1,6 @@
 ---
 name: sherpamind
-description: Use for SherpaDesk-related requests: ticket lookup, support-history retrieval, account/user/technician analysis, stale-ticket review, workload questions, operational reporting, and open-ended natural-language questions about SherpaDesk data. Trigger when the user mentions SherpaDesk or asks about tickets, support issues, clients/accounts, technicians, resolution history, recurring incidents, backlog, response timing, or similar support-operations analysis.
-metadata: {"openclaw":{"emoji":"🧰","homepage":"https://github.com/kklouzal/SherpaMind","requires":{"bins":["python3"]}}}
+description: "Use for SherpaDesk-related requests: ticket lookup, support-history retrieval, account/user/technician analysis, stale-ticket review, workload questions, operational reporting, and open-ended natural-language questions about SherpaDesk data. Trigger when the user mentions SherpaDesk or asks about tickets, support issues, clients/accounts, technicians, resolution history, recurring incidents, backlog, response timing, or similar support-operations analysis."
 ---
 
 # SherpaMind
@@ -15,6 +14,8 @@ Work from the repo root:
 ```bash
 cd {baseDir}
 ```
+
+When the repo is installed under an OpenClaw `skills/` directory, SherpaMind automatically uses the parent workspace as `SHERPAMIND_WORKSPACE_ROOT`, so runtime state stays in workspace-level `.SherpaMind/` rather than inside the skill checkout.
 
 Use the stable runner:
 

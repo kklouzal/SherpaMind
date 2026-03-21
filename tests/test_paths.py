@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sherpamind.paths import ensure_path_layout, resolve_paths
+from sherpamind.paths import discover_workspace_root, ensure_path_layout, resolve_paths
 
 
 def test_resolve_paths_uses_workspace_root(monkeypatch, tmp_path: Path) -> None:
@@ -19,3 +19,10 @@ def test_ensure_path_layout_creates_directories(monkeypatch, tmp_path: Path) -> 
     assert paths.public_root.exists()
     assert paths.exports_root.exists()
     assert paths.docs_root.exists()
+
+
+def test_discover_workspace_root_prefers_openclaw_workspace_parent(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SHERPAMIND_WORKSPACE_ROOT", raising=False)
+    repo_root = tmp_path / "skills" / "sherpamind"
+    repo_root.mkdir(parents=True)
+    assert discover_workspace_root(repo_root=repo_root, cwd=tmp_path / "elsewhere") == tmp_path

@@ -5,6 +5,16 @@ from pathlib import Path
 import os
 
 
+def discover_workspace_root(*, repo_root: Path | None = None, cwd: Path | None = None) -> Path:
+    explicit = os.getenv("SHERPAMIND_WORKSPACE_ROOT")
+    if explicit:
+        return Path(explicit).resolve()
+    repo = (repo_root or Path(__file__).resolve().parents[2]).resolve()
+    if repo.parent.name == "skills":
+        return repo.parent.parent.resolve()
+    return (cwd or Path.cwd()).resolve()
+
+
 @dataclass(frozen=True)
 class SherpaMindPaths:
     workspace_root: Path
@@ -24,7 +34,7 @@ class SherpaMindPaths:
 
 
 def resolve_paths() -> SherpaMindPaths:
-    workspace_root = Path(os.getenv("SHERPAMIND_WORKSPACE_ROOT", os.getcwd())).resolve()
+    workspace_root = discover_workspace_root()
     root = workspace_root / ".SherpaMind"
     private_root = root / "private"
     public_root = root / "public"
