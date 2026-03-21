@@ -90,6 +90,14 @@ def seed_fixture(db: Path) -> None:
             ],
             "timelogs": [],
             "attachments": [{"id": "a1", "name": "shot.png", "url": "https://example/shot.png", "size": 1234, "date": "2026-03-18T01:00:00Z"}],
+        }, {
+            "id": 102,
+            "followup_note": "Waiting for branch manager approval",
+            "ticketlogs": [
+                {"id": 601, "log_type": "Waiting on Response", "record_date": "2026-03-19T07:00:00Z", "plain_note": "Waiting for branch manager approval"}
+            ],
+            "timelogs": [],
+            "attachments": [],
         }],
         synced_at="2026-03-19T01:00:00Z",
     )
@@ -134,6 +142,8 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["cleaned_followup_note"] == "Waiting on user approval"
     assert primary["metadata"]["cleaned_request_completion_note"] == "Finish after-hours maintenance window"
     assert primary["metadata"]["cleaned_next_step"] == "Call back"
+    assert primary["metadata"]["cleaned_action_cue"] == "Call back"
+    assert primary["metadata"]["action_cue_source"] == "next_step"
     assert primary["metadata"]["cleaned_latest_response_note"] == "printer broken"
     assert primary["metadata"]["latest_response_date"] == "2026-03-18T01:00:00Z"
     assert primary["metadata"]["cleaned_resolution_log_note"] == "Closed after printer service restored"
@@ -175,6 +185,9 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Technician: Queue Owner" in fallback["text"]
     assert "Account location: Warehouse" in fallback["text"]
     assert fallback["metadata"]["account_location_name"] == "Warehouse"
+    assert fallback["metadata"]["cleaned_action_cue"] == "Waiting for branch manager approval"
+    assert fallback["metadata"]["action_cue_source"] == "followup_note"
+    assert fallback["metadata"]["has_next_step"] is True
     assert fallback["metadata"]["account_label_source"] == "raw"
     assert fallback["metadata"]["user_label_source"] == "raw"
     assert fallback["metadata"]["technician_label_source"] == "joined"

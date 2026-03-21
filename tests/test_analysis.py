@@ -134,6 +134,7 @@ def test_analysis_reports(tmp_path: Path) -> None:
     assert coverage["metadata"]["priority_docs"] == 0
     assert coverage["metadata"]["cleaned_subject_docs"] == 0
     assert coverage["metadata"]["next_step_docs"] == 0
+    assert coverage["metadata"]["action_cue_docs"] == 0
     assert coverage["metadata"]["attachment_presence_docs"] == 0
     assert summary["counts"]["tickets"] == 3
     assert summary["counts"]["ticket_logs"] == 1

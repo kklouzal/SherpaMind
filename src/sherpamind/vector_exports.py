@@ -45,6 +45,8 @@ def _load_rows(db_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
                json_extract(d.raw_json, '$.metadata.cleaned_followup_note') AS cleaned_followup_note,
                json_extract(d.raw_json, '$.metadata.cleaned_request_completion_note') AS cleaned_request_completion_note,
                json_extract(d.raw_json, '$.metadata.cleaned_next_step') AS cleaned_next_step,
+               json_extract(d.raw_json, '$.metadata.cleaned_action_cue') AS cleaned_action_cue,
+               json_extract(d.raw_json, '$.metadata.action_cue_source') AS action_cue_source,
                json_extract(d.raw_json, '$.metadata.cleaned_latest_response_note') AS cleaned_latest_response_note,
                json_extract(d.raw_json, '$.metadata.latest_response_date') AS latest_response_date,
                json_extract(d.raw_json, '$.metadata.cleaned_resolution_log_note') AS cleaned_resolution_log_note,
@@ -149,6 +151,8 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                     "cleaned_followup_note": record["cleaned_followup_note"],
                     "cleaned_request_completion_note": record["cleaned_request_completion_note"],
                     "cleaned_next_step": record["cleaned_next_step"],
+                    "cleaned_action_cue": record["cleaned_action_cue"],
+                    "action_cue_source": record["action_cue_source"],
                     "cleaned_latest_response_note": record["cleaned_latest_response_note"],
                     "latest_response_date": record["latest_response_date"],
                     "cleaned_resolution_log_note": record["cleaned_resolution_log_note"],
@@ -233,6 +237,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "cleaned_followup_note": lambda row: _present(row.get("cleaned_followup_note")),
         "cleaned_request_completion_note": lambda row: _present(row.get("cleaned_request_completion_note")),
         "cleaned_next_step": lambda row: _present(row.get("cleaned_next_step")),
+        "cleaned_action_cue": lambda row: _present(row.get("cleaned_action_cue")),
         "cleaned_latest_response_note": lambda row: _present(row.get("cleaned_latest_response_note")),
         "latest_response_date": lambda row: _present(row.get("latest_response_date")),
         "cleaned_resolution_log_note": lambda row: _present(row.get("cleaned_resolution_log_note")),
@@ -274,7 +279,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         }
 
     label_source_summary = {}
-    for field in ("account_label_source", "user_label_source", "technician_label_source", "department_label_source"):
+    for field in ("account_label_source", "user_label_source", "technician_label_source", "department_label_source", "action_cue_source"):
         counts: dict[str, int] = {}
         for row in rows:
             value = row.get(field) or "missing"

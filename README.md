@@ -72,7 +72,7 @@ SherpaMind currently covers five major areas:
    - normalizes ticket text into cleaner retrieval-ready summaries
    - normalizes account/user/technician labels so retrieval/vector facets prefer human-readable names over raw numeric IDs when ticket payloads provide them
    - promotes ticket-observed technician labels into canonical stub rows when that is the cleanest stable source available, so technician-facing summaries/filter facets stay readable even when endpoint coverage is thin
-   - carries workflow/state metadata such as subject, user email, recent log types, derived waiting/follow-up cues, derived latest-response and closure cues from ticket logs, next-step hints, class/submission/resolution taxonomy, human-readable department labels plus label-source provenance, contract/confirmation context, account-location and department context, intake-channel/handling flags, request-completion cues, attachment presence, and resolution highlights into derived artifacts
+   - carries workflow/state metadata such as subject, user email, recent log types, derived waiting/follow-up cues, derived latest-response and closure cues from ticket logs, next-step hints, derived action-cue text/source (from explicit next steps, follow-up notes, request-completion notes, or waiting-log fallback), class/submission/resolution taxonomy, human-readable department labels plus label-source provenance, contract/confirmation context, account-location and department context, intake-channel/handling flags, request-completion cues, attachment presence, and resolution highlights into derived artifacts
    - chunks long documents deterministically
    - supports keyword/text search over docs and chunks
    - exports metadata-rich embedding-ready chunk payloads
@@ -500,7 +500,7 @@ Vector and retrieval readiness reporting includes:
 - outdated content rows
 - chunk-size quality metrics (avg/min/max, tiny, over-target)
 - filter-facet inventories for accounts, technicians, statuses, priorities, and categories
-- chunk-level and document-level metadata coverage for cleaned subject/issue summary/next-step/log-type/resolution/attachment readiness plus class/submission/resolution taxonomy, human-readable department labels, account-location, confirmation, and intake-channel metadata
+- chunk-level and document-level metadata coverage for cleaned subject/issue summary/next-step/action-cue/log-type/resolution/attachment readiness plus class/submission/resolution taxonomy, human-readable department labels, account-location, confirmation, and intake-channel metadata
 - chunk-topology readiness signals such as chunks-per-document and multi-chunk-document ratio so vector-sidecar consumers can reason about chunk fanout cleanly
 - freshness windows for materialized chunks vs ticket update timestamps
 

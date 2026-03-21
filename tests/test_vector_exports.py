@@ -34,6 +34,8 @@ def seed(db: Path) -> None:
                 "cleaned_followup_note": "Waiting on customer reply",
                 "cleaned_request_completion_note": "Complete during maintenance window",
                 "cleaned_next_step": "Call back tomorrow",
+                "cleaned_action_cue": "Call back tomorrow",
+                "action_cue_source": "next_step",
                 "cleaned_latest_response_note": "We are checking now",
                 "latest_response_date": "2026-03-19T09:15:00Z",
                 "cleaned_resolution_log_note": "Closed after maintenance",
@@ -107,6 +109,8 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["cleaned_followup_note"] == "Waiting on customer reply"
     assert row["metadata"]["cleaned_request_completion_note"] == "Complete during maintenance window"
     assert row["metadata"]["cleaned_next_step"] == "Call back tomorrow"
+    assert row["metadata"]["cleaned_action_cue"] == "Call back tomorrow"
+    assert row["metadata"]["action_cue_source"] == "next_step"
     assert row["metadata"]["cleaned_latest_response_note"] == "We are checking now"
     assert row["metadata"]["latest_response_date"] == "2026-03-19T09:15:00Z"
     assert row["metadata"]["cleaned_resolution_log_note"] == "Closed after maintenance"
@@ -155,6 +159,7 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["filter_facets"]["departments"] == ["Managed Services"]
     assert summary["metadata_coverage"]["cleaned_subject"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_followup_note"]["chunks"] == 1
+    assert summary["metadata_coverage"]["cleaned_action_cue"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_latest_response_note"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_resolution_log_note"]["chunks"] == 1
     assert summary["metadata_coverage"]["class_name"]["chunks"] == 1
@@ -173,6 +178,7 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["label_source_summary"]["user_label_source"]["email"]["chunks"] == 1
     assert summary["label_source_summary"]["technician_label_source"]["joined"]["chunks"] == 1
     assert summary["label_source_summary"]["department_label_source"]["support_group_name"]["chunks"] == 1
+    assert summary["label_source_summary"]["action_cue_source"]["next_step"]["chunks"] == 1
     assert summary["metadata_coverage"]["has_attachments"]["ratio"] == 1.0
     assert summary["materialization"]["current_version"] >= 1
     assert summary["materialization"]["current_version_docs"] == 1

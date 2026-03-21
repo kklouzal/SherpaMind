@@ -9,7 +9,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 5
+DOCUMENT_MATERIALIZATION_VERSION = 6
 
 
 def _content_hash(text: str) -> str:
@@ -194,6 +194,23 @@ def _derive_recent_log_cues(logs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _resolve_action_cue(
+    cleaned_next_step: str | None,
+    explicit_followup_note: str | None,
+    cleaned_request_completion_note: str | None,
+    waiting_log_note: str | None,
+) -> tuple[str | None, str]:
+    if cleaned_next_step:
+        return cleaned_next_step, "next_step"
+    if explicit_followup_note:
+        return explicit_followup_note, "followup_note"
+    if cleaned_request_completion_note:
+        return cleaned_request_completion_note, "request_completion_note"
+    if waiting_log_note:
+        return waiting_log_note, "waiting_log"
+    return None, "missing"
+
+
 def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict]:
     query = """
         SELECT t.id,
@@ -342,7 +359,9 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         waiting_log = log_cues["waiting_log"]
         response_log = log_cues["response_log"]
         resolution_log = log_cues["resolution_log"]
-        cleaned_followup_note = normalize_ticket_text(_first_present(record.get("followup_note"), waiting_log["cleaned_note"] if waiting_log else None))
+        explicit_followup_note = normalize_ticket_text(record.get("followup_note"))
+        waiting_log_note = waiting_log["cleaned_note"] if waiting_log else None
+        cleaned_followup_note = normalize_ticket_text(_first_present(explicit_followup_note, waiting_log_note))
         followup_date = _first_present(record.get("followup_date"), waiting_log["record_date"] if waiting_log else None)
         cleaned_request_completion_note = normalize_ticket_text(record.get("request_completion_note"))
         cleaned_recent_logs = normalize_ticket_text(record.get("recent_log_text"))
@@ -359,6 +378,12 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         )
         cleaned_subject = normalize_ticket_text(record.get("subject"))
         cleaned_next_step = normalize_ticket_text(_first_present(record.get("detail_next_step"), record.get("next_step")))
+        cleaned_action_cue, action_cue_source = _resolve_action_cue(
+            cleaned_next_step,
+            explicit_followup_note,
+            cleaned_request_completion_note,
+            waiting_log_note,
+        )
         recent_log_types = _split_csv_values(record.get("recent_log_types"))
         account_label, account_label_source = _resolve_account_label(record)
         user_label, user_label_source = _resolve_user_label(record)
@@ -528,6 +553,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "cleaned_followup_note": cleaned_followup_note[:400] if cleaned_followup_note else None,
                     "cleaned_request_completion_note": cleaned_request_completion_note[:400] if cleaned_request_completion_note else None,
                     "cleaned_next_step": cleaned_next_step[:300] if cleaned_next_step else None,
+                    "cleaned_action_cue": cleaned_action_cue[:400] if cleaned_action_cue else None,
+                    "action_cue_source": action_cue_source,
                     "cleaned_latest_response_note": cleaned_latest_response_note[:400] if cleaned_latest_response_note else None,
                     "latest_response_date": latest_response_date,
                     "cleaned_resolution_log_note": cleaned_resolution_log_note[:400] if cleaned_resolution_log_note else None,
@@ -535,7 +562,7 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "next_step_date": record.get("next_step_date"),
                     "followup_date": followup_date,
                     "request_completion_date": record.get("request_completion_date"),
-                    "has_next_step": bool(cleaned_next_step or record.get("next_step_date") or followup_date or cleaned_followup_note),
+                    "has_next_step": bool(cleaned_action_cue or record.get("next_step_date") or followup_date),
                     "recent_log_types": recent_log_types,
                     "recent_log_types_csv": ", ".join(recent_log_types) if recent_log_types else None,
                     "initial_response_present": record.get("initial_response") is not None,
