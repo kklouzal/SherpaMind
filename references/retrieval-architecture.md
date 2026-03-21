@@ -40,6 +40,8 @@ Examples:
 - have we seen something like this before?
 - what past tickets look semantically similar to this new issue?
 - what historical context is most relevant to this ticket?
+- what differences show up in technician habits or client/technician interaction style?
+- what recurring operational work should probably be formalized into scheduled service?
 
 Best source:
 - vector/semantic retrieval, ideally with SQL metadata filters layered on top

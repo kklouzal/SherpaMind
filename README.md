@@ -18,9 +18,17 @@ That split matters:
 
 - SherpaMind owns ingest, sync, cleanup, normalization, metadata extraction, enrichment, chunking, indexing, public artifact generation, and background runtime behavior.
 - The skill-front owns activation/query guidance for OpenClaw.
-- OpenClaw owns interpretation, synthesis, and user-facing reasoning.
+- OpenClaw owns interpretation, synthesis, comparative analysis, and user-facing reasoning.
 
 SherpaMind is not meant to hardcode brittle conclusions into the backend. It is meant to make SherpaDesk data easy to trust, inspect, search, and reason over.
+
+In practice, that means SherpaMind should make questions like these possible without pre-baking the answers:
+- what kinds of recurring issues does an account show?
+- how do two technicians differ in ticket-writing or support style?
+- what habits show up in client/technician back-and-forth?
+- what routine service work should probably become scheduled/proactive?
+
+Those are OpenClaw-time reasoning tasks over prepared support history, not backend-side canned conclusions.
 
 ## Public-repo anonymization rule
 
@@ -62,6 +70,9 @@ SherpaMind currently covers five major areas:
    - refreshes hot open-ticket state
    - reconciles recently closed tickets
    - performs rolling cold closed-ticket audits
+   - tracks whether the historical cold corpus has completed at least one full pass
+   - uses spare hourly API headroom opportunistically to accelerate cold audit/detail deepening before that first full pass completes
+   - slows cold re-audit/re-enrichment back down after the first full pass so most budget remains available for hot/warm freshness while still preserving long-tail maintenance
    - backfills technician stub rows from stable ticket payload names when the standalone technicians endpoint is thinner than real ticket assignee history
    - enriches a bounded priority ticket set through single-ticket detail fetches
    - biases cold-detail enrichment toward under-covered categories/accounts/technicians so historical retrieval depth broadens instead of clustering only around the newest cold tickets
@@ -106,7 +117,7 @@ Observed capability evidence includes:
 - successful local vector indexing with **12,081 indexed chunks** and an observed ready state of **0 missing**, **0 dangling**, and **0 outdated** index rows at the latest validation point
 - successful request-budget tracking showing observed runtime behavior well below the documented `600 requests/hour` ceiling during normal service activity
 - successful generated public artifact output under `.SherpaMind/public/docs/`
-- successful local automated validation with the current test suite passing (`59 passed` in the latest run)
+- successful local automated validation with the current test suite passing (`60 passed` in the latest run)
 - successful service-backed runtime operation on a Linux host using the documented user-level `systemd` model
 
 These figures are evidence from real observed runs, not guaranteed fixed installation outcomes. Exact counts will vary by target SherpaDesk account, sync timing, and local runtime state, but the project has been proven in live use to perform the ingest, sync, enrichment, retrieval-preparation, artifact-generation, and validation behaviors described here.
@@ -515,10 +526,11 @@ SherpaMind is functional and live, but the current surface is still intentionall
 Current limits include:
 
 - full-corpus detail enrichment is not in place; enrichment is selective and bounded
-- open-ticket detail coverage is strong, but whole-corpus detail coverage is still shallow
+- open-ticket detail coverage is strong, but whole-corpus detail coverage is still shallow enough that some deeper comparative/history questions will surface "not enough detail yet" pressure
 - attachment bodies are not downloaded by default
 - native outbound watcher alert routing is not implemented
 - broader comment/history/detail capture depends on what SherpaDesk actually exposes cleanly and consistently
+- the service now supports an explicit cold-bootstrap-versus-steady-state posture, but the exact adaptive budget heuristics are still early and should be tuned against real long-running usage
 
 One current live-state nuance matters:
 

@@ -32,9 +32,15 @@ def test_load_settings_reads_service_controls(monkeypatch, tmp_path: Path) -> No
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("SHERPAMIND_SERVICE_HOT_OPEN_EVERY_SECONDS", "123")
     monkeypatch.setenv("SHERPAMIND_SERVICE_ENRICHMENT_LIMIT", "77")
+    monkeypatch.setenv("SHERPAMIND_SERVICE_COLD_BOOTSTRAP_EVERY_SECONDS", "456")
+    monkeypatch.setenv("SHERPAMIND_SERVICE_ENRICHMENT_BOOTSTRAP_LIMIT", "222")
+    monkeypatch.setenv("SHERPAMIND_COLD_CLOSED_BOOTSTRAP_PAGES_PER_RUN", "9")
     settings = load_settings()
     assert settings.service_hot_open_every_seconds == 123
     assert settings.service_enrichment_limit == 77
+    assert settings.service_cold_bootstrap_every_seconds == 456
+    assert settings.service_enrichment_bootstrap_limit == 222
+    assert settings.cold_closed_bootstrap_pages_per_run == 9
 
 
 def test_write_config_env_is_loaded(monkeypatch, tmp_path: Path) -> None:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sherpamind"
-version = "0.1.1"
+version = "0.1.2"
 description = "Local-first SherpaDesk backend + OpenClaw skill-front system for rich capture and retrieval-preparation"
 readme = "README.md"
 requires-python = ">=3.10"

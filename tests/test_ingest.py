@@ -43,6 +43,10 @@ def make_settings(tmp_path: Path) -> Settings:
         warm_closed_pages=2,
         warm_closed_days=7,
         cold_closed_pages_per_run=2,
+        service_cold_bootstrap_every_seconds=1800,
+        service_enrichment_bootstrap_every_seconds=900,
+        service_enrichment_bootstrap_limit=240,
+        cold_closed_bootstrap_pages_per_run=10,
     )
 
 

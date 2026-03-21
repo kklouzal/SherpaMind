@@ -8,6 +8,7 @@ from .freshness import get_sync_freshness
 from .vector_index import get_vector_index_status
 from .vector_exports import get_retrieval_readiness_summary
 from .paths import ensure_path_layout
+from .sync_state import get_json_state
 
 
 def generate_runtime_status_artifacts(db_path: Path) -> dict:
@@ -21,6 +22,7 @@ def generate_runtime_status_artifacts(db_path: Path) -> dict:
     dataset = get_dataset_summary(db_path)
     vector = get_vector_index_status(db_path)
     retrieval = get_retrieval_readiness_summary(db_path)
+    cold_bootstrap = get_json_state(db_path, "service.cold_bootstrap", default={}) or {}
 
     status_md = [
         "# SherpaMind Runtime Status",
@@ -43,6 +45,11 @@ def generate_runtime_status_artifacts(db_path: Path) -> dict:
         "## API usage",
         "```json",
         json.dumps(usage, indent=2),
+        "```",
+        "",
+        "## Cold bootstrap status",
+        "```json",
+        json.dumps(cold_bootstrap, indent=2),
         "```",
         "",
         "## Vector index status",

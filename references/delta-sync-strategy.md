@@ -104,14 +104,18 @@ This is the lane that protects us from:
 ### 4. Cold historical audit lane
 Purpose:
 - preserve eventual consistency for older tickets
+- converge historical detail coverage quickly enough for meaningful analysis
 
 Approach:
-- scan older closed-ticket pages in small rolling batches
-- run daily or weekly
+- scan older closed-ticket pages in rolling batches
+- before the first full historical pass completes, use spare hourly headroom aggressively to accelerate cold auditing and enrichment
+- after the first full historical pass completes, slow the cold lane back down and keep it as a maintenance/audit loop
 - record the last audited page/range locally
+- persist whether the cold corpus has completed at least one full pass
 
 This is our answer to:
 - “closed usually means lower churn, but not zero churn”
+- “historical analytical depth should ramp quickly once, then settle into slower maintenance”
 
 ### 5. Periodic deep audit lane
 Purpose:

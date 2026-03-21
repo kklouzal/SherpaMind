@@ -7,7 +7,14 @@ Make SherpaMind naturally usable from OpenClaw for open-ended questions without 
 ## Runtime stance
 
 SherpaMind’s background syncing/enrichment should come from its local Python backend service.
-OpenClaw’s job is to query, inspect, summarize, and reason over SherpaMind outputs — not to burn tokens on acting like the periodic backend scheduler.
+OpenClaw’s job is to query, inspect, compare, summarize, and reason over SherpaMind outputs — not to burn tokens on acting like the periodic backend scheduler.
+
+OpenClaw should be able to answer questions like:
+- how does one technician's ticket handling differ from another's?
+- what habits show up in client-versus-technician voice on a given account?
+- what recurring work should likely become proactive or scheduled?
+
+Those remain query-time reasoning problems over prepared history, not backend-side canned dashboards.
 
 ## Current local data layers
 
@@ -34,7 +41,7 @@ Use for natural-language recall and fuzzy investigation:
 These are derived from canonical tables and are **replaceable caches**, not source-of-truth memory.
 
 ### 3. Public markdown artifacts
-Use for quick human/agent inspection under `.SherpaMind/public/references/`, including:
+Use for quick human/agent inspection under `.SherpaMind/public/docs/`, including:
 - `index.md`
 - `insight-snapshot.md`
 - `stale-open-tickets.md`

@@ -33,6 +33,10 @@ class Settings:
     service_vector_refresh_every_seconds: int = 1800
     service_doctor_every_seconds: int = 43200
     service_enrichment_limit: int = 25
+    service_cold_bootstrap_every_seconds: int = 1800
+    service_enrichment_bootstrap_every_seconds: int = 900
+    service_enrichment_bootstrap_limit: int = 240
+    cold_closed_bootstrap_pages_per_run: int = 10
     api_hourly_limit: int = 600
     api_budget_warn_ratio: float = 0.7
     api_budget_critical_ratio: float = 0.85
@@ -129,6 +133,10 @@ def load_settings() -> Settings:
         service_vector_refresh_every_seconds=int(_env_value("SHERPAMIND_SERVICE_VECTOR_REFRESH_EVERY_SECONDS", file_values, "1800") or "1800"),
         service_doctor_every_seconds=int(_env_value("SHERPAMIND_SERVICE_DOCTOR_EVERY_SECONDS", file_values, "43200") or "43200"),
         service_enrichment_limit=int(_env_value("SHERPAMIND_SERVICE_ENRICHMENT_LIMIT", file_values, "60") or "60"),
+        service_cold_bootstrap_every_seconds=int(_env_value("SHERPAMIND_SERVICE_COLD_BOOTSTRAP_EVERY_SECONDS", file_values, "1800") or "1800"),
+        service_enrichment_bootstrap_every_seconds=int(_env_value("SHERPAMIND_SERVICE_ENRICHMENT_BOOTSTRAP_EVERY_SECONDS", file_values, "900") or "900"),
+        service_enrichment_bootstrap_limit=int(_env_value("SHERPAMIND_SERVICE_ENRICHMENT_BOOTSTRAP_LIMIT", file_values, "240") or "240"),
+        cold_closed_bootstrap_pages_per_run=int(_env_value("SHERPAMIND_COLD_CLOSED_BOOTSTRAP_PAGES_PER_RUN", file_values, "10") or "10"),
         api_hourly_limit=int(_env_value("SHERPAMIND_API_HOURLY_LIMIT", file_values, "600") or "600"),
         api_budget_warn_ratio=float(_env_value("SHERPAMIND_API_BUDGET_WARN_RATIO", file_values, "0.7") or "0.7"),
         api_budget_critical_ratio=float(_env_value("SHERPAMIND_API_BUDGET_CRITICAL_RATIO", file_values, "0.85") or "0.85"),

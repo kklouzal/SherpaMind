@@ -206,42 +206,50 @@ def sync_warm_closed_tickets(settings: Settings) -> DeltaSyncResult:
         raise
 
 
-def sync_cold_closed_audit(settings: Settings) -> DeltaSyncResult:
+def sync_cold_closed_audit(settings: Settings, *, pages_per_run: int | None = None) -> DeltaSyncResult:
     initialize_db(settings.db_path)
     error = _require_live_context(settings)
     if error:
         status = "needs_org_context" if "ORG_KEY" in error else "needs_config"
         return DeltaSyncResult(status=status, message=error)
 
+    pages_per_run = pages_per_run or settings.cold_closed_pages_per_run
     run_id = start_ingest_run(
         settings.db_path,
         mode="sync_cold_closed_audit",
-        notes=f"cold_closed_pages_per_run={settings.cold_closed_pages_per_run}",
+        notes=f"cold_closed_pages_per_run={pages_per_run}",
     )
     try:
         client = _build_client(settings)
         synced_at = now_iso()
-        state = get_json_state(settings.db_path, "sync.cold_closed.last_state", default={"next_page": 0}) or {"next_page": 0}
+        state = get_json_state(settings.db_path, "sync.cold_closed.last_state", default={"next_page": 0, "completed_cycles": 0}) or {"next_page": 0, "completed_cycles": 0}
         start_page = int(state.get("next_page", 0))
+        completed_cycles = int(state.get("completed_cycles", 0))
         closed_pages = []
         next_page = 0
-        for page in range(start_page, start_page + settings.cold_closed_pages_per_run):
+        cycle_completed = False
+        for page in range(start_page, start_page + pages_per_run):
             page_rows = client.get("tickets", params={"status": "closed", "limit": settings.seed_page_size, "page": page})
             if not isinstance(page_rows, list):
                 raise TypeError(f"Expected list response from tickets page {page}, got {type(page_rows).__name__}")
             closed_pages.extend(page_rows)
             if len(page_rows) < settings.seed_page_size:
                 next_page = 0
+                cycle_completed = True
                 break
         else:
-            next_page = start_page + settings.cold_closed_pages_per_run
+            next_page = start_page + pages_per_run
+        if cycle_completed:
+            completed_cycles += 1
         upsert_tickets(settings.db_path, closed_pages, synced_at=synced_at)
         stats = {
             "synced_at": synced_at,
             "start_page": start_page,
             "next_page": next_page,
-            "pages_scanned": settings.cold_closed_pages_per_run,
+            "pages_scanned": pages_per_run,
             "cold_ticket_count": len(closed_pages),
+            "cycle_completed": cycle_completed,
+            "completed_cycles": completed_cycles,
         }
         set_json_state(settings.db_path, "sync.cold_closed.last_state", stats)
         finish_ingest_run(settings.db_path, run_id, status="success", notes=json.dumps(stats, sort_keys=True))

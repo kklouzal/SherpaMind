@@ -53,6 +53,8 @@ If a change blurs those boundaries, it should be treated as architectural drift.
 - interpretation
 - open-ended reasoning
 - contextual synthesis
+- comparative analysis across tickets/accounts/technicians
+- user/technician/client voice analysis over retrieved ticket history
 - final user-facing analytical conclusions
 
 ## Change checklist

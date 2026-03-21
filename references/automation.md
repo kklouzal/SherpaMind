@@ -33,8 +33,14 @@ The priority enrichment loop should stay retrieval-oriented rather than purely r
 
 These run from internal Python timers, not OpenClaw cron.
 
-The service also tracks real SherpaDesk request usage in SQLite and can use rolling hourly budget utilization to defer lower-priority work before it rides the 600/hour line.
+The service also tracks real SherpaDesk request usage in SQLite and should use that to reserve the forecast hot/warm budget first, then spend spare hourly headroom opportunistically on cold audit and enrichment work instead of throttling cold depth with only a static conservative cadence.
 Old request-event rows are pruned automatically by retention policy so the request log remains bounded.
+
+Cold-history work should run in two phases:
+- **bootstrap mode** until the historical corpus has completed one real full cold pass and closed-ticket detail coverage catches up
+- **steady-state mode** after that, where cold re-audit/re-enrichment continues more slowly for drift correction and enrichment evolution
+
+That first full-pass completion should be durable state, not guesswork.
 
 The service should also repair stale derived retrieval artifacts when the current document materializer version no longer matches what is stored in `ticket_documents`. That keeps metadata/chunking improvements from depending on a human remembering to force a rematerialization pass.
 
