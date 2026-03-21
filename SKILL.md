@@ -1,6 +1,7 @@
 ---
 name: sherpamind
 description: "Use for SherpaDesk-related requests: ticket lookup, support-history retrieval, account/user/technician analysis, stale-ticket review, workload questions, operational reporting, and open-ended natural-language questions about SherpaDesk data. This skill is a local SherpaDesk backend plus OpenClaw query layer: it requires SherpaDesk API credentials for live setup, creates workspace-local runtime state under `.SherpaMind/`, and may install an optional user-level background service. Trigger when the user mentions SherpaDesk or asks about tickets, support issues, clients/accounts, technicians, resolution history, recurring incidents, backlog, response timing, or similar support-operations analysis."
+metadata: {"openclaw":{"emoji":"🧰","homepage":"https://github.com/kklouzal/SherpaMind","requires":{"anyBins":["python3","python"]},"primaryEnv":"SHERPADESK_API_KEY"}}
 ---
 
 # SherpaMind
