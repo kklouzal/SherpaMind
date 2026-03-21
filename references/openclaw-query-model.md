@@ -149,6 +149,7 @@ SherpaMind should also expose enough observability that OpenClaw can trust the r
 - whether important retrieval metadata (category, class/submission/resolution taxonomy, cleaned subject, issue summary, stable ticket identifiers, technician/creator contact context, waiting/age timing signals, next-step hints, derived action cues, follow-up/request-completion cues, log-derived latest-response and closure cues, confirmation/contract context, account-location and human-readable department context, intake-channel/handling flags, recent log types, resolution summary, attachment presence) is materially populated
 - whether low coverage on source-backed metadata reflects real upstream absence in SherpaDesk payloads versus a backend promotion/materialization gap
 - whether account/user/technician labels are arriving as human-readable names versus raw-ID fallbacks so metadata filters stay clean
+- explicit entity-label quality summaries showing readable-vs-identifier-like label ratios and fallback-source pressure for account/user/technician/department facets
 - whether chunk sizes and chunk fanout per document look sane for vector/semantic use
 - whether important retrieval metadata is materially populated at both the chunk level and the document level so a few multi-chunk tickets do not distort coverage reads
 - a real SQLite column/table

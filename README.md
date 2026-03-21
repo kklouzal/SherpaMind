@@ -553,6 +553,7 @@ Vector and retrieval readiness reporting includes:
 - filter-facet inventories for accounts, technicians, statuses, priorities, and categories
 - chunk-level and document-level metadata coverage for cleaned subject/issue summary/next-step/action-cue/log-type/resolution/attachment readiness plus class/submission/resolution taxonomy, human-readable department labels, account-location, confirmation, and intake-channel metadata
 - source-vs-materialized coverage for source-backed metadata fields such as support group, contract, location, department key, ticket identifiers, timing flags, and confirmation fields, including whether low coverage reflects upstream absence or backend materialization drift
+- entity-label quality summaries for account/user/technician/department facets so operators can see readable-vs-identifier-like label ratios and fallback-source pressure before trusting filters heavily
 - chunk-topology readiness signals such as chunks-per-document and multi-chunk-document ratio so vector-sidecar consumers can reason about chunk fanout cleanly
 - freshness windows for materialized chunks vs ticket update timestamps
 

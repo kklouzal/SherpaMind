@@ -217,6 +217,66 @@ def _present(value: Any) -> bool:
     return value is not None and value != ""
 
 
+def _looks_like_identifier(value: Any) -> bool:
+    if value is None:
+        return False
+    candidate = str(value).strip()
+    return bool(candidate) and candidate.isdigit()
+
+
+def _entity_label_quality_summary(
+    rows: list[dict[str, Any]],
+    *,
+    label_field: str,
+    label_source_field: str,
+    readable_sources: set[str],
+    fallback_sources: set[str],
+) -> dict[str, Any]:
+    total_chunks = len(rows)
+    present_rows = [row for row in rows if _present(row.get(label_field))]
+    readable_rows = [row for row in present_rows if not _looks_like_identifier(row.get(label_field))]
+    identifier_like_rows = [row for row in present_rows if _looks_like_identifier(row.get(label_field))]
+
+    distinct_values = sorted({str(row.get(label_field)).strip() for row in present_rows if _present(row.get(label_field))})
+    identifier_like_values = sorted({str(row.get(label_field)).strip() for row in identifier_like_rows if _present(row.get(label_field))})
+
+    source_counts: dict[str, int] = {}
+    for row in present_rows:
+        source = str(row.get(label_source_field) or "missing")
+        source_counts[source] = source_counts.get(source, 0) + 1
+
+    readable_source_chunks = sum(source_counts.get(source, 0) for source in readable_sources)
+    fallback_source_chunks = sum(source_counts.get(source, 0) for source in fallback_sources)
+    other_source_chunks = max(len(present_rows) - readable_source_chunks - fallback_source_chunks, 0)
+
+    return {
+        "present_chunks": len(present_rows),
+        "present_ratio": round((len(present_rows) / total_chunks), 4) if total_chunks else 0.0,
+        "missing_chunks": total_chunks - len(present_rows),
+        "missing_ratio": round(((total_chunks - len(present_rows)) / total_chunks), 4) if total_chunks else 0.0,
+        "readable_chunks": len(readable_rows),
+        "readable_ratio": round((len(readable_rows) / total_chunks), 4) if total_chunks else 0.0,
+        "identifier_like_chunks": len(identifier_like_rows),
+        "identifier_like_ratio": round((len(identifier_like_rows) / total_chunks), 4) if total_chunks else 0.0,
+        "readable_source_chunks": readable_source_chunks,
+        "readable_source_ratio": round((readable_source_chunks / total_chunks), 4) if total_chunks else 0.0,
+        "fallback_source_chunks": fallback_source_chunks,
+        "fallback_source_ratio": round((fallback_source_chunks / total_chunks), 4) if total_chunks else 0.0,
+        "other_source_chunks": other_source_chunks,
+        "other_source_ratio": round((other_source_chunks / total_chunks), 4) if total_chunks else 0.0,
+        "distinct_value_count": len(distinct_values),
+        "identifier_like_distinct_value_count": len(identifier_like_values),
+        "identifier_like_distinct_value_sample": identifier_like_values[:10],
+        "source_counts": {
+            key: {
+                "chunks": value,
+                "ratio": round((value / total_chunks), 4) if total_chunks else 0.0,
+            }
+            for key, value in sorted(source_counts.items())
+        },
+    }
+
+
 def _json_presence_clause(paths: list[str], *, kind: str = "text") -> str:
     clauses = []
     for path in paths:
@@ -479,6 +539,37 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         total_chunks=chunk_count,
     )
 
+    entity_label_quality = {
+        "account": _entity_label_quality_summary(
+            rows,
+            label_field="account",
+            label_source_field="account_label_source",
+            readable_sources={"joined", "raw"},
+            fallback_sources={"id"},
+        ),
+        "user": _entity_label_quality_summary(
+            rows,
+            label_field="user_name",
+            label_source_field="user_label_source",
+            readable_sources={"joined", "raw", "email"},
+            fallback_sources={"id"},
+        ),
+        "technician": _entity_label_quality_summary(
+            rows,
+            label_field="technician",
+            label_source_field="technician_label_source",
+            readable_sources={"joined", "raw"},
+            fallback_sources={"id"},
+        ),
+        "department": _entity_label_quality_summary(
+            rows,
+            label_field="department_label",
+            label_source_field="department_label_source",
+            readable_sources={"support_group_name", "class_name", "submission_category", "department_key"},
+            fallback_sources=set(),
+        ),
+    }
+
     return {
         "chunk_count": chunk_count,
         "document_count": len(document_ids),
@@ -536,6 +627,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "document_metadata_coverage": document_metadata_coverage,
         "source_metadata_coverage": source_metadata_coverage,
         "label_source_summary": label_source_summary,
+        "entity_label_quality": entity_label_quality,
         "vector_index": vector,
         "materialization": {
             **materialization,
