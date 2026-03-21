@@ -78,3 +78,5 @@ Do not let the retrieval layer become the only source of truth.
 Derived retrieval artifacts should be rebuildable from canonical local data.
 
 That also means materialized docs/chunks need visible drift detection when the backend materializer changes. If metadata cleanup, chunking, or document-shape logic improves, SherpaMind should be able to detect stale derived artifacts and refresh them instead of quietly serving yesterday's retrieval shape.
+
+Retrieval observability should also separate **source absence** from **materialization drift** for source-backed metadata. If a field like support group, contract, location, department key, or confirmation state reads as sparse, SherpaMind should make it clear whether SherpaDesk never supplied that field for the current corpus or whether the backend failed to carry it into retrieval artifacts.

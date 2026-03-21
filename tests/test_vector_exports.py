@@ -1,13 +1,65 @@
 import json
 from pathlib import Path
 
-from sherpamind.db import initialize_db, replace_ticket_document_chunks, replace_ticket_documents
+from sherpamind.db import (
+    initialize_db,
+    replace_ticket_document_chunks,
+    replace_ticket_documents,
+    upsert_ticket_details,
+    upsert_tickets,
+)
 from sherpamind.documents import DOCUMENT_MATERIALIZATION_VERSION
 from sherpamind.vector_exports import export_embedding_manifest, export_embedding_ready_chunks, get_retrieval_readiness_summary
 
 
 def seed(db: Path) -> None:
     initialize_db(db)
+    upsert_tickets(
+        db,
+        [{
+            "id": 101,
+            "account_id": 1,
+            "user_id": 2,
+            "tech_id": 3,
+            "subject": "hello",
+            "status": "Open",
+            "priority_name": "High",
+            "creation_category_name": "Hardware",
+            "created_time": "2026-03-19T01:00:00Z",
+            "updated_time": "2026-03-19T03:00:00Z",
+            "closed_time": None,
+            "number": "T-101",
+            "key": "abc-101",
+            "technician_email": "tech@example.com",
+            "user_phone": "520-555-0101",
+            "account_location_name": "HQ Campus",
+            "is_via_email_parser": True,
+            "is_handle_by_callcentre": False,
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+    upsert_ticket_details(
+        db,
+        [{
+            "id": 101,
+            "default_contract_name": "Gold",
+            "location_name": "HQ",
+            "department_key": "managed-services",
+            "user_created_email": "dispatcher@example.com",
+            "tech_type": "dispatcher",
+            "days_old_in_minutes": 1440,
+            "waiting_minutes": 30,
+            "confirmed_by_name": "Tech Lead",
+            "confirmed_date": "2026-03-19T05:00:00Z",
+            "is_waiting_on_response": True,
+            "is_resolved": False,
+            "is_confirmed": True,
+            "attachments": [{"id": 9, "name": "photo.png"}],
+            "ticketlogs": [{"id": 1, "log_type": "Response", "note": "closed"}],
+            "timelogs": [],
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
     replace_ticket_documents(
         db,
         [{
@@ -204,6 +256,13 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["is_via_email_parser"]["chunks"] == 1
     assert summary["metadata_coverage"]["is_handle_by_callcentre"]["chunks"] == 1
     assert summary["metadata_coverage"]["is_waiting_on_response"]["chunks"] == 1
+    assert summary["source_metadata_coverage"]["support_group_name"]["status"] == "upstream_absent"
+    assert summary["source_metadata_coverage"]["support_group_name"]["source_documents"] == 0
+    assert summary["source_metadata_coverage"]["support_group_name"]["materialized_documents"] == 1
+    assert summary["source_metadata_coverage"]["ticket_number"]["ticket_rows"] == 1
+    assert summary["source_metadata_coverage"]["ticket_number"]["detail_rows"] == 0
+    assert summary["source_metadata_coverage"]["default_contract_name"]["detail_rows"] == 1
+    assert summary["source_metadata_coverage"]["default_contract_name"]["status"] == "materialized"
     assert summary["label_source_summary"]["account_label_source"]["raw"]["chunks"] == 1
     assert summary["label_source_summary"]["user_label_source"]["email"]["chunks"] == 1
     assert summary["label_source_summary"]["technician_label_source"]["joined"]["chunks"] == 1
@@ -232,4 +291,6 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     assert manifest["metadata_coverage"]["resolution_summary"]["chunks"] == 1
     assert manifest["document_metadata_coverage"]["resolution_summary"]["documents"] == 1
     assert manifest["metadata_coverage"]["account_location_name"]["chunks"] == 1
+    assert manifest["source_metadata_coverage"]["default_contract_name"]["detail_rows"] == 1
+    assert manifest["source_metadata_coverage"]["support_group_name"]["status"] == "upstream_absent"
     assert manifest["label_source_summary"]["account_label_source"]["raw"]["chunks"] == 1

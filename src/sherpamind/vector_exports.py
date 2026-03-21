@@ -217,6 +217,155 @@ def _present(value: Any) -> bool:
     return value is not None and value != ""
 
 
+def _json_presence_clause(paths: list[str], *, kind: str = "text") -> str:
+    clauses = []
+    for path in paths:
+        if kind == "value":
+            clauses.append(f"json_type(raw_json, '{path}') IS NOT NULL")
+        else:
+            clauses.append(
+                "(json_type(raw_json, '{path}') IS NOT NULL AND TRIM(CAST(json_extract(raw_json, '{path}') AS TEXT)) != '')".format(path=path)
+            )
+    return " OR ".join(clauses) or "0"
+
+
+SOURCE_METADATA_FIELDS: dict[str, dict[str, Any]] = {
+    "support_group_name": {
+        "tickets": {"paths": ["$.support_group_name"], "kind": "text"},
+        "ticket_details": {"paths": ["$.support_group_name"], "kind": "text"},
+    },
+    "default_contract_name": {
+        "tickets": {"paths": ["$.default_contract_name"], "kind": "text"},
+        "ticket_details": {"paths": ["$.default_contract_name"], "kind": "text"},
+    },
+    "location_name": {
+        "tickets": {"paths": ["$.location_name"], "kind": "text"},
+        "ticket_details": {"paths": ["$.location_name"], "kind": "text"},
+    },
+    "account_location_name": {
+        "tickets": {"paths": ["$.account_location_name"], "kind": "text"},
+        "ticket_details": {"paths": ["$.account_location_name"], "kind": "text"},
+    },
+    "department_key": {
+        "tickets": {"paths": ["$.department_key"], "kind": "value"},
+        "ticket_details": {"paths": ["$.department_key"], "kind": "value"},
+    },
+    "ticket_number": {
+        "tickets": {"paths": ["$.number"], "kind": "text"},
+    },
+    "ticket_key": {
+        "tickets": {"paths": ["$.key"], "kind": "text"},
+    },
+    "technician_email": {
+        "tickets": {"paths": ["$.technician_email", "$.tech_email"], "kind": "text"},
+    },
+    "user_phone": {
+        "tickets": {"paths": ["$.user_phone"], "kind": "text"},
+        "ticket_details": {"paths": ["$.user_phone"], "kind": "text"},
+    },
+    "user_created_email": {
+        "tickets": {"paths": ["$.user_created_email"], "kind": "text"},
+        "ticket_details": {"paths": ["$.user_created_email"], "kind": "text"},
+    },
+    "technician_type": {
+        "tickets": {"paths": ["$.tech_type"], "kind": "text"},
+        "ticket_details": {"paths": ["$.tech_type"], "kind": "text"},
+    },
+    "days_old_in_minutes": {
+        "tickets": {"paths": ["$.days_old_in_minutes"], "kind": "value"},
+        "ticket_details": {"paths": ["$.days_old_in_minutes"], "kind": "value"},
+    },
+    "waiting_minutes": {
+        "tickets": {"paths": ["$.waiting_minutes"], "kind": "value"},
+        "ticket_details": {"paths": ["$.waiting_minutes"], "kind": "value"},
+    },
+    "confirmed_by_name": {
+        "tickets": {"paths": ["$.confirmed_by_name"], "kind": "text"},
+        "ticket_details": {"paths": ["$.confirmed_by_name"], "kind": "text"},
+    },
+    "confirmed_date": {
+        "tickets": {"paths": ["$.confirmed_date"], "kind": "text"},
+        "ticket_details": {"paths": ["$.confirmed_date"], "kind": "text"},
+    },
+    "is_via_email_parser": {
+        "tickets": {"paths": ["$.is_via_email_parser"], "kind": "value"},
+        "ticket_details": {"paths": ["$.is_via_email_parser"], "kind": "value"},
+    },
+    "is_handle_by_callcentre": {
+        "tickets": {"paths": ["$.is_handle_by_callcentre"], "kind": "value"},
+        "ticket_details": {"paths": ["$.is_handle_by_callcentre"], "kind": "value"},
+    },
+    "is_waiting_on_response": {
+        "ticket_details": {"paths": ["$.is_waiting_on_response"], "kind": "value"},
+    },
+    "is_resolved": {
+        "ticket_details": {"paths": ["$.is_resolved"], "kind": "value"},
+    },
+    "is_confirmed": {
+        "ticket_details": {"paths": ["$.is_confirmed"], "kind": "value"},
+    },
+}
+
+
+def _get_source_metadata_coverage(
+    db_path: Path,
+    document_metadata_coverage: dict[str, dict[str, float]],
+    metadata_coverage: dict[str, dict[str, float]],
+    total_documents: int,
+    total_chunks: int,
+) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    with connect(db_path) as conn:
+        for field, config in SOURCE_METADATA_FIELDS.items():
+            ticket_clause = _json_presence_clause(
+                config.get("tickets", {}).get("paths", []),
+                kind=config.get("tickets", {}).get("kind", "text"),
+            ) if config.get("tickets") else "0"
+            detail_clause = _json_presence_clause(
+                config.get("ticket_details", {}).get("paths", []),
+                kind=config.get("ticket_details", {}).get("kind", "text"),
+            ) if config.get("ticket_details") else "0"
+            counts = conn.execute(
+                f"""
+                SELECT
+                    (SELECT COUNT(DISTINCT id) FROM tickets WHERE {ticket_clause}) AS ticket_rows,
+                    (SELECT COUNT(DISTINCT ticket_id) FROM ticket_details WHERE {detail_clause}) AS detail_rows,
+                    (
+                        SELECT COUNT(*)
+                        FROM (
+                            SELECT id AS ticket_id FROM tickets WHERE {ticket_clause}
+                            UNION
+                            SELECT ticket_id FROM ticket_details WHERE {detail_clause}
+                        )
+                    ) AS source_documents
+                """
+            ).fetchone()
+            source_documents = int(counts["source_documents"] or 0)
+            materialized_documents = int(document_metadata_coverage.get(field, {}).get("documents", 0) or 0)
+            materialized_chunks = int(metadata_coverage.get(field, {}).get("chunks", 0) or 0)
+            if source_documents == 0:
+                status = "upstream_absent"
+            elif materialized_documents == 0:
+                status = "missing_materialization"
+            elif materialized_documents < source_documents:
+                status = "partial_materialization"
+            else:
+                status = "materialized"
+            summary[field] = {
+                "ticket_rows": int(counts["ticket_rows"] or 0),
+                "detail_rows": int(counts["detail_rows"] or 0),
+                "source_documents": source_documents,
+                "source_document_ratio": round((source_documents / total_documents), 4) if total_documents else 0.0,
+                "materialized_documents": materialized_documents,
+                "materialized_document_ratio": round((materialized_documents / total_documents), 4) if total_documents else 0.0,
+                "materialized_chunks": materialized_chunks,
+                "materialized_chunk_ratio": round((materialized_chunks / total_chunks), 4) if total_chunks else 0.0,
+                "promotion_gap_documents": max(source_documents - materialized_documents, 0),
+                "status": status,
+            }
+    return summary
+
+
 def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> dict[str, Any]:
     initialize_db(db_path)
     rows = _load_rows(db_path, limit=limit)
@@ -322,6 +471,14 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
             for key, value in sorted(counts.items())
         }
 
+    source_metadata_coverage = _get_source_metadata_coverage(
+        db_path,
+        document_metadata_coverage=document_metadata_coverage,
+        metadata_coverage=metadata_coverage,
+        total_documents=len(document_ids),
+        total_chunks=chunk_count,
+    )
+
     return {
         "chunk_count": chunk_count,
         "document_count": len(document_ids),
@@ -377,6 +534,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         },
         "metadata_coverage": metadata_coverage,
         "document_metadata_coverage": document_metadata_coverage,
+        "source_metadata_coverage": source_metadata_coverage,
         "label_source_summary": label_source_summary,
         "vector_index": vector,
         "materialization": {

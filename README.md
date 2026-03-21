@@ -82,6 +82,7 @@ SherpaMind currently covers five major areas:
    - reports dataset counts and freshness
    - reports enrichment coverage and retrieval coverage
    - reports retrieval-metadata readiness across the materialized document layer
+   - reports source-vs-materialized coverage for source-backed metadata so thin fields can be distinguished as upstream absence vs backend promotion drift
    - reports API usage and hourly budget pressure
    - reports vector index readiness and drift
    - generates public Markdown artifacts for lightweight inspection
@@ -501,6 +502,7 @@ Vector and retrieval readiness reporting includes:
 - chunk-size quality metrics (avg/min/max, tiny, over-target)
 - filter-facet inventories for accounts, technicians, statuses, priorities, and categories
 - chunk-level and document-level metadata coverage for cleaned subject/issue summary/next-step/action-cue/log-type/resolution/attachment readiness plus class/submission/resolution taxonomy, human-readable department labels, account-location, confirmation, and intake-channel metadata
+- source-vs-materialized coverage for source-backed metadata fields such as support group, contract, location, department key, ticket identifiers, timing flags, and confirmation fields, including whether low coverage reflects upstream absence or backend materialization drift
 - chunk-topology readiness signals such as chunks-per-document and multi-chunk-document ratio so vector-sidecar consumers can reason about chunk fanout cleanly
 - freshness windows for materialized chunks vs ticket update timestamps
 
