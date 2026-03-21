@@ -1,9 +1,11 @@
+import json
+import time
 from pathlib import Path
 
-from sherpamind.db import initialize_db, record_api_request_event, replace_ticket_document_chunks, replace_ticket_documents
+from sherpamind.db import initialize_db, record_api_request_event, replace_ticket_document_chunks, replace_ticket_documents, upsert_tickets
 from sherpamind.service_runtime import run_pending_tasks
 from sherpamind.settings import Settings
-from sherpamind.vector_index import get_vector_index_status
+from sherpamind.vector_index import build_vector_index, get_vector_index_status
 
 
 def make_settings(tmp_path: Path) -> Settings:
@@ -106,3 +108,188 @@ def test_run_pending_tasks_builds_vector_index(monkeypatch, tmp_path: Path) -> N
     runtime_status_path = tmp_path / '.SherpaMind' / 'public' / 'docs' / 'runtime' / 'status.md'
     assert runtime_status_path.exists()
     assert 'Vector index status' in runtime_status_path.read_text()
+
+
+def test_run_pending_tasks_forces_local_retrieval_repair_when_materialization_is_stale(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
+    settings = make_settings(tmp_path)
+    settings = Settings(
+        **{
+            **settings.__dict__,
+            'service_vector_refresh_every_seconds': 999999,
+            'service_doctor_every_seconds': 999999,
+        }
+    )
+    initialize_db(settings.db_path)
+    upsert_tickets(
+        settings.db_path,
+        [{
+            'id': 999,
+            'account_id': 1,
+            'user_id': 2,
+            'tech_id': 3,
+            'subject': 'Stale printer issue',
+            'status': 'Open',
+            'priority_name': 'High',
+            'creation_category_name': 'Hardware',
+            'created_time': '2026-03-19T01:00:00Z',
+            'updated_time': '2026-03-19T03:00:00Z',
+            'account_name': 'Acme',
+            'user_name': 'Alice',
+            'tech_name': 'Tech One',
+            'plain_initial_post': 'Printer is still broken',
+        }],
+        synced_at='2026-03-19T01:00:00Z',
+    )
+    replace_ticket_documents(
+        settings.db_path,
+        [{
+            'doc_id': 'ticket:999',
+            'ticket_id': 999,
+            'status': 'Open',
+            'account': 'Acme',
+            'user_name': 'Alice',
+            'technician': 'Tech One',
+            'updated_at': '2026-03-19T03:00:00Z',
+            'text': 'stale doc',
+            'metadata': {'materialization_version': 3},
+            'content_hash': 'doc-stale',
+        }],
+        synced_at='2026-03-19T01:00:00Z',
+    )
+    replace_ticket_document_chunks(
+        settings.db_path,
+        [{
+            'chunk_id': 'ticket:999:chunk:0',
+            'doc_id': 'ticket:999',
+            'ticket_id': 999,
+            'chunk_index': 0,
+            'text': 'stale doc',
+            'content_hash': 'chunk-stale',
+        }],
+        synced_at='2026-03-19T01:00:00Z',
+    )
+
+    service_state_path = tmp_path / '.SherpaMind' / 'private' / 'service-state.json'
+    service_state_path.parent.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    service_state_path.write_text(json.dumps({
+        'started_at': '2026-03-19T00:00:00Z',
+        'tasks': {
+            'retrieval_artifacts': {'last_run_epoch': now},
+            'public_snapshot': {'last_run_epoch': now},
+            'vector_refresh': {'last_run_epoch': now},
+            'runtime_status': {'last_run_epoch': now},
+        },
+    }))
+
+    result = run_pending_tasks(settings)
+    by_task = {item['task']: item for item in result['results']}
+    assert by_task['retrieval_artifacts']['status'] == 'ok'
+    assert by_task['retrieval_artifacts']['forced'] is True
+    assert by_task['public_snapshot']['status'] == 'ok'
+    assert by_task['public_snapshot']['forced'] is True
+    assert by_task['vector_refresh']['status'] == 'ok'
+    assert by_task['vector_refresh']['forced'] is True
+    assert by_task['runtime_status']['status'] == 'ok'
+    assert by_task['runtime_status']['forced'] is True
+
+    vector_status = get_vector_index_status(settings.db_path)
+    assert vector_status['indexed_chunks'] == 1
+    assert vector_status['missing_index_rows'] == 0
+    assert vector_status['outdated_content_rows'] == 0
+
+
+def test_run_pending_tasks_forces_vector_repair_when_index_drifts(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
+    settings = make_settings(tmp_path)
+    settings = Settings(
+        **{
+            **settings.__dict__,
+            'service_vector_refresh_every_seconds': 999999,
+            'service_doctor_every_seconds': 999999,
+        }
+    )
+    initialize_db(settings.db_path)
+    upsert_tickets(
+        settings.db_path,
+        [{
+            'id': 101,
+            'account_id': 1,
+            'user_id': 2,
+            'tech_id': 3,
+            'subject': 'Printer issue',
+            'status': 'Open',
+            'priority_name': 'High',
+            'creation_category_name': 'Hardware',
+            'created_time': '2026-03-19T01:00:00Z',
+            'updated_time': '2026-03-19T03:00:00Z',
+            'account_name': 'Acme',
+            'user_name': 'Alice',
+            'tech_name': 'Tech One',
+        }],
+        synced_at='2026-03-19T01:00:00Z',
+    )
+    replace_ticket_documents(
+        settings.db_path,
+        [{
+            'doc_id': 'ticket:101',
+            'ticket_id': 101,
+            'status': 'Open',
+            'account': 'Acme',
+            'user_name': 'Alice',
+            'technician': 'Tech One',
+            'updated_at': '2026-03-19T03:00:00Z',
+            'text': 'Printer issue in office',
+            'metadata': {'materialization_version': 4, 'priority': 'High', 'category': 'Hardware'},
+            'content_hash': 'doc-a',
+        }],
+        synced_at='2026-03-19T01:00:00Z',
+    )
+    replace_ticket_document_chunks(
+        settings.db_path,
+        [{
+            'chunk_id': 'ticket:101:chunk:0',
+            'doc_id': 'ticket:101',
+            'ticket_id': 101,
+            'chunk_index': 0,
+            'text': 'Printer issue in office',
+            'content_hash': 'chunk-a',
+        }],
+        synced_at='2026-03-19T01:00:00Z',
+    )
+    build_vector_index(settings.db_path)
+    replace_ticket_document_chunks(
+        settings.db_path,
+        [{
+            'chunk_id': 'ticket:101:chunk:0',
+            'doc_id': 'ticket:101',
+            'ticket_id': 101,
+            'chunk_index': 0,
+            'text': 'Printer issue in office and warehouse',
+            'content_hash': 'chunk-b',
+        }],
+        synced_at='2026-03-19T02:00:00Z',
+    )
+
+    service_state_path = tmp_path / '.SherpaMind' / 'private' / 'service-state.json'
+    service_state_path.parent.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    service_state_path.write_text(json.dumps({
+        'started_at': '2026-03-19T00:00:00Z',
+        'tasks': {
+            'vector_refresh': {'last_run_epoch': now},
+            'runtime_status': {'last_run_epoch': now},
+        },
+    }))
+
+    result = run_pending_tasks(settings)
+    by_task = {item['task']: item for item in result['results']}
+    assert by_task['vector_refresh']['status'] == 'ok'
+    assert by_task['vector_refresh']['forced'] is True
+    assert by_task['runtime_status']['status'] == 'ok'
+    assert by_task['runtime_status']['forced'] is True
+
+    vector_status = get_vector_index_status(settings.db_path)
+    assert vector_status['missing_index_rows'] == 0
+    assert vector_status['outdated_content_rows'] == 0
