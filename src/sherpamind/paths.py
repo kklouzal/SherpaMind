@@ -20,6 +20,7 @@ def discover_workspace_root(*, repo_root: Path | None = None, cwd: Path | None =
 class SherpaMindPaths:
     workspace_root: Path
     root: Path
+    private_root: Path
     config_root: Path
     secrets_root: Path
     data_root: Path
@@ -37,7 +38,6 @@ class SherpaMindPaths:
     service_state_file: Path
     service_log: Path
     runtime_venv: Path
-    legacy_private_root: Path
     legacy_env_file: Path
 
 
@@ -47,19 +47,20 @@ SECRET_FILE_MODE = 0o600
 def resolve_paths() -> SherpaMindPaths:
     workspace_root = discover_workspace_root()
     root = workspace_root / ".SherpaMind"
-    config_root = root / "config"
-    secrets_root = root / "secrets"
-    data_root = root / "data"
-    state_root = root / "state"
-    logs_root = root / "logs"
-    runtime_root = root / "runtime"
+    private_root = root / "private"
+    config_root = private_root / "config"
+    secrets_root = private_root / "secrets"
+    data_root = private_root / "data"
+    state_root = private_root / "state"
+    logs_root = private_root / "logs"
+    runtime_root = private_root / "runtime"
     public_root = root / "public"
     exports_root = public_root / "exports"
     docs_root = public_root / "docs"
-    legacy_private_root = root / "private"
     return SherpaMindPaths(
         workspace_root=workspace_root,
         root=root,
+        private_root=private_root,
         config_root=config_root,
         secrets_root=secrets_root,
         data_root=data_root,
@@ -77,8 +78,7 @@ def resolve_paths() -> SherpaMindPaths:
         service_state_file=state_root / "service-state.json",
         service_log=logs_root / "service.log",
         runtime_venv=runtime_root / "venv",
-        legacy_private_root=legacy_private_root,
-        legacy_env_file=legacy_private_root / "config.env",
+        legacy_env_file=private_root / "config.env",
     )
 
 
@@ -108,6 +108,7 @@ def _write_settings_file(path: Path, values: dict[str, str]) -> None:
     ordered_keys = [
         "SHERPADESK_API_BASE_URL",
         "SHERPADESK_ORG_KEY",
+        "SHERPAMIND_INSTANCE_KEY",
         "SHERPADESK_INSTANCE_KEY",
         "SHERPAMIND_NOTIFY_CHANNEL",
         "SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS",
@@ -137,8 +138,8 @@ def _write_settings_file(path: Path, values: dict[str, str]) -> None:
     ]
     lines = [
         "# SherpaMind staged non-secret settings",
-        "# Runtime state lives under .SherpaMind/ outside the skill tree.",
-        "# Secrets are stored separately under .SherpaMind/secrets/.",
+        "# Runtime state lives under .SherpaMind/private/ outside the skill tree.",
+        "# Secrets are stored separately under .SherpaMind/private/secrets/.",
     ]
     for key in ordered_keys:
         if key in values:
@@ -149,11 +150,7 @@ def _write_settings_file(path: Path, values: dict[str, str]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _migrate_legacy_layout(paths: SherpaMindPaths) -> None:
-    private_root = paths.legacy_private_root
-    if not private_root.exists():
-        return
-
+def _merge_legacy_settings_into_current(paths: SherpaMindPaths) -> None:
     legacy_values = _read_env_file(paths.legacy_env_file)
     current_settings = _read_env_file(paths.settings_file)
     changed_settings = False
@@ -193,38 +190,66 @@ def _migrate_legacy_layout(paths: SherpaMindPaths) -> None:
             changed_settings = True
     if changed_settings or (legacy_values and not paths.settings_file.exists()):
         _write_settings_file(paths.settings_file, current_settings)
-
     if not paths.api_key_file.exists() and legacy_values.get("SHERPADESK_API_KEY"):
         _write_secret_file(paths.api_key_file, legacy_values["SHERPADESK_API_KEY"])
     if not paths.api_user_file.exists() and legacy_values.get("SHERPADESK_API_USER"):
         _write_secret_file(paths.api_user_file, legacy_values["SHERPADESK_API_USER"])
 
-    file_moves: list[tuple[Path, Path]] = [
-        (private_root / "sherpamind.sqlite3", paths.db_path),
-        (private_root / "watch_state.json", paths.watch_state_path),
-        (private_root / "service-state.json", paths.service_state_file),
-        (private_root / "logs" / "service.log", paths.service_log),
-    ]
-    for source, target in file_moves:
-        if source.exists() and not target.exists():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(source), str(target))
 
-    legacy_runtime = private_root / "runtime"
-    if legacy_runtime.exists():
-        if not any(paths.runtime_root.iterdir()):
-            for child in sorted(legacy_runtime.iterdir()):
-                shutil.move(str(child), str(paths.runtime_root / child.name))
+def _move_if_missing(source: Path, target: Path) -> None:
+    if source.exists() and not target.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(target))
+
+
+def _move_children_if_target_empty(source_dir: Path, target_dir: Path) -> None:
+    if not source_dir.exists():
+        return
+    target_dir.mkdir(parents=True, exist_ok=True)
+    if any(target_dir.iterdir()):
+        return
+    for child in sorted(source_dir.iterdir()):
+        shutil.move(str(child), str(target_dir / child.name))
+    try:
+        source_dir.rmdir()
+    except OSError:
+        pass
+
+
+def _migrate_flat_layout_into_private(paths: SherpaMindPaths) -> None:
+    flat_to_private = [
+        (paths.root / "config", paths.config_root),
+        (paths.root / "secrets", paths.secrets_root),
+        (paths.root / "data", paths.data_root),
+        (paths.root / "state", paths.state_root),
+        (paths.root / "logs", paths.logs_root),
+        (paths.root / "runtime", paths.runtime_root),
+    ]
+    for source_dir, target_dir in flat_to_private:
+        if source_dir == target_dir:
+            continue
+        _move_children_if_target_empty(source_dir, target_dir)
+        if source_dir.exists() and not any(source_dir.iterdir()):
             try:
-                legacy_runtime.rmdir()
+                source_dir.rmdir()
             except OSError:
                 pass
+
+
+def _migrate_legacy_private_layout(paths: SherpaMindPaths) -> None:
+    _merge_legacy_settings_into_current(paths)
+    _move_if_missing(paths.private_root / "sherpamind.sqlite3", paths.db_path)
+    _move_if_missing(paths.private_root / "watch_state.json", paths.watch_state_path)
+    _move_if_missing(paths.private_root / "service-state.json", paths.service_state_file)
+    _move_if_missing(paths.private_root / "logs" / "service.log", paths.service_log)
+    _move_children_if_target_empty(paths.private_root / "runtime", paths.runtime_root)
 
 
 def ensure_path_layout() -> SherpaMindPaths:
     paths = resolve_paths()
     for path in [
         paths.root,
+        paths.private_root,
         paths.config_root,
         paths.secrets_root,
         paths.data_root,
@@ -236,7 +261,8 @@ def ensure_path_layout() -> SherpaMindPaths:
         paths.docs_root,
     ]:
         path.mkdir(parents=True, exist_ok=True)
-    _migrate_legacy_layout(paths)
+    _migrate_flat_layout_into_private(paths)
+    _migrate_legacy_private_layout(paths)
     if not paths.settings_file.exists():
         _write_settings_file(paths.settings_file, {"SHERPADESK_API_BASE_URL": "https://api.sherpadesk.com"})
     return paths

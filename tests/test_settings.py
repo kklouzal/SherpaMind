@@ -15,8 +15,8 @@ def test_load_settings_reads_request_controls(monkeypatch, tmp_path: Path) -> No
 def test_load_settings_defaults_paths(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
     settings = load_settings()
-    assert settings.db_path == tmp_path / ".SherpaMind" / "data" / "sherpamind.sqlite3"
-    assert settings.watch_state_path == tmp_path / ".SherpaMind" / "state" / "watch_state.json"
+    assert settings.db_path == tmp_path / ".SherpaMind" / "private" / "data" / "sherpamind.sqlite3"
+    assert settings.watch_state_path == tmp_path / ".SherpaMind" / "private" / "state" / "watch_state.json"
 
 
 def test_load_settings_reads_seed_controls(monkeypatch, tmp_path: Path) -> None:

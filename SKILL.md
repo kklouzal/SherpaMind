@@ -33,18 +33,18 @@ SherpaMind is not an instruction-only skill.
 
 When installed and configured for live use, it can:
 - create workspace-local runtime state under `.SherpaMind/`
-- create staged runtime dirs under `.SherpaMind/config/`, `.SherpaMind/secrets/`, `.SherpaMind/data/`, `.SherpaMind/state/`, `.SherpaMind/logs/`, `.SherpaMind/runtime/`, and `.SherpaMind/public/`
+- create staged runtime dirs under `.SherpaMind/private/config/`, `.SherpaMind/private/secrets/`, `.SherpaMind/private/data/`, `.SherpaMind/private/state/`, `.SherpaMind/private/logs/`, `.SherpaMind/private/runtime/`, and `.SherpaMind/public/`
 - create a local SQLite database and generated public artifacts
-- create a Python runtime venv under `.SherpaMind/runtime/venv`
+- create a Python runtime venv under `.SherpaMind/private/runtime/venv`
 - install Python dependencies from PyPI during bootstrap
-- store the SherpaDesk API key locally in `.SherpaMind/secrets/sherpadesk_api_key.txt`
-- optionally store a SherpaDesk API user hint in `.SherpaMind/secrets/sherpadesk_api_user.txt`
-- store non-secret connection/runtime settings in `.SherpaMind/config/settings.env`
+- store the SherpaDesk API key locally in `.SherpaMind/private/secrets/sherpadesk_api_key.txt`
+- optionally store a SherpaDesk API user hint in `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
+- store non-secret connection/runtime settings in `.SherpaMind/private/config/settings.env`
 - optionally install and run a **user-level** `systemd` background service
 
 Required live staged credentials/config for real SherpaDesk use:
-- staged API key under `.SherpaMind/secrets/sherpadesk_api_key.txt`
-- staged org/instance settings in `.SherpaMind/config/settings.env`
+- staged API key under `.SherpaMind/private/secrets/sherpadesk_api_key.txt`
+- staged org/instance settings in `.SherpaMind/private/config/settings.env`
 
 If the user only wants query guidance or offline inspection of an existing local dataset, do not imply that fresh credentials or service installation are unnecessary for live sync.
 

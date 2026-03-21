@@ -4,13 +4,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import subprocess
-import sys
 import venv
 
 
 DEFAULT_SETTINGS_TEMPLATE = """# SherpaMind staged non-secret settings
-# Runtime state lives under .SherpaMind/ outside the skill tree.
-# Secrets are stored separately under .SherpaMind/secrets/.
+# Runtime state lives under .SherpaMind/private/ outside the skill tree.
+# Secrets are stored separately under .SherpaMind/private/secrets/.
 SHERPADESK_API_BASE_URL=https://api.sherpadesk.com
 SHERPADESK_ORG_KEY=
 SHERPADESK_INSTANCE_KEY=
@@ -36,28 +35,32 @@ def sherpamind_root() -> Path:
     return workspace_root() / ".SherpaMind"
 
 
+def private_root() -> Path:
+    return sherpamind_root() / "private"
+
+
 def config_root() -> Path:
-    return sherpamind_root() / "config"
+    return private_root() / "config"
 
 
 def secrets_root() -> Path:
-    return sherpamind_root() / "secrets"
+    return private_root() / "secrets"
 
 
 def data_root() -> Path:
-    return sherpamind_root() / "data"
+    return private_root() / "data"
 
 
 def state_root() -> Path:
-    return sherpamind_root() / "state"
+    return private_root() / "state"
 
 
 def logs_root() -> Path:
-    return sherpamind_root() / "logs"
+    return private_root() / "logs"
 
 
 def runtime_root() -> Path:
-    return sherpamind_root() / "runtime"
+    return private_root() / "runtime"
 
 
 def public_root() -> Path:
@@ -83,6 +86,7 @@ def venv_python(venv_root: Path) -> Path:
 def ensure_layout() -> None:
     for path in [
         sherpamind_root(),
+        private_root(),
         config_root(),
         secrets_root(),
         data_root(),

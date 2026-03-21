@@ -14,17 +14,17 @@ For live use it can:
 - authenticate to the SherpaDesk API
 - create workspace-local runtime state under `.SherpaMind/`
 - create and maintain a local SQLite database plus generated public artifacts
-- create staged runtime dirs under `.SherpaMind/config/`, `.SherpaMind/secrets/`, `.SherpaMind/data/`, `.SherpaMind/state/`, `.SherpaMind/logs/`, `.SherpaMind/runtime/`, and `.SherpaMind/public/`
-- create a Python runtime venv under `.SherpaMind/runtime/venv`
+- create staged runtime dirs under `.SherpaMind/private/config/`, `.SherpaMind/private/secrets/`, `.SherpaMind/private/data/`, `.SherpaMind/private/state/`, `.SherpaMind/private/logs/`, `.SherpaMind/private/runtime/`, and `.SherpaMind/public/`
+- create a Python runtime venv under `.SherpaMind/private/runtime/venv`
 - install Python packages from PyPI during bootstrap
-- store the SherpaDesk API key locally in `.SherpaMind/secrets/sherpadesk_api_key.txt`
-- optionally store a SherpaDesk API user hint in `.SherpaMind/secrets/sherpadesk_api_user.txt`
-- store non-secret connection/runtime settings in `.SherpaMind/config/settings.env`
+- store the SherpaDesk API key locally in `.SherpaMind/private/secrets/sherpadesk_api_key.txt`
+- optionally store a SherpaDesk API user hint in `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
+- store non-secret connection/runtime settings in `.SherpaMind/private/config/settings.env`
 - optionally install and run a **user-level** `systemd` background service for ongoing sync/enrichment
 
 Primary live staged credentials/config required:
-- API key file: `.SherpaMind/secrets/sherpadesk_api_key.txt`
-- org/instance settings: `.SherpaMind/config/settings.env`
+- API key file: `.SherpaMind/private/secrets/sherpadesk_api_key.txt`
+- org/instance settings: `.SherpaMind/private/config/settings.env`
 
 Persistent behavior is intentionally workspace-local and user-scoped; SherpaMind does not require system-wide privilege for its normal service model.
 
@@ -132,7 +132,7 @@ SherpaMind is not just a paper design. It has been exercised against a real read
 Observed capability evidence includes:
 
 - successful live authentication against the SherpaDesk API
-- successful local persistence into the canonical SQLite store at `.SherpaMind/data/sherpamind.sqlite3`
+- successful local persistence into the canonical SQLite store at `.SherpaMind/private/data/sherpamind.sqlite3`
 - successful live ingestion of a non-trivial dataset including **43 accounts**, **495 users**, **2 technicians**, and **12,041 tickets** during observed runs
 - successful bounded detail enrichment producing **114 ticket details**, **752 ticket logs**, and **97 attachment metadata rows** during observed runs
 - successful retrieval materialization producing **12,040 ticket documents** and **12,081 ticket document chunks** during observed runs
@@ -202,17 +202,17 @@ For distribution, the important rule is that the repo root contains a valid `SKI
 
 SherpaMind uses a workspace-local split storage model:
 
-- `.SherpaMind/config/`
+- `.SherpaMind/private/config/`
   - staged non-secret connection/runtime settings
-- `.SherpaMind/secrets/`
+- `.SherpaMind/private/secrets/`
   - staged API key / optional API user secret files
-- `.SherpaMind/data/`
+- `.SherpaMind/private/data/`
   - canonical SQLite database
-- `.SherpaMind/state/`
+- `.SherpaMind/private/state/`
   - watch state, service state, sync-progress state
-- `.SherpaMind/logs/`
+- `.SherpaMind/private/logs/`
   - local service logs
-- `.SherpaMind/runtime/`
+- `.SherpaMind/private/runtime/`
   - runtime venv and other purely local execution artifacts
 - `.SherpaMind/public/`
   - derived Markdown artifacts for OpenClaw/human inspection
@@ -477,13 +477,13 @@ When SherpaMind is installed under an OpenClaw `skills/` directory, the default 
 
 This creates the main workspace-local layout:
 
-- `.SherpaMind/config/settings.env`
-- `.SherpaMind/secrets/sherpadesk_api_key.txt`
-- `.SherpaMind/secrets/sherpadesk_api_user.txt`
-- `.SherpaMind/data/sherpamind.sqlite3`
-- `.SherpaMind/state/watch_state.json`
-- `.SherpaMind/logs/service.log`
-- `.SherpaMind/runtime/venv`
+- `.SherpaMind/private/config/settings.env`
+- `.SherpaMind/private/secrets/sherpadesk_api_key.txt`
+- `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
+- `.SherpaMind/private/data/sherpamind.sqlite3`
+- `.SherpaMind/private/state/watch_state.json`
+- `.SherpaMind/private/logs/service.log`
+- `.SherpaMind/private/runtime/venv`
 - `.SherpaMind/public/exports`
 - `.SherpaMind/public/docs`
 

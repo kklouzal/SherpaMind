@@ -72,8 +72,8 @@ def _write_key_value_file(path: Path, values: dict[str, str]) -> None:
     ]
     lines = [
         "# SherpaMind staged non-secret settings",
-        "# Runtime state lives under .SherpaMind/ outside the skill tree.",
-        "# Secrets are stored separately under .SherpaMind/secrets/.",
+        "# Runtime state lives under .SherpaMind/private/ outside the skill tree.",
+        "# Secrets are stored separately under .SherpaMind/private/secrets/.",
     ]
     for key in ordered_keys:
         if key in values:

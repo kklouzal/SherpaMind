@@ -36,7 +36,7 @@ class DeltaSyncResult:
 
 def _missing_api_config_message() -> str:
     return (
-        "Database initialized, but live SherpaDesk ingest is still blocked until a staged SherpaDesk API key exists under .SherpaMind/secrets/, "
+        "Database initialized, but live SherpaDesk ingest is still blocked until a staged SherpaDesk API key exists under .SherpaMind/private/secrets/, "
         "organization/instance access is confirmed, and the real endpoint contract is verified."
     )
 

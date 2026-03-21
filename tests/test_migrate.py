@@ -18,8 +18,8 @@ def test_migrate_legacy_state_copies_state_files(monkeypatch, tmp_path: Path) ->
     result = migrate_legacy_state(tmp_path)
 
     assert result.status == "ok"
-    assert (tmp_path / ".SherpaMind" / "data" / "sherpamind.sqlite3").exists()
-    assert (tmp_path / ".SherpaMind" / "state" / "watch_state.json").exists()
+    assert (tmp_path / ".SherpaMind" / "private" / "data" / "sherpamind.sqlite3").exists()
+    assert (tmp_path / ".SherpaMind" / "private" / "state" / "watch_state.json").exists()
     assert len(result.stats["copied"]) == 2
 
 
@@ -33,7 +33,7 @@ def test_migrate_legacy_state_replaces_empty_destination_sqlite(monkeypatch, tmp
     conn.commit()
     conn.close()
 
-    destination = tmp_path / ".SherpaMind" / "data"
+    destination = tmp_path / ".SherpaMind" / "private" / "data"
     destination.mkdir(parents=True, exist_ok=True)
     sqlite3.connect(destination / "sherpamind.sqlite3").close()
 
@@ -53,5 +53,5 @@ def test_archive_legacy_state_moves_repo_local_state(monkeypatch, tmp_path: Path
     result = archive_legacy_state(tmp_path)
 
     assert result.status == "ok"
-    assert (tmp_path / ".SherpaMind" / "state" / "legacy" / "sherpamind.sqlite3").exists()
-    assert (tmp_path / ".SherpaMind" / "state" / "legacy" / "watch_state.json").exists()
+    assert (tmp_path / ".SherpaMind" / "private" / "state" / "legacy" / "sherpamind.sqlite3").exists()
+    assert (tmp_path / ".SherpaMind" / "private" / "state" / "legacy" / "watch_state.json").exists()

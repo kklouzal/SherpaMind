@@ -45,11 +45,11 @@ SherpaMind needs all three behaviors, so the durable design is **SQLite + retrie
 - `ingest_runs`
 
 ### Adjacent local state
-- `.SherpaMind/config/settings.env`
-- `.SherpaMind/secrets/sherpadesk_api_key.txt`
-- `.SherpaMind/secrets/sherpadesk_api_user.txt`
-- `.SherpaMind/state/watch_state.json`
-- `.SherpaMind/runtime/venv`
+- `.SherpaMind/private/config/settings.env`
+- `.SherpaMind/private/secrets/sherpadesk_api_key.txt`
+- `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
+- `.SherpaMind/private/state/watch_state.json`
+- `.SherpaMind/private/runtime/venv`
 - `.SherpaMind/public/exports/`
 - `.SherpaMind/public/docs/`
 

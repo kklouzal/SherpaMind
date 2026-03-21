@@ -7,12 +7,12 @@ Use this when SherpaMind is being installed, reviewed for portability, or prepar
 Turn this repo into a working SherpaMind installation without storing runtime state inside the skill tree.
 
 Default runtime layout lives under the workspace root:
-- `.SherpaMind/config/`
-- `.SherpaMind/secrets/`
-- `.SherpaMind/data/`
-- `.SherpaMind/state/`
-- `.SherpaMind/logs/`
-- `.SherpaMind/runtime/`
+- `.SherpaMind/private/config/`
+- `.SherpaMind/private/secrets/`
+- `.SherpaMind/private/data/`
+- `.SherpaMind/private/state/`
+- `.SherpaMind/private/logs/`
+- `.SherpaMind/private/runtime/`
 - `.SherpaMind/public/`
 
 Override only when the operator explicitly wants a different workspace root.

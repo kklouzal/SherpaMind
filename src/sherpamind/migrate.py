@@ -117,6 +117,6 @@ def archive_legacy_state(legacy_root: Path) -> LegacyArchiveResult:
 
     return LegacyArchiveResult(
         status="ok",
-        message="Legacy SherpaMind repo-local state archived into .SherpaMind/state/legacy.",
+        message="Legacy SherpaMind repo-local state archived into .SherpaMind/private/state/legacy.",
         stats={"moved": moved, "skipped": skipped, "archive_root": str(archive_root)},
     )

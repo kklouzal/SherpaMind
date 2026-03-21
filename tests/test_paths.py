@@ -7,11 +7,11 @@ def test_resolve_paths_uses_workspace_root(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
     paths = resolve_paths()
     assert paths.root == tmp_path / ".SherpaMind"
-    assert paths.config_root == tmp_path / ".SherpaMind" / "config"
-    assert paths.secrets_root == tmp_path / ".SherpaMind" / "secrets"
-    assert paths.data_root == tmp_path / ".SherpaMind" / "data"
-    assert paths.state_root == tmp_path / ".SherpaMind" / "state"
-    assert paths.runtime_venv == tmp_path / ".SherpaMind" / "runtime" / "venv"
+    assert paths.config_root == tmp_path / ".SherpaMind" / "private" / "config"
+    assert paths.secrets_root == tmp_path / ".SherpaMind" / "private" / "secrets"
+    assert paths.data_root == tmp_path / ".SherpaMind" / "private" / "data"
+    assert paths.state_root == tmp_path / ".SherpaMind" / "private" / "state"
+    assert paths.runtime_venv == tmp_path / ".SherpaMind" / "private" / "runtime" / "venv"
 
 
 def test_ensure_path_layout_creates_directories(monkeypatch, tmp_path: Path) -> None:

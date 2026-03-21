@@ -6,7 +6,7 @@ from sherpamind.observability import generate_runtime_status_artifacts
 
 def test_generate_runtime_status_artifacts(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
-    db = tmp_path / '.SherpaMind' / 'data' / 'sherpamind.sqlite3'
+    db = tmp_path / '.SherpaMind' / 'private' / 'data' / 'sherpamind.sqlite3'
     initialize_db(db)
     result = generate_runtime_status_artifacts(db)
     assert result['status'] == 'ok'

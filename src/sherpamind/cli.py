@@ -74,7 +74,7 @@ def _json_ready(value):
 def _build_client() -> SherpaDeskClient:
     settings = load_settings()
     if not settings.api_key:
-        raise typer.BadParameter("SherpaDesk API key is required for live API commands. Stage it in .SherpaMind/secrets/sherpadesk_api_key.txt or use `stage-api-key`.")
+        raise typer.BadParameter("SherpaDesk API key is required for live API commands. Stage it in .SherpaMind/private/secrets/sherpadesk_api_key.txt or use `stage-api-key`.")
     return SherpaDeskClient(
         api_base_url=settings.api_base_url,
         api_key=settings.api_key,
@@ -151,7 +151,7 @@ def configure(
                 "SHERPADESK_INSTANCE_KEY": instance_key,
             }.items() if value is not None
         ],
-        "note": "Non-secret settings were updated. Stage secrets separately under .SherpaMind/secrets/.",
+        "note": "Non-secret settings were updated. Stage secrets separately under .SherpaMind/private/secrets/.",
     }, indent=2))
 
 
