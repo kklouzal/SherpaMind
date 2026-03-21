@@ -1,6 +1,6 @@
 ---
 name: sherpamind
-description: "Use for SherpaDesk-related requests: ticket lookup, support-history retrieval, account/user/technician analysis, stale-ticket review, workload questions, operational reporting, and open-ended natural-language questions about SherpaDesk data. Trigger when the user mentions SherpaDesk or asks about tickets, support issues, clients/accounts, technicians, resolution history, recurring incidents, backlog, response timing, or similar support-operations analysis."
+description: "Use for SherpaDesk-related requests: ticket lookup, support-history retrieval, account/user/technician analysis, stale-ticket review, workload questions, operational reporting, and open-ended natural-language questions about SherpaDesk data. This skill is a local SherpaDesk backend plus OpenClaw query layer: it requires SherpaDesk API credentials for live setup, creates workspace-local runtime state under `.SherpaMind/`, and may install an optional user-level background service. Trigger when the user mentions SherpaDesk or asks about tickets, support issues, clients/accounts, technicians, resolution history, recurring incidents, backlog, response timing, or similar support-operations analysis."
 ---
 
 # SherpaMind
@@ -25,6 +25,25 @@ python3 scripts/run.py <command> [args...]
 
 Do not invent alternate runtime paths.
 Do not treat OpenClaw as the background scheduler for this backend.
+
+## Transparency and operator expectations
+
+SherpaMind is not an instruction-only skill.
+
+When installed and configured for live use, it can:
+- create workspace-local runtime state under `.SherpaMind/`
+- create a local SQLite database and generated public artifacts
+- create a Python runtime venv under `.SherpaMind/private/runtime/venv`
+- install Python dependencies from PyPI during bootstrap
+- store SherpaDesk credentials locally in `.SherpaMind/private/config.env`
+- optionally install and run a **user-level** `systemd` background service
+
+Required live credentials/config for real SherpaDesk use:
+- `SHERPADESK_API_KEY`
+- `SHERPADESK_ORG_KEY`
+- `SHERPADESK_INSTANCE_KEY`
+
+If the user only wants query guidance or offline inspection of an existing local dataset, do not imply that fresh credentials or service installation are unnecessary for live sync.
 
 ## Choose the lightest path that answers the question
 

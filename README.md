@@ -6,6 +6,26 @@ SherpaMind is a local-first SherpaDesk ingest, sync, enrichment, retrieval-prepa
 
 It keeps canonical SherpaDesk data in SQLite, derives rebuildable retrieval artifacts from that data, runs background maintenance through a local Python service, and exposes a CLI for sync, observability, analysis, and search.
 
+## Transparency summary
+
+SherpaMind is a real local backend, not just a passive instruction skill.
+
+For live use it can:
+- authenticate to the SherpaDesk API
+- create workspace-local runtime state under `.SherpaMind/`
+- create and maintain a local SQLite database plus generated public artifacts
+- create a Python runtime venv under `.SherpaMind/private/runtime/venv`
+- install Python packages from PyPI during bootstrap
+- store SherpaDesk credentials locally in `.SherpaMind/private/config.env`
+- optionally install and run a **user-level** `systemd` background service for ongoing sync/enrichment
+
+Primary live credentials/config required:
+- `SHERPADESK_API_KEY`
+- `SHERPADESK_ORG_KEY`
+- `SHERPADESK_INSTANCE_KEY`
+
+Persistent behavior is intentionally workspace-local and user-scoped; SherpaMind does not require system-wide privilege for its normal service model.
+
 ## Project stance
 
 SherpaMind follows a strict split:
