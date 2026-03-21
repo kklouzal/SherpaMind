@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sherpamind.settings import load_settings, write_config_env
+from sherpamind.settings import load_settings, stage_api_key, stage_connection_settings
 
 
 def test_load_settings_reads_request_controls(monkeypatch, tmp_path: Path) -> None:
@@ -15,8 +15,8 @@ def test_load_settings_reads_request_controls(monkeypatch, tmp_path: Path) -> No
 def test_load_settings_defaults_paths(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
     settings = load_settings()
-    assert settings.db_path == tmp_path / ".SherpaMind" / "private" / "sherpamind.sqlite3"
-    assert settings.watch_state_path == tmp_path / ".SherpaMind" / "private" / "watch_state.json"
+    assert settings.db_path == tmp_path / ".SherpaMind" / "data" / "sherpamind.sqlite3"
+    assert settings.watch_state_path == tmp_path / ".SherpaMind" / "state" / "watch_state.json"
 
 
 def test_load_settings_reads_seed_controls(monkeypatch, tmp_path: Path) -> None:
@@ -43,10 +43,12 @@ def test_load_settings_reads_service_controls(monkeypatch, tmp_path: Path) -> No
     assert settings.cold_closed_bootstrap_pages_per_run == 9
 
 
-def test_write_config_env_is_loaded(monkeypatch, tmp_path: Path) -> None:
+def test_staged_settings_and_secrets_are_loaded(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
-    env_file = write_config_env(api_key="secret", org_key="org1", instance_key="inst1")
-    assert env_file.exists()
+    settings_file = stage_connection_settings(org_key="org1", instance_key="inst1")
+    api_key_file = stage_api_key(api_key="secret")
+    assert settings_file.exists()
+    assert api_key_file.exists()
     settings = load_settings()
     assert settings.api_key == "secret"
     assert settings.org_key == "org1"

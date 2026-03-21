@@ -174,7 +174,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "## Notes",
         "",
         "- This file is a derived public artifact for OpenClaw-friendly consumption.",
-        "- Canonical truth remains in `.SherpaMind/private/sherpamind.sqlite3`.",
+        "- Canonical truth remains in `.SherpaMind/data/sherpamind.sqlite3`.",
         "- Attachment bodies are not downloaded by default; this snapshot reflects metadata only.",
     ]
     snapshot_path.write_text("\n".join(snapshot_md) + "\n")
@@ -194,7 +194,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
             ("days_since_update", "Days Since Update"),
         ]),
         "",
-        "- Derived from the canonical SQLite store under `.SherpaMind/private/`.",
+        "- Derived from the canonical SQLite store under `.SherpaMind/data/`.",
     ]
     stale_open_path.write_text("\n".join(stale_open_md) + "\n")
 
@@ -419,7 +419,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
         f"- account docs directory: `{account_dir}` ({account_docs_written} docs)",
         f"- technician docs directory: `{technician_dir}` ({technician_docs_written} docs)",
         "",
-        "These are derived/public artifacts for OpenClaw-friendly access. Canonical truth remains in `.SherpaMind/private/`.",
+        "These are derived/public artifacts for OpenClaw-friendly access. Canonical truth remains in `.SherpaMind/data/`.",
         "The matching vector-ready export lives under `.SherpaMind/public/exports/embedding-ticket-chunks.jsonl` when generated.",
         "The matching vector export manifest lives under `.SherpaMind/public/exports/embedding-ticket-chunks.manifest.json` when generated.",
     ]

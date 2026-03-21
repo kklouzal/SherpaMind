@@ -22,7 +22,7 @@ def workspace_root() -> Path:
 
 
 def venv_python() -> Path:
-    return workspace_root() / ".SherpaMind" / "private" / "runtime" / "venv" / "bin" / "python"
+    return workspace_root() / ".SherpaMind" / "runtime" / "venv" / "bin" / "python"
 
 
 def ensure_bootstrap() -> Path:

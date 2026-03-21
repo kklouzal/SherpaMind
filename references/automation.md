@@ -47,17 +47,20 @@ The service should also repair stale derived retrieval artifacts when the curren
 ## Install vs update behavior
 
 ### First install
+- run `bootstrap-audit` first
 - bootstrap the skill-local runtime
 - migrate legacy state if needed
 - initialize the DB
+- stage the API key and connection settings
+- validate discovery/seed behavior
 - optionally generate initial public docs
-- install/start the user service
+- only then install/start the user service if unattended mode is actually wanted
 - doctor the result
 - clean up any legacy SherpaMind cron jobs
 
 ### Update / re-bootstrap
 - rerun bootstrap safely
-- preserve `.SherpaMind/private` and `.SherpaMind/public`
+- preserve `.SherpaMind/{config,secrets,data,state,logs,runtime}` and `.SherpaMind/public`
 - archive old repo-local `state/` leftovers once migrated
 - reinstall/rewrite the systemd user unit idempotently
 - restart the service safely
@@ -103,7 +106,7 @@ Keep issue content anonymized and public-safe.
 
 `doctor` should verify:
 - runtime venv exists
-- config exists
+- staged settings/secrets paths exist
 - DB exists
 - watch state exists
 - systemd user service file exists

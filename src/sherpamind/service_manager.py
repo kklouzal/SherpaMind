@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import shutil
 import subprocess
 from typing import Any
 
@@ -33,7 +34,6 @@ def _run(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str
 def unit_contents() -> str:
     paths = ensure_path_layout()
     repo = _repo_root()
-    env_file = paths.env_file
     python = paths.runtime_venv / "bin" / "python"
     return f"""[Unit]
 Description=SherpaMind background sync service
@@ -43,7 +43,6 @@ After=default.target
 Type=simple
 WorkingDirectory={repo}
 Environment=SHERPAMIND_WORKSPACE_ROOT={paths.workspace_root}
-EnvironmentFile=-{env_file}
 ExecStart={python} -m sherpamind.cli service-run
 Restart=always
 RestartSec=10
@@ -116,10 +115,14 @@ def start_service() -> ServiceCommandResult:
 def doctor_service() -> dict[str, Any]:
     status = service_status()
     paths = ensure_path_layout()
+    systemctl_available = shutil.which("systemctl") is not None
     return {
         **status,
         "runtime_python_exists": (paths.runtime_venv / "bin" / "python").exists(),
-        "env_file_exists": paths.env_file.exists(),
+        "settings_file_exists": paths.settings_file.exists(),
+        "api_key_file_exists": paths.api_key_file.exists(),
+        "api_user_file_exists": paths.api_user_file.exists(),
         "service_log_exists": paths.service_log.exists(),
         "service_state_exists": paths.service_state_file.exists(),
+        "systemctl_user_available": systemctl_available,
     }

@@ -89,7 +89,7 @@ def seed_fixture(db: Path) -> None:
 
 def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
-    db = tmp_path / ".SherpaMind" / "private" / "sherpamind.sqlite3"
+    db = tmp_path / ".SherpaMind" / "data" / "sherpamind.sqlite3"
     seed_fixture(db)
     result = generate_public_snapshot(db)
     assert result["status"] == "ok"
@@ -105,7 +105,7 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Retrieval metadata readiness" in text
     assert "Account artifact coverage" in text
     assert "Technician artifact coverage" in text
-    assert ".SherpaMind/private/sherpamind.sqlite3" in text
+    assert ".SherpaMind/data/sherpamind.sqlite3" in text
 
     account_index = tmp_path / ".SherpaMind" / "public" / "docs" / "accounts" / "index.md"
     technician_index = tmp_path / ".SherpaMind" / "public" / "docs" / "technicians" / "index.md"

@@ -8,11 +8,10 @@ import sys
 import venv
 
 
-DEFAULT_ENV_TEMPLATE = """# SherpaMind skill-local config
-# Fill in SherpaDesk credentials/keys here or use `python3 scripts/run.py configure ...`.
+DEFAULT_SETTINGS_TEMPLATE = """# SherpaMind staged non-secret settings
+# Runtime state lives under .SherpaMind/ outside the skill tree.
+# Secrets are stored separately under .SherpaMind/secrets/.
 SHERPADESK_API_BASE_URL=https://api.sherpadesk.com
-SHERPADESK_API_KEY=
-SHERPADESK_API_USER=
 SHERPADESK_ORG_KEY=
 SHERPADESK_INSTANCE_KEY=
 SHERPAMIND_NOTIFY_CHANNEL=
@@ -37,12 +36,44 @@ def sherpamind_root() -> Path:
     return workspace_root() / ".SherpaMind"
 
 
-def skill_runtime_root() -> Path:
-    return sherpamind_root() / "private" / "runtime"
+def config_root() -> Path:
+    return sherpamind_root() / "config"
 
 
-def env_file() -> Path:
-    return sherpamind_root() / "private" / "config.env"
+def secrets_root() -> Path:
+    return sherpamind_root() / "secrets"
+
+
+def data_root() -> Path:
+    return sherpamind_root() / "data"
+
+
+def state_root() -> Path:
+    return sherpamind_root() / "state"
+
+
+def logs_root() -> Path:
+    return sherpamind_root() / "logs"
+
+
+def runtime_root() -> Path:
+    return sherpamind_root() / "runtime"
+
+
+def public_root() -> Path:
+    return sherpamind_root() / "public"
+
+
+def settings_file() -> Path:
+    return config_root() / "settings.env"
+
+
+def api_key_file() -> Path:
+    return secrets_root() / "sherpadesk_api_key.txt"
+
+
+def api_user_file() -> Path:
+    return secrets_root() / "sherpadesk_api_user.txt"
 
 
 def venv_python(venv_root: Path) -> Path:
@@ -52,15 +83,26 @@ def venv_python(venv_root: Path) -> Path:
 def ensure_layout() -> None:
     for path in [
         sherpamind_root(),
-        sherpamind_root() / "private",
-        sherpamind_root() / "public",
-        sherpamind_root() / "private" / "runtime",
-        sherpamind_root() / "public" / "exports",
-        sherpamind_root() / "public" / "docs",
+        config_root(),
+        secrets_root(),
+        data_root(),
+        state_root(),
+        logs_root(),
+        runtime_root(),
+        public_root(),
+        public_root() / "exports",
+        public_root() / "docs",
     ]:
         path.mkdir(parents=True, exist_ok=True)
-    if not env_file().exists():
-        env_file().write_text(DEFAULT_ENV_TEMPLATE)
+    if not settings_file().exists():
+        settings_file().write_text(DEFAULT_SETTINGS_TEMPLATE, encoding="utf-8")
+    for path in [api_key_file(), api_user_file()]:
+        if not path.exists():
+            path.write_text("", encoding="utf-8")
+            try:
+                path.chmod(0o600)
+            except OSError:
+                pass
 
 
 def ensure_venv(venv_root: Path) -> None:
@@ -81,8 +123,7 @@ def pip_install(venv_root: Path) -> None:
 
 def main() -> int:
     ensure_layout()
-    runtime_root = skill_runtime_root()
-    venv_root = runtime_root / "venv"
+    venv_root = runtime_root() / "venv"
     ensure_venv(venv_root)
     pip_install(venv_root)
     print(str(venv_python(venv_root)))

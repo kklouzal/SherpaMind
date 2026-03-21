@@ -9,3 +9,4 @@ def test_unit_contents_contains_service_run(monkeypatch, tmp_path: Path) -> None
     assert 'ExecStart=' in text
     assert 'service-run' in text
     assert 'SHERPAMIND_WORKSPACE_ROOT=' in text
+    assert 'EnvironmentFile=' not in text

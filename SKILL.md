@@ -32,16 +32,18 @@ SherpaMind is not an instruction-only skill.
 
 When installed and configured for live use, it can:
 - create workspace-local runtime state under `.SherpaMind/`
+- create staged runtime dirs under `.SherpaMind/config/`, `.SherpaMind/secrets/`, `.SherpaMind/data/`, `.SherpaMind/state/`, `.SherpaMind/logs/`, `.SherpaMind/runtime/`, and `.SherpaMind/public/`
 - create a local SQLite database and generated public artifacts
-- create a Python runtime venv under `.SherpaMind/private/runtime/venv`
+- create a Python runtime venv under `.SherpaMind/runtime/venv`
 - install Python dependencies from PyPI during bootstrap
-- store SherpaDesk credentials locally in `.SherpaMind/private/config.env`
+- store the SherpaDesk API key locally in `.SherpaMind/secrets/sherpadesk_api_key.txt`
+- optionally store a SherpaDesk API user hint in `.SherpaMind/secrets/sherpadesk_api_user.txt`
+- store non-secret connection/runtime settings in `.SherpaMind/config/settings.env`
 - optionally install and run a **user-level** `systemd` background service
 
-Required live credentials/config for real SherpaDesk use:
-- `SHERPADESK_API_KEY`
-- `SHERPADESK_ORG_KEY`
-- `SHERPADESK_INSTANCE_KEY`
+Required live staged credentials/config for real SherpaDesk use:
+- staged API key under `.SherpaMind/secrets/sherpadesk_api_key.txt`
+- staged org/instance settings in `.SherpaMind/config/settings.env`
 
 If the user only wants query guidance or offline inspection of an existing local dataset, do not imply that fresh credentials or service installation are unnecessary for live sync.
 
@@ -132,30 +134,34 @@ If any prerequisite is missing, stop and tell the user exactly what is missing a
 
 Then use this flow from the installed skill bundle root:
 
-1. bootstrap the skill-local runtime
+1. audit bootstrap/readiness first
+   - `python3 scripts/run.py bootstrap-audit`
+2. bootstrap the skill-local runtime
    - `python3 scripts/bootstrap.py`
-2. run the setup flow
+3. run the setup flow
    - `python3 scripts/run.py setup`
-3. verify runtime/service state
+4. verify runtime state
    - `python3 scripts/run.py doctor`
-   - `python3 scripts/run.py service-status`
-4. configure the SherpaDesk API token
-   - `python3 scripts/run.py configure --api-key <token>`
-5. discover organizations/instances
+5. stage the SherpaDesk API key
+   - `python3 scripts/run.py stage-api-key --from-file <path-to-token-file>`
+6. discover organizations/instances
    - `python3 scripts/run.py discover-orgs`
-6. write the chosen org/instance into config
+7. write the chosen org/instance into non-secret settings
    - `python3 scripts/run.py configure --org-key <org> --instance-key <instance>`
-7. seed the local dataset
+8. seed the local dataset
    - `python3 scripts/run.py seed`
-8. generate/refine the derived artifacts if needed
+9. generate/refine the derived artifacts if needed
    - `python3 scripts/run.py generate-public-snapshot`
    - `python3 scripts/run.py generate-runtime-status`
-9. confirm the install is actually usable
+10. confirm the install is actually usable
    - `python3 scripts/run.py dataset-summary`
    - `python3 scripts/run.py insight-snapshot`
    - `python3 scripts/run.py report-vector-index-status`
+11. only then decide whether unattended background mode is wanted
+   - `python3 scripts/run.py install-service`
+   - `python3 scripts/run.py service-status`
 
-Default expectation on Linux is that `setup` will also initialize the DB, clean up any old SherpaMind cron jobs, generate an initial public snapshot, and install/start the user-level `systemd` service. Do not stop at cloning or placing files; complete the runtime bootstrap, config, seed, and verification steps.
+Default expectation on Linux is that `setup` initializes the DB, cleans up any old SherpaMind cron jobs, and can generate an initial public snapshot. Treat user-level `systemd` installation as a later, explicit operator choice rather than part of the earliest bootstrap steps.
 
 If service installation fails because the target host lacks usable `systemctl --user`, continue the bootstrap/config/seed flow anyway, report the service limitation clearly, and use `python3 scripts/run.py service-run-once` or `python3 scripts/run.py service-run` as the fallback operational mode instead of pretending the service installed.
 
@@ -169,12 +175,14 @@ Use these for setup/maintenance, not routine user queries:
 - `python3 scripts/run.py workspace-layout`
 - `python3 scripts/run.py doctor`
 - `python3 scripts/run.py backfill-technician-stubs`
+- `python3 scripts/run.py bootstrap-audit`
 - `python3 scripts/run.py setup`
 - `python3 scripts/run.py migrate-legacy-state`
 - `python3 scripts/run.py archive-legacy-state`
 - `python3 scripts/run.py cleanup-legacy-cron`
-- `python3 scripts/run.py configure --api-key <token>`
+- `python3 scripts/run.py stage-api-key --from-file <path-to-token-file>`
 - `python3 scripts/run.py discover-orgs`
+- `python3 scripts/run.py configure --org-key <org> --instance-key <instance>`
 - `python3 scripts/run.py install-service`
 - `python3 scripts/run.py restart-service`
 - `python3 scripts/run.py service-status`
@@ -197,6 +205,7 @@ Read these only when needed. Keep the action layer in this file lean; use the re
 - `{baseDir}/references/openclaw-query-model.md` — query/retrieval model
 - `{baseDir}/references/architecture-doctrine.md` — backend vs skill-front boundary
 - `{baseDir}/references/retrieval-architecture.md` — retrieval and vector design
+- `{baseDir}/references/bootstrap-onboarding.md` — audit-first install/onboarding model
 - `{baseDir}/references/automation.md` — service/install/update model
 - `{baseDir}/references/delta-sync-strategy.md` — hot/warm/cold sync behavior
 - `{baseDir}/references/api-reference.md` — verified API/auth behavior

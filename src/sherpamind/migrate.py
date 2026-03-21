@@ -90,7 +90,7 @@ def migrate_legacy_state(legacy_root: Path) -> MigrationResult:
 def archive_legacy_state(legacy_root: Path) -> LegacyArchiveResult:
     paths = ensure_path_layout()
     legacy_state_dir = legacy_root / "state"
-    archive_root = paths.private_root / "legacy"
+    archive_root = paths.state_root / "legacy"
     moved = []
     skipped = []
 
@@ -117,6 +117,6 @@ def archive_legacy_state(legacy_root: Path) -> LegacyArchiveResult:
 
     return LegacyArchiveResult(
         status="ok",
-        message="Legacy SherpaMind repo-local state archived into .SherpaMind/private/legacy.",
+        message="Legacy SherpaMind repo-local state archived into .SherpaMind/state/legacy.",
         stats={"moved": moved, "skipped": skipped, "archive_root": str(archive_root)},
     )

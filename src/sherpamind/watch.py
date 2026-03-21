@@ -65,14 +65,14 @@ def watch_new_tickets(settings: Settings) -> WatchResult:
         return WatchResult(
             status="needs_config",
             message=(
-                "Watcher is blocked until SHERPADESK_API_KEY is configured."
+                "Watcher is blocked until a staged SherpaDesk API key exists under .SherpaMind/secrets/."
             ),
         )
     if not settings.org_key or not settings.instance_key:
         return WatchResult(
             status="needs_org_context",
             message=(
-                "Watcher is blocked until SHERPADESK_ORG_KEY and SHERPADESK_INSTANCE_KEY are configured."
+                "Watcher is blocked until staged org/instance settings exist under .SherpaMind/config/settings.env."
             ),
         )
 

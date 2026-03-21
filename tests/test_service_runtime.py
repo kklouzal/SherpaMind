@@ -17,8 +17,8 @@ def make_settings(tmp_path: Path) -> Settings:
         api_user=None,
         org_key=None,
         instance_key=None,
-        db_path=tmp_path / '.SherpaMind' / 'private' / 'sherpamind.sqlite3',
-        watch_state_path=tmp_path / '.SherpaMind' / 'private' / 'watch_state.json',
+        db_path=tmp_path / '.SherpaMind' / 'data' / 'sherpamind.sqlite3',
+        watch_state_path=tmp_path / '.SherpaMind' / 'state' / 'watch_state.json',
         notify_channel=None,
         request_min_interval_seconds=0,
         request_timeout_seconds=30,
@@ -53,7 +53,7 @@ def test_run_pending_tasks_writes_service_state(monkeypatch, tmp_path: Path) -> 
     initialize_db(settings.db_path)
     result = run_pending_tasks(settings)
     assert result['status'] == 'ok'
-    assert (tmp_path / '.SherpaMind' / 'private' / 'service-state.json').exists()
+    assert (tmp_path / '.SherpaMind' / 'state' / 'service-state.json').exists()
 
 
 def test_json_ready_normalizes_dataclasses(monkeypatch, tmp_path: Path) -> None:
@@ -98,7 +98,7 @@ def test_run_pending_tasks_marks_cold_bootstrap_complete_when_closed_detail_catc
         ],
         synced_at='2026-03-03T00:00:00Z',
     )
-    (tmp_path / '.SherpaMind' / 'private' / 'service-state.json').parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / '.SherpaMind' / 'state' / 'service-state.json').parent.mkdir(parents=True, exist_ok=True)
     from sherpamind.sync_state import set_json_state, get_json_state
     set_json_state(settings.db_path, 'sync.cold_closed.last_state', {'next_page': 0, 'completed_cycles': 1})
 
@@ -219,7 +219,7 @@ def test_run_pending_tasks_forces_local_retrieval_repair_when_materialization_is
         synced_at='2026-03-19T01:00:00Z',
     )
 
-    service_state_path = tmp_path / '.SherpaMind' / 'private' / 'service-state.json'
+    service_state_path = tmp_path / '.SherpaMind' / 'state' / 'service-state.json'
     service_state_path.parent.mkdir(parents=True, exist_ok=True)
     now = time.time()
     service_state_path.write_text(json.dumps({
@@ -321,7 +321,7 @@ def test_run_pending_tasks_forces_vector_repair_when_index_drifts(monkeypatch, t
         synced_at='2026-03-19T02:00:00Z',
     )
 
-    service_state_path = tmp_path / '.SherpaMind' / 'private' / 'service-state.json'
+    service_state_path = tmp_path / '.SherpaMind' / 'state' / 'service-state.json'
     service_state_path.parent.mkdir(parents=True, exist_ok=True)
     now = time.time()
     service_state_path.write_text(json.dumps({

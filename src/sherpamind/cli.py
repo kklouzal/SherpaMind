@@ -51,7 +51,7 @@ from .ingest import (
     sync_hot_open_tickets,
     sync_warm_closed_tickets,
 )
-from .settings import load_settings, write_config_env
+from .settings import load_settings, stage_api_key, stage_api_user, stage_connection_settings
 from .summaries import get_account_summary, get_technician_summary
 from .vector_exports import export_embedding_manifest, export_embedding_ready_chunks, get_retrieval_readiness_summary
 from .vector_index import build_vector_index, get_vector_index_status, search_vector_index
@@ -74,7 +74,7 @@ def _json_ready(value):
 def _build_client() -> SherpaDeskClient:
     settings = load_settings()
     if not settings.api_key:
-        raise typer.BadParameter("SHERPADESK_API_KEY is required for live API commands")
+        raise typer.BadParameter("SherpaDesk API key is required for live API commands. Stage it in .SherpaMind/secrets/sherpadesk_api_key.txt or use `stage-api-key`.")
     return SherpaDeskClient(
         api_base_url=settings.api_base_url,
         api_key=settings.api_key,
@@ -107,14 +107,21 @@ def workspace_layout() -> None:
     print(json.dumps({
         "workspace_root": str(paths.workspace_root),
         "root": str(paths.root),
-        "private_root": str(paths.private_root),
+        "config_root": str(paths.config_root),
+        "secrets_root": str(paths.secrets_root),
+        "data_root": str(paths.data_root),
+        "state_root": str(paths.state_root),
+        "logs_root": str(paths.logs_root),
+        "runtime_root": str(paths.runtime_root),
         "public_root": str(paths.public_root),
         "runtime_venv": str(paths.runtime_venv),
         "db_path": str(paths.db_path),
         "watch_state_path": str(paths.watch_state_path),
         "exports_root": str(paths.exports_root),
         "docs_root": str(paths.docs_root),
-        "env_file": str(paths.env_file),
+        "settings_file": str(paths.settings_file),
+        "api_key_file": str(paths.api_key_file),
+        "api_user_file": str(paths.api_user_file),
         "service_log": str(paths.service_log),
         "service_state_file": str(paths.service_state_file),
     }, indent=2))
@@ -122,35 +129,48 @@ def workspace_layout() -> None:
 
 @app.command("configure")
 def configure(
-    api_key: str | None = None,
     org_key: str | None = None,
     instance_key: str | None = None,
-    api_user: str | None = None,
     api_base_url: str | None = None,
     notify_channel: str | None = None,
 ) -> None:
-    env_file = write_config_env(
+    settings_file = stage_connection_settings(
         api_base_url=api_base_url,
-        api_key=api_key,
-        api_user=api_user,
         org_key=org_key,
         instance_key=instance_key,
         notify_channel=notify_channel,
     )
     print(json.dumps({
         "status": "ok",
-        "env_file": str(env_file),
+        "settings_file": str(settings_file),
         "updated_keys": [
             key for key, value in {
                 "SHERPADESK_API_BASE_URL": api_base_url,
-                "SHERPADESK_API_KEY": api_key,
-                "SHERPADESK_API_USER": api_user,
                 "SHERPADESK_ORG_KEY": org_key,
-                "SHERPADESK_INSTANCE_KEY": instance_key,
                 "SHERPAMIND_NOTIFY_CHANNEL": notify_channel,
+                "SHERPADESK_INSTANCE_KEY": instance_key,
             }.items() if value is not None
         ],
+        "note": "Non-secret settings were updated. Stage secrets separately under .SherpaMind/secrets/.",
     }, indent=2))
+
+
+@app.command("stage-api-key")
+def stage_api_key_cmd(
+    from_file: Path | None = None,
+    value: str | None = None,
+) -> None:
+    secret_path = stage_api_key(api_key=value, from_file=from_file)
+    print(json.dumps({"status": "ok", "api_key_file": str(secret_path)}, indent=2))
+
+
+@app.command("stage-api-user")
+def stage_api_user_cmd(
+    from_file: Path | None = None,
+    value: str | None = None,
+) -> None:
+    secret_path = stage_api_user(api_user=value, from_file=from_file)
+    print(json.dumps({"status": "ok", "api_user_file": str(secret_path)}, indent=2))
 
 
 @app.command("doctor")
@@ -160,7 +180,9 @@ def doctor() -> None:
     legacy_db = paths.workspace_root / "state" / "sherpamind.sqlite3"
     legacy_watch = paths.workspace_root / "state" / "watch_state.json"
     checks = {
-        "env_file_exists": paths.env_file.exists(),
+        "settings_file_exists": paths.settings_file.exists(),
+        "api_key_file_exists": paths.api_key_file.exists(),
+        "api_user_file_exists": paths.api_user_file.exists(),
         "runtime_venv_exists": paths.runtime_venv.exists(),
         "db_exists": settings.db_path.exists(),
         "watch_state_exists": settings.watch_state_path.exists(),
@@ -174,9 +196,15 @@ def doctor() -> None:
         "status": "ok",
         "paths": {
             "root": str(paths.root),
-            "private_root": str(paths.private_root),
+            "config_root": str(paths.config_root),
+            "secrets_root": str(paths.secrets_root),
+            "data_root": str(paths.data_root),
+            "state_root": str(paths.state_root),
+            "logs_root": str(paths.logs_root),
             "public_root": str(paths.public_root),
-            "env_file": str(paths.env_file),
+            "settings_file": str(paths.settings_file),
+            "api_key_file": str(paths.api_key_file),
+            "api_user_file": str(paths.api_user_file),
             "runtime_venv": str(paths.runtime_venv),
             "db_path": str(settings.db_path),
             "service_log": str(paths.service_log),
@@ -213,7 +241,7 @@ def archive_legacy() -> None:
 def setup(
     migrate_legacy: bool = True,
     initialize_db_only: bool = False,
-    install_service_now: bool = True,
+    install_service_now: bool = False,
     cleanup_legacy_cron_now: bool = True,
 ) -> None:
     settings = load_settings()
@@ -252,12 +280,91 @@ def setup(
         "message": "SherpaMind setup flow completed.",
         "steps": steps,
         "next": [
+            "python3 scripts/run.py bootstrap-audit",
             "python3 scripts/run.py doctor",
-            "python3 scripts/run.py configure --api-key <token>",
+            "python3 scripts/run.py stage-api-key --from-file <path-to-token-file>",
             "python3 scripts/run.py discover-orgs",
+            "python3 scripts/run.py configure --org-key <org> --instance-key <instance>",
             "python3 scripts/run.py seed",
+            "python3 scripts/run.py install-service",
         ],
     }, indent=2))
+
+
+@app.command("bootstrap-audit")
+def bootstrap_audit(summary: bool = False) -> None:
+    settings = load_settings()
+    paths = ensure_path_layout()
+    service = doctor_service()
+    checks = {
+        "python3": True,
+        "systemctl_user": service.get("systemctl_user_available", True),
+    }
+    onboarding_steps = []
+
+    def add_step(step: str, details: str, command: str | None = None, user_action_required: bool = True) -> None:
+        onboarding_steps.append({
+            "step": step,
+            "details": details,
+            "command": command,
+            "user_action_required": user_action_required,
+        })
+
+    if not paths.runtime_venv.exists():
+        add_step("bootstrap-runtime", "Bootstrap the runtime venv and staged runtime directories.", "python3 scripts/bootstrap.py")
+    if not paths.api_key_file.exists():
+        add_step("stage-api-key", f"Stage the SherpaDesk API key in {paths.api_key_file} or use stage-api-key.", "python3 scripts/run.py stage-api-key --from-file <path-to-token-file>")
+    if not settings.org_key or not settings.instance_key:
+        add_step("discover-and-configure-org-instance", "Discover orgs/instances, then persist the chosen org/instance in non-secret settings.", "python3 scripts/run.py discover-orgs")
+    if not settings.db_path.exists():
+        add_step("initialize-db", "Initialize the local SQLite store and runtime scaffolding.", "python3 scripts/run.py setup")
+    if not service.get("unit_exists"):
+        add_step("install-service", "Optionally install the user-level background service after bootstrap and seeding are complete.", "python3 scripts/run.py install-service", user_action_required=False)
+
+    payload = {
+        "ready": len(onboarding_steps) == 0,
+        "workspace_root": str(paths.workspace_root),
+        "runtime_root": str(paths.root),
+        "runtime_paths": {
+            "config_root": str(paths.config_root),
+            "secrets_root": str(paths.secrets_root),
+            "data_root": str(paths.data_root),
+            "state_root": str(paths.state_root),
+            "logs_root": str(paths.logs_root),
+            "runtime_root": str(paths.runtime_root),
+            "public_root": str(paths.public_root),
+            "settings_file": str(paths.settings_file),
+            "api_key_file": str(paths.api_key_file),
+            "api_user_file": str(paths.api_user_file),
+            "db_path": str(paths.db_path),
+        },
+        "credentials": {
+            "api_key_present": bool(settings.api_key),
+            "org_key_present": bool(settings.org_key),
+            "instance_key_present": bool(settings.instance_key),
+            "api_user_present": bool(settings.api_user),
+        },
+        "service": service,
+        "checks": checks,
+        "summary": {
+            "blocking_step_count": sum(1 for step in onboarding_steps if step["user_action_required"]),
+            "nonblocking_step_count": sum(1 for step in onboarding_steps if not step["user_action_required"]),
+        },
+        "onboarding_steps": onboarding_steps,
+    }
+    if summary:
+        print(f"ready={payload['ready']}")
+        print(f"runtime_root={paths.root}")
+        print(f"settings_file={paths.settings_file}")
+        print(f"api_key_file={paths.api_key_file}")
+        print(f"blocking_step_count={payload['summary']['blocking_step_count']}")
+        print(f"nonblocking_step_count={payload['summary']['nonblocking_step_count']}")
+        for step in onboarding_steps:
+            print(f"next_step={step['step']}: {step['details']}")
+            if step['command']:
+                print(f"next_command={step['command']}")
+        return
+    print(json.dumps(payload, indent=2))
 
 
 @app.command("install-service")
