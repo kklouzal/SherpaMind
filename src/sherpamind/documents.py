@@ -9,7 +9,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 4
+DOCUMENT_MATERIALIZATION_VERSION = 5
 
 
 def _content_hash(text: str) -> str:
@@ -113,6 +113,22 @@ def _resolve_technician_label(record: dict) -> tuple[str | None, str]:
         return joined_name, "joined"
     if technician_id:
         return technician_id, "id"
+    return None, "missing"
+
+
+def _resolve_department_label(record: dict) -> tuple[str | None, str]:
+    support_group_name = _first_present(record.get("support_group_name"))
+    class_name = _first_present(record.get("class_name"))
+    submission_category = _first_present(record.get("submission_category"))
+    department_key = _first_present(record.get("department_key"))
+    if support_group_name:
+        return support_group_name, "support_group_name"
+    if class_name:
+        return class_name, "class_name"
+    if submission_category:
+        return submission_category, "submission_category"
+    if department_key and not _looks_like_identifier(department_key):
+        return department_key, "department_key"
     return None, "missing"
 
 
@@ -347,6 +363,7 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         account_label, account_label_source = _resolve_account_label(record)
         user_label, user_label_source = _resolve_user_label(record)
         technician_label, technician_label_source = _resolve_technician_label(record)
+        department_label, department_label_source = _resolve_department_label(record)
         is_waiting_on_response = _coerce_bool(record.get("is_waiting_on_response"))
         is_resolved = _coerce_bool(record.get("is_resolved"))
         is_confirmed = _coerce_bool(record.get("is_confirmed"))
@@ -369,6 +386,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Account location: {record['account_location_name']}")
         if record.get("location_name"):
             text_parts.append(f"Location: {record['location_name']}")
+        if department_label:
+            text_parts.append(f"Department: {department_label}")
         if record.get("department_key"):
             text_parts.append(f"Department key: {record['department_key']}")
         if is_via_email_parser is not None:
@@ -472,6 +491,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "class_name": record.get("class_name"),
                     "submission_category": record.get("submission_category"),
                     "resolution_category": record.get("resolution_category_name"),
+                    "department_label": department_label,
+                    "department_label_source": department_label_source,
                     "closed_at": record.get("closed_at"),
                     "ticketlogs_count": record.get("ticketlogs_count"),
                     "timelogs_count": record.get("timelogs_count"),
@@ -490,6 +511,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                         or record.get("followup_note")
                         or record.get("request_completion_note")
                         or record.get("support_group_name")
+                        or record.get("class_name")
+                        or record.get("resolution_category_name")
                         or record.get("default_contract_name")
                         or record.get("account_location_name")
                         or record.get("department_key")
@@ -522,6 +545,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "location_name": record.get("location_name"),
                     "account_location_name": record.get("account_location_name"),
                     "department_key": record.get("department_key"),
+                    "department_label": department_label,
+                    "department_label_source": department_label_source,
                     "confirmed_by_name": record.get("confirmed_by_name"),
                     "confirmed_date": record.get("confirmed_date"),
                     "is_via_email_parser": is_via_email_parser,

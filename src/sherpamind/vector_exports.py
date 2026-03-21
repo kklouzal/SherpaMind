@@ -31,6 +31,9 @@ def _load_rows(db_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
                COALESCE(json_extract(d.raw_json, '$.materialization_version'), json_extract(d.raw_json, '$.metadata.materialization_version')) AS materialization_version,
                json_extract(d.raw_json, '$.metadata.priority') AS priority,
                json_extract(d.raw_json, '$.metadata.category') AS category,
+               json_extract(d.raw_json, '$.metadata.class_name') AS class_name,
+               json_extract(d.raw_json, '$.metadata.submission_category') AS submission_category,
+               json_extract(d.raw_json, '$.metadata.resolution_category') AS resolution_category,
                json_extract(d.raw_json, '$.metadata.closed_at') AS closed_at,
                json_extract(d.raw_json, '$.metadata.attachments_count') AS attachments_count,
                json_extract(d.raw_json, '$.metadata.ticketlogs_count') AS ticketlogs_count,
@@ -57,6 +60,8 @@ def _load_rows(db_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
                json_extract(d.raw_json, '$.metadata.location_name') AS location_name,
                json_extract(d.raw_json, '$.metadata.account_location_name') AS account_location_name,
                json_extract(d.raw_json, '$.metadata.department_key') AS department_key,
+               json_extract(d.raw_json, '$.metadata.department_label') AS department_label,
+               json_extract(d.raw_json, '$.metadata.department_label_source') AS department_label_source,
                json_extract(d.raw_json, '$.metadata.confirmed_by_name') AS confirmed_by_name,
                json_extract(d.raw_json, '$.metadata.confirmed_date') AS confirmed_date,
                json_extract(d.raw_json, '$.metadata.is_via_email_parser') AS is_via_email_parser,
@@ -112,6 +117,9 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                     "technician_label_source": record["technician_label_source"],
                     "priority": record["priority"],
                     "category": record["category"],
+                    "class_name": record["class_name"],
+                    "submission_category": record["submission_category"],
+                    "resolution_category": record["resolution_category"],
                     "closed_at": record["closed_at"],
                     "attachments_count": record["attachments_count"],
                     "has_attachments": bool(record["has_attachments"]),
@@ -139,6 +147,8 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                     "location_name": record["location_name"],
                     "account_location_name": record["account_location_name"],
                     "department_key": record["department_key"],
+                    "department_label": record["department_label"],
+                    "department_label_source": record["department_label_source"],
                     "confirmed_by_name": record["confirmed_by_name"],
                     "confirmed_date": record["confirmed_date"],
                     "is_via_email_parser": None if record["is_via_email_parser"] is None else bool(record["is_via_email_parser"]),
@@ -179,6 +189,10 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
     statuses = sorted({row.get("status") for row in rows if row.get("status")})
     priorities = sorted({row.get("priority") for row in rows if row.get("priority")})
     categories = sorted({row.get("category") for row in rows if row.get("category")})
+    class_names = sorted({row.get("class_name") for row in rows if row.get("class_name")})
+    submission_categories = sorted({row.get("submission_category") for row in rows if row.get("submission_category")})
+    resolution_categories = sorted({row.get("resolution_category") for row in rows if row.get("resolution_category")})
+    departments = sorted({row.get("department_label") for row in rows if row.get("department_label")})
 
     chunk_lengths = [int(row.get("chunk_chars") or 0) for row in rows]
     chunk_counts_by_doc: dict[str, int] = {}
@@ -191,6 +205,9 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "technician": lambda row: _present(row.get("technician")),
         "priority": lambda row: _present(row.get("priority")),
         "category": lambda row: _present(row.get("category")),
+        "class_name": lambda row: _present(row.get("class_name")),
+        "submission_category": lambda row: _present(row.get("submission_category")),
+        "resolution_category": lambda row: _present(row.get("resolution_category")),
         "user_email": lambda row: _present(row.get("user_email")),
         "cleaned_subject": lambda row: _present(row.get("cleaned_subject")),
         "cleaned_initial_post": lambda row: _present(row.get("cleaned_initial_post")),
@@ -210,6 +227,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "location_name": lambda row: _present(row.get("location_name")),
         "account_location_name": lambda row: _present(row.get("account_location_name")),
         "department_key": lambda row: _present(row.get("department_key")),
+        "department_label": lambda row: _present(row.get("department_label")),
         "confirmed_by_name": lambda row: _present(row.get("confirmed_by_name")),
         "confirmed_date": lambda row: _present(row.get("confirmed_date")),
         "recent_log_types": lambda row: _present(row.get("recent_log_types")),
@@ -233,7 +251,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         }
 
     label_source_summary = {}
-    for field in ("account_label_source", "user_label_source", "technician_label_source"):
+    for field in ("account_label_source", "user_label_source", "technician_label_source", "department_label_source"):
         counts: dict[str, int] = {}
         for row in rows:
             value = row.get(field) or "missing"
@@ -276,6 +294,14 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
             "priority_count": len(priorities),
             "categories": categories,
             "category_count": len(categories),
+            "class_names": class_names,
+            "class_name_count": len(class_names),
+            "submission_categories": submission_categories,
+            "submission_category_count": len(submission_categories),
+            "resolution_categories": resolution_categories,
+            "resolution_category_count": len(resolution_categories),
+            "departments": departments,
+            "department_count": len(departments),
         },
         "metadata_coverage": metadata_coverage,
         "label_source_summary": label_source_summary,

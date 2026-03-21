@@ -112,6 +112,7 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Contract: Gold" in primary["text"]
     assert "Location: HQ" in primary["text"]
     assert "Account location: HQ Campus" in primary["text"]
+    assert "Department: Managed Services" in primary["text"]
     assert "Department key: managed-services" in primary["text"]
     assert "Via email parser: True" in primary["text"]
     assert "Handled by call centre: False" in primary["text"]
@@ -144,6 +145,8 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["location_name"] == "HQ"
     assert primary["metadata"]["account_location_name"] == "HQ Campus"
     assert primary["metadata"]["department_key"] == "managed-services"
+    assert primary["metadata"]["department_label"] == "Managed Services"
+    assert primary["metadata"]["department_label_source"] == "support_group_name"
     assert primary["metadata"]["confirmed_by_name"] == "Tech Lead"
     assert primary["metadata"]["confirmed_date"] == "2026-03-19T05:00:00Z"
     assert primary["metadata"]["is_via_email_parser"] is True

@@ -22,6 +22,9 @@ def seed(db: Path) -> None:
             "metadata": {
                 "priority": "High",
                 "category": "Hardware",
+                "class_name": "Service Request",
+                "submission_category": "Portal",
+                "resolution_category": "Completed",
                 "attachments_count": 1,
                 "has_attachments": True,
                 "ticketlogs_count": 5,
@@ -46,6 +49,8 @@ def seed(db: Path) -> None:
                 "location_name": "HQ",
                 "account_location_name": "HQ Campus",
                 "department_key": "managed-services",
+                "department_label": "Managed Services",
+                "department_label_source": "support_group_name",
                 "confirmed_by_name": "Tech Lead",
                 "confirmed_date": "2026-03-19T05:00:00Z",
                 "is_via_email_parser": True,
@@ -88,6 +93,9 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["id"] == "ticket:101:chunk:0"
     assert row["metadata"]["account"] == "Acme"
     assert row["metadata"]["priority"] == "High"
+    assert row["metadata"]["class_name"] == "Service Request"
+    assert row["metadata"]["submission_category"] == "Portal"
+    assert row["metadata"]["resolution_category"] == "Completed"
     assert row["metadata"]["ticketlogs_count"] == 5
     assert row["metadata"]["has_attachments"] is True
     assert row["metadata"]["cleaned_followup_note"] == "Waiting on customer reply"
@@ -104,6 +112,8 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["location_name"] == "HQ"
     assert row["metadata"]["account_location_name"] == "HQ Campus"
     assert row["metadata"]["department_key"] == "managed-services"
+    assert row["metadata"]["department_label"] == "Managed Services"
+    assert row["metadata"]["department_label_source"] == "support_group_name"
     assert row["metadata"]["confirmed_by_name"] == "Tech Lead"
     assert row["metadata"]["confirmed_date"] == "2026-03-19T05:00:00Z"
     assert row["metadata"]["is_via_email_parser"] is True
@@ -130,13 +140,21 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["chunk_quality"]["max_chunk_chars"] == len("chunk text")
     assert summary["filter_facets"]["accounts"] == ["Acme"]
     assert summary["filter_facets"]["priorities"] == ["High"]
+    assert summary["filter_facets"]["class_names"] == ["Service Request"]
+    assert summary["filter_facets"]["submission_categories"] == ["Portal"]
+    assert summary["filter_facets"]["resolution_categories"] == ["Completed"]
+    assert summary["filter_facets"]["departments"] == ["Managed Services"]
     assert summary["metadata_coverage"]["cleaned_subject"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_followup_note"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_latest_response_note"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_resolution_log_note"]["chunks"] == 1
+    assert summary["metadata_coverage"]["class_name"]["chunks"] == 1
+    assert summary["metadata_coverage"]["submission_category"]["chunks"] == 1
+    assert summary["metadata_coverage"]["resolution_category"]["chunks"] == 1
     assert summary["metadata_coverage"]["support_group_name"]["chunks"] == 1
     assert summary["metadata_coverage"]["account_location_name"]["chunks"] == 1
     assert summary["metadata_coverage"]["department_key"]["chunks"] == 1
+    assert summary["metadata_coverage"]["department_label"]["chunks"] == 1
     assert summary["metadata_coverage"]["confirmed_date"]["chunks"] == 1
     assert summary["metadata_coverage"]["is_via_email_parser"]["chunks"] == 1
     assert summary["metadata_coverage"]["is_handle_by_callcentre"]["chunks"] == 1
@@ -144,6 +162,7 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["label_source_summary"]["account_label_source"]["raw"]["chunks"] == 1
     assert summary["label_source_summary"]["user_label_source"]["email"]["chunks"] == 1
     assert summary["label_source_summary"]["technician_label_source"]["joined"]["chunks"] == 1
+    assert summary["label_source_summary"]["department_label_source"]["support_group_name"]["chunks"] == 1
     assert summary["metadata_coverage"]["has_attachments"]["ratio"] == 1.0
     assert summary["materialization"]["current_version"] >= 1
     assert summary["materialization"]["current_version_docs"] == 1
@@ -162,6 +181,7 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     manifest = json.loads(output.read_text())
     assert manifest["chunk_count"] == 1
     assert manifest["filter_facets"]["accounts"] == ["Acme"]
+    assert manifest["filter_facets"]["departments"] == ["Managed Services"]
     assert manifest["metadata_coverage"]["resolution_summary"]["chunks"] == 1
     assert manifest["metadata_coverage"]["account_location_name"]["chunks"] == 1
     assert manifest["label_source_summary"]["account_label_source"]["raw"]["chunks"] == 1

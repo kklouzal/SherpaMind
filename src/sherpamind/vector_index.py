@@ -202,7 +202,10 @@ def search_vector_index(
                    c.chunk_index, c.text,
                    d.account, d.status, d.technician, d.updated_at,
                    json_extract(d.raw_json, '$.metadata.priority') AS priority,
-                   json_extract(d.raw_json, '$.metadata.category') AS category
+                   json_extract(d.raw_json, '$.metadata.category') AS category,
+                   json_extract(d.raw_json, '$.metadata.class_name') AS class_name,
+                   json_extract(d.raw_json, '$.metadata.resolution_category') AS resolution_category,
+                   json_extract(d.raw_json, '$.metadata.department_label') AS department_label
             FROM vector_chunk_index v
             JOIN ticket_document_chunks c ON c.chunk_id = v.chunk_id
             JOIN ticket_documents d ON d.doc_id = v.doc_id
@@ -227,6 +230,9 @@ def search_vector_index(
                 "technician": row["technician"],
                 "priority": row["priority"],
                 "category": row["category"],
+                "class_name": row["class_name"],
+                "resolution_category": row["resolution_category"],
+                "department_label": row["department_label"],
                 "updated_at": row["updated_at"],
                 "content_hash": row["content_hash"],
                 "score": round(score, 6),

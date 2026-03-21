@@ -9,8 +9,8 @@ def seed(db: Path) -> None:
     replace_ticket_documents(
         db,
         [
-            {"doc_id": "ticket:101", "ticket_id": 101, "status": "Open", "account": "Acme", "user_name": "Alice", "technician": "Tech One", "updated_at": "2026-03-19T03:00:00Z", "text": "Printer issue in office", "metadata": {"priority": "High", "category": "Hardware"}, "content_hash": "a"},
-            {"doc_id": "ticket:102", "ticket_id": 102, "status": "Closed", "account": "Beta", "user_name": "Bob", "technician": "Tech Two", "updated_at": "2026-03-19T02:00:00Z", "text": "Outlook email sync issue", "metadata": {"priority": "Low", "category": "Software"}, "content_hash": "b"},
+            {"doc_id": "ticket:101", "ticket_id": 101, "status": "Open", "account": "Acme", "user_name": "Alice", "technician": "Tech One", "updated_at": "2026-03-19T03:00:00Z", "text": "Printer issue in office", "metadata": {"priority": "High", "category": "Hardware", "class_name": "Technical Incident", "resolution_category": "Completed", "department_label": "Managed Services"}, "content_hash": "a"},
+            {"doc_id": "ticket:102", "ticket_id": 102, "status": "Closed", "account": "Beta", "user_name": "Bob", "technician": "Tech Two", "updated_at": "2026-03-19T02:00:00Z", "text": "Outlook email sync issue", "metadata": {"priority": "Low", "category": "Software", "class_name": "Service Request", "resolution_category": "Escalated", "department_label": "Dispatch"}, "content_hash": "b"},
         ],
         synced_at="2026-03-19T01:00:00Z",
     )
@@ -43,6 +43,9 @@ def test_build_and_search_vector_index(tmp_path: Path) -> None:
     rows = search_vector_index(db, "printer", limit=5)
     assert rows[0]["ticket_id"] == "101"
     assert rows[0]["priority"] == "High"
+    assert rows[0]["class_name"] == "Technical Incident"
+    assert rows[0]["resolution_category"] == "Completed"
+    assert rows[0]["department_label"] == "Managed Services"
     filtered = search_vector_index(db, "issue", limit=5, account="Beta", status="Closed", priority="Low", category="Soft")
     assert filtered[0]["ticket_id"] == "102"
 

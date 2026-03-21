@@ -139,7 +139,7 @@ Whenever a field becomes operationally useful more than once, promote it into:
 SherpaMind should also expose enough observability that OpenClaw can trust the retrieval layer before leaning on it heavily. In practice that means coverage/freshness/readiness outputs should make it easy to see:
 - how much of the corpus has detail enrichment
 - whether ticket references/chunks cover the full ticket set
-- whether important retrieval metadata (category, cleaned subject, issue summary, next-step hints, follow-up/request-completion cues, log-derived latest-response and closure cues, confirmation/contract context, account-location and department context, intake-channel/handling flags, recent log types, resolution summary, attachment presence) is materially populated
+- whether important retrieval metadata (category, class/submission/resolution taxonomy, cleaned subject, issue summary, next-step hints, follow-up/request-completion cues, log-derived latest-response and closure cues, confirmation/contract context, account-location and human-readable department context, intake-channel/handling flags, recent log types, resolution summary, attachment presence) is materially populated
 - whether account/user/technician labels are arriving as human-readable names versus raw-ID fallbacks so metadata filters stay clean
 - whether chunk sizes look sane for vector/semantic use
 - a real SQLite column/table
