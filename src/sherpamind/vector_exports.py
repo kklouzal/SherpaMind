@@ -94,9 +94,20 @@ def _load_rows(db_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
 def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int | None = None) -> dict:
     rows = _load_rows(db_path, limit=limit)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    chunk_counts_by_doc: dict[str, int] = {}
+    doc_total_chunk_chars: dict[str, int] = {}
+    for row in rows:
+        doc_id = str(row["doc_id"])
+        chunk_counts_by_doc[doc_id] = chunk_counts_by_doc.get(doc_id, 0) + 1
+        doc_total_chunk_chars[doc_id] = doc_total_chunk_chars.get(doc_id, 0) + int(row.get("chunk_chars") or 0)
+
     count = 0
     with output_path.open("w", encoding="utf-8") as f:
         for record in rows:
+            doc_id = str(record["doc_id"])
+            chunk_count_for_doc = chunk_counts_by_doc.get(doc_id, 0)
+            chunk_chars = int(record.get("chunk_chars") or 0)
+            doc_chunk_chars = doc_total_chunk_chars.get(doc_id, 0)
             payload = {
                 "id": record["chunk_id"],
                 "text": record["text"],
@@ -104,6 +115,12 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                     "doc_id": record["doc_id"],
                     "ticket_id": record["ticket_id"],
                     "chunk_index": record["chunk_index"],
+                    "chunk_chars": chunk_chars,
+                    "chunk_count_for_doc": chunk_count_for_doc,
+                    "doc_total_chunk_chars": doc_chunk_chars,
+                    "is_first_chunk": record["chunk_index"] == 0,
+                    "is_last_chunk": chunk_count_for_doc > 0 and record["chunk_index"] == (chunk_count_for_doc - 1),
+                    "is_multi_chunk_doc": chunk_count_for_doc > 1,
                     "status": record["status"],
                     "account": record["account"],
                     "account_id": record["account_id"],
@@ -243,11 +260,17 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "is_confirmed": lambda row: row.get("is_confirmed") is not None,
     }
     metadata_coverage = {}
+    document_metadata_coverage = {}
     for key, predicate in metadata_fields.items():
         covered = sum(1 for row in rows if predicate(row))
+        covered_docs = {str(row["doc_id"]) for row in rows if predicate(row)}
         metadata_coverage[key] = {
             "chunks": covered,
             "ratio": round(covered / chunk_count, 4) if chunk_count else 0.0,
+        }
+        document_metadata_coverage[key] = {
+            "documents": len(covered_docs),
+            "ratio": round(len(covered_docs) / len(document_ids), 4) if document_ids else 0.0,
         }
 
     label_source_summary = {}
@@ -283,6 +306,20 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
             "over_target_chunk_count": sum(1 for length in chunk_lengths if length > 1800),
             "multi_chunk_document_count": sum(1 for count in chunk_counts_by_doc.values() if count > 1),
         },
+        "document_chunk_topology": {
+            "avg_chunks_per_document": round((chunk_count / len(document_ids)), 4) if document_ids else 0.0,
+            "min_chunks_per_document": min(chunk_counts_by_doc.values(), default=0),
+            "max_chunks_per_document": max(chunk_counts_by_doc.values(), default=0),
+            "single_chunk_document_count": sum(1 for count in chunk_counts_by_doc.values() if count == 1),
+            "multi_chunk_document_count": sum(1 for count in chunk_counts_by_doc.values() if count > 1),
+            "multi_chunk_document_ratio": round(
+                (
+                    sum(1 for count in chunk_counts_by_doc.values() if count > 1)
+                    / len(document_ids)
+                ),
+                4,
+            ) if document_ids else 0.0,
+        },
         "filter_facets": {
             "accounts": accounts,
             "account_count": len(accounts),
@@ -304,6 +341,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
             "department_count": len(departments),
         },
         "metadata_coverage": metadata_coverage,
+        "document_metadata_coverage": document_metadata_coverage,
         "label_source_summary": label_source_summary,
         "vector_index": vector,
         "materialization": {

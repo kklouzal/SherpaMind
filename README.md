@@ -500,7 +500,8 @@ Vector and retrieval readiness reporting includes:
 - outdated content rows
 - chunk-size quality metrics (avg/min/max, tiny, over-target)
 - filter-facet inventories for accounts, technicians, statuses, priorities, and categories
-- chunk-level metadata coverage for cleaned subject/issue summary/next-step/log-type/resolution/attachment readiness plus class/submission/resolution taxonomy, human-readable department labels, account-location, confirmation, and intake-channel metadata
+- chunk-level and document-level metadata coverage for cleaned subject/issue summary/next-step/log-type/resolution/attachment readiness plus class/submission/resolution taxonomy, human-readable department labels, account-location, confirmation, and intake-channel metadata
+- chunk-topology readiness signals such as chunks-per-document and multi-chunk-document ratio so vector-sidecar consumers can reason about chunk fanout cleanly
 - freshness windows for materialized chunks vs ticket update timestamps
 
 ## Current limitations and intentionally deferred areas

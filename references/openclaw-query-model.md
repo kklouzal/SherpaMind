@@ -141,7 +141,8 @@ SherpaMind should also expose enough observability that OpenClaw can trust the r
 - whether ticket references/chunks cover the full ticket set
 - whether important retrieval metadata (category, class/submission/resolution taxonomy, cleaned subject, issue summary, next-step hints, follow-up/request-completion cues, log-derived latest-response and closure cues, confirmation/contract context, account-location and human-readable department context, intake-channel/handling flags, recent log types, resolution summary, attachment presence) is materially populated
 - whether account/user/technician labels are arriving as human-readable names versus raw-ID fallbacks so metadata filters stay clean
-- whether chunk sizes look sane for vector/semantic use
+- whether chunk sizes and chunk fanout per document look sane for vector/semantic use
+- whether important retrieval metadata is materially populated at both the chunk level and the document level so a few multi-chunk tickets do not distort coverage reads
 - a real SQLite column/table
 - a reusable structural query
 - the ticket document/chunk materialization layer

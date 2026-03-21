@@ -92,6 +92,12 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     row = json.loads(output.read_text().splitlines()[0])
     assert row["id"] == "ticket:101:chunk:0"
     assert row["metadata"]["account"] == "Acme"
+    assert row["metadata"]["chunk_chars"] == len("chunk text")
+    assert row["metadata"]["chunk_count_for_doc"] == 1
+    assert row["metadata"]["doc_total_chunk_chars"] == len("chunk text")
+    assert row["metadata"]["is_first_chunk"] is True
+    assert row["metadata"]["is_last_chunk"] is True
+    assert row["metadata"]["is_multi_chunk_doc"] is False
     assert row["metadata"]["priority"] == "High"
     assert row["metadata"]["class_name"] == "Service Request"
     assert row["metadata"]["submission_category"] == "Portal"
@@ -138,6 +144,9 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["chunk_count"] == 1
     assert summary["document_count"] == 1
     assert summary["chunk_quality"]["max_chunk_chars"] == len("chunk text")
+    assert summary["document_chunk_topology"]["avg_chunks_per_document"] == 1.0
+    assert summary["document_chunk_topology"]["single_chunk_document_count"] == 1
+    assert summary["document_chunk_topology"]["multi_chunk_document_count"] == 0
     assert summary["filter_facets"]["accounts"] == ["Acme"]
     assert summary["filter_facets"]["priorities"] == ["High"]
     assert summary["filter_facets"]["class_names"] == ["Service Request"]
@@ -155,6 +164,7 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["account_location_name"]["chunks"] == 1
     assert summary["metadata_coverage"]["department_key"]["chunks"] == 1
     assert summary["metadata_coverage"]["department_label"]["chunks"] == 1
+    assert summary["document_metadata_coverage"]["department_label"]["documents"] == 1
     assert summary["metadata_coverage"]["confirmed_date"]["chunks"] == 1
     assert summary["metadata_coverage"]["is_via_email_parser"]["chunks"] == 1
     assert summary["metadata_coverage"]["is_handle_by_callcentre"]["chunks"] == 1
@@ -182,6 +192,8 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     assert manifest["chunk_count"] == 1
     assert manifest["filter_facets"]["accounts"] == ["Acme"]
     assert manifest["filter_facets"]["departments"] == ["Managed Services"]
+    assert manifest["document_chunk_topology"]["avg_chunks_per_document"] == 1.0
     assert manifest["metadata_coverage"]["resolution_summary"]["chunks"] == 1
+    assert manifest["document_metadata_coverage"]["resolution_summary"]["documents"] == 1
     assert manifest["metadata_coverage"]["account_location_name"]["chunks"] == 1
     assert manifest["label_source_summary"]["account_label_source"]["raw"]["chunks"] == 1
