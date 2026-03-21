@@ -53,8 +53,18 @@ def seed(db: Path) -> None:
                 "department_key": "managed-services",
                 "department_label": "Managed Services",
                 "department_label_source": "support_group_name",
+                "ticket_number": "T-101",
+                "ticket_key": "abc-101",
+                "technician_email": "tech@example.com",
+                "user_phone": "520-555-0101",
+                "user_created_name": "Casey Dispatcher",
+                "user_created_email": "dispatcher@example.com",
+                "technician_type": "dispatcher",
+                "days_old_in_minutes": 1440,
+                "waiting_minutes": 30,
                 "confirmed_by_name": "Tech Lead",
                 "confirmed_date": "2026-03-19T05:00:00Z",
+                "cleaned_confirmed_note": "User confirmed the printer was fixed.",
                 "is_via_email_parser": True,
                 "is_handle_by_callcentre": False,
                 "is_waiting_on_response": True,
@@ -124,8 +134,18 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["department_key"] == "managed-services"
     assert row["metadata"]["department_label"] == "Managed Services"
     assert row["metadata"]["department_label_source"] == "support_group_name"
+    assert row["metadata"]["ticket_number"] == "T-101"
+    assert row["metadata"]["ticket_key"] == "abc-101"
+    assert row["metadata"]["technician_email"] == "tech@example.com"
+    assert row["metadata"]["user_phone"] == "520-555-0101"
+    assert row["metadata"]["user_created_name"] == "Casey Dispatcher"
+    assert row["metadata"]["user_created_email"] == "dispatcher@example.com"
+    assert row["metadata"]["technician_type"] == "dispatcher"
+    assert row["metadata"]["days_old_in_minutes"] == 1440
+    assert row["metadata"]["waiting_minutes"] == 30
     assert row["metadata"]["confirmed_by_name"] == "Tech Lead"
     assert row["metadata"]["confirmed_date"] == "2026-03-19T05:00:00Z"
+    assert row["metadata"]["cleaned_confirmed_note"] == "User confirmed the printer was fixed."
     assert row["metadata"]["is_via_email_parser"] is True
     assert row["metadata"]["is_handle_by_callcentre"] is False
     assert row["metadata"]["is_waiting_on_response"] is True
@@ -169,8 +189,18 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["account_location_name"]["chunks"] == 1
     assert summary["metadata_coverage"]["department_key"]["chunks"] == 1
     assert summary["metadata_coverage"]["department_label"]["chunks"] == 1
+    assert summary["metadata_coverage"]["ticket_number"]["chunks"] == 1
+    assert summary["metadata_coverage"]["ticket_key"]["chunks"] == 1
+    assert summary["metadata_coverage"]["technician_email"]["chunks"] == 1
+    assert summary["metadata_coverage"]["user_phone"]["chunks"] == 1
+    assert summary["metadata_coverage"]["user_created_name"]["chunks"] == 1
+    assert summary["metadata_coverage"]["user_created_email"]["chunks"] == 1
+    assert summary["metadata_coverage"]["technician_type"]["chunks"] == 1
+    assert summary["metadata_coverage"]["days_old_in_minutes"]["chunks"] == 1
+    assert summary["metadata_coverage"]["waiting_minutes"]["chunks"] == 1
     assert summary["document_metadata_coverage"]["department_label"]["documents"] == 1
     assert summary["metadata_coverage"]["confirmed_date"]["chunks"] == 1
+    assert summary["metadata_coverage"]["cleaned_confirmed_note"]["chunks"] == 1
     assert summary["metadata_coverage"]["is_via_email_parser"]["chunks"] == 1
     assert summary["metadata_coverage"]["is_handle_by_callcentre"]["chunks"] == 1
     assert summary["metadata_coverage"]["is_waiting_on_response"]["chunks"] == 1

@@ -9,7 +9,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 6
+DOCUMENT_MATERIALIZATION_VERSION = 7
 
 
 def _content_hash(text: str) -> str:
@@ -221,10 +221,13 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                t.created_at,
                t.updated_at,
                t.closed_at,
+               json_extract(t.raw_json, '$.number') AS ticket_number,
+               json_extract(t.raw_json, '$.key') AS ticket_key,
                COALESCE(a.name, t.account_id) AS account,
                COALESCE(u.display_name, t.user_id) AS user_name,
                COALESCE(u.email, json_extract(t.raw_json, '$.user_email')) AS user_email,
                COALESCE(te.display_name, t.assigned_technician_id) AS technician,
+               COALESCE(te.email, json_extract(t.raw_json, '$.technician_email'), json_extract(t.raw_json, '$.tech_email')) AS technician_email,
                t.account_id,
                t.user_id,
                t.assigned_technician_id,
@@ -264,12 +267,20 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                COALESCE(json_extract(td.raw_json, '$.account_location_name'), json_extract(t.raw_json, '$.account_location_name')) AS account_location_name,
                COALESCE(json_extract(td.raw_json, '$.confirmed_by_name'), json_extract(t.raw_json, '$.confirmed_by_name')) AS confirmed_by_name,
                COALESCE(json_extract(td.raw_json, '$.confirmed_date'), json_extract(t.raw_json, '$.confirmed_date')) AS confirmed_date,
+               COALESCE(json_extract(td.raw_json, '$.confirmed_note'), json_extract(t.raw_json, '$.confirmed_note')) AS confirmed_note,
                COALESCE(json_extract(td.raw_json, '$.department_key'), json_extract(t.raw_json, '$.department_key')) AS department_key,
                COALESCE(json_extract(td.raw_json, '$.is_via_email_parser'), json_extract(t.raw_json, '$.is_via_email_parser')) AS is_via_email_parser,
                COALESCE(json_extract(td.raw_json, '$.is_handle_by_callcentre'), json_extract(t.raw_json, '$.is_handle_by_callcentre')) AS is_handle_by_callcentre,
                json_extract(td.raw_json, '$.is_waiting_on_response') AS is_waiting_on_response,
                json_extract(td.raw_json, '$.is_resolved') AS is_resolved,
                json_extract(td.raw_json, '$.is_confirmed') AS is_confirmed,
+               COALESCE(json_extract(td.raw_json, '$.user_phone'), json_extract(t.raw_json, '$.user_phone')) AS user_phone,
+               COALESCE(json_extract(td.raw_json, '$.user_created_email'), json_extract(t.raw_json, '$.user_created_email')) AS user_created_email,
+               COALESCE(json_extract(td.raw_json, '$.user_created_firstname'), json_extract(t.raw_json, '$.user_created_firstname')) AS user_created_firstname,
+               COALESCE(json_extract(td.raw_json, '$.user_created_lastname'), json_extract(t.raw_json, '$.user_created_lastname')) AS user_created_lastname,
+               COALESCE(json_extract(td.raw_json, '$.tech_type'), json_extract(t.raw_json, '$.tech_type')) AS technician_type,
+               COALESCE(json_extract(td.raw_json, '$.days_old_in_minutes'), json_extract(t.raw_json, '$.days_old_in_minutes')) AS days_old_in_minutes,
+               COALESCE(json_extract(td.raw_json, '$.waiting_minutes'), json_extract(t.raw_json, '$.waiting_minutes')) AS waiting_minutes,
                td.sla_response_date,
                td.sla_complete_date,
                td.ticketlogs_count,
@@ -377,6 +388,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             or record.get("submission_category")
         )
         cleaned_subject = normalize_ticket_text(record.get("subject"))
+        cleaned_confirmed_note = normalize_ticket_text(record.get("confirmed_note"))
+        created_by_name = _join_name_parts(record.get("user_created_firstname"), record.get("user_created_lastname"))
         cleaned_next_step = normalize_ticket_text(_first_present(record.get("detail_next_step"), record.get("next_step")))
         cleaned_action_cue, action_cue_source = _resolve_action_cue(
             cleaned_next_step,
@@ -407,6 +420,18 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             f"Updated: {record.get('updated_at') or 'unknown'}",
             f"Closed: {record.get('closed_at') or 'not closed'}",
         ]
+        if record.get("ticket_number"):
+            text_parts.append(f"Ticket number: {record['ticket_number']}")
+        if record.get("ticket_key"):
+            text_parts.append(f"Ticket key: {record['ticket_key']}")
+        if record.get("technician_email"):
+            text_parts.append(f"Technician email: {record['technician_email']}")
+        if created_by_name:
+            text_parts.append(f"Created by: {created_by_name}")
+        if record.get("user_created_email"):
+            text_parts.append(f"Created by email: {record['user_created_email']}")
+        if record.get("user_phone"):
+            text_parts.append(f"User phone: {record['user_phone']}")
         if record.get("account_location_name"):
             text_parts.append(f"Account location: {record['account_location_name']}")
         if record.get("location_name"):
@@ -439,12 +464,20 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Confirmed by: {record['confirmed_by_name']}")
         if record.get("confirmed_date"):
             text_parts.append(f"Confirmed date: {record['confirmed_date']}")
+        if cleaned_confirmed_note:
+            text_parts.append(f"Confirmed note: {cleaned_confirmed_note[:800]}")
         if is_waiting_on_response is not None:
             text_parts.append(f"Waiting on response: {is_waiting_on_response}")
+        if record.get("waiting_minutes") not in (None, ""):
+            text_parts.append(f"Waiting minutes: {record['waiting_minutes']}")
         if is_confirmed is not None:
             text_parts.append(f"Confirmed: {is_confirmed}")
         if is_resolved is not None:
             text_parts.append(f"Resolved flag: {is_resolved}")
+        if record.get("days_old_in_minutes") not in (None, ""):
+            text_parts.append(f"Ticket age minutes: {record['days_old_in_minutes']}")
+        if record.get("technician_type"):
+            text_parts.append(f"Technician type: {record['technician_type']}")
         if cleaned_next_step:
             text_parts.append(f"Next step: {cleaned_next_step}")
         if record.get("next_step_date"):
@@ -543,6 +576,16 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                         or record.get("department_key")
                         or record.get("confirmed_by_name")
                         or record.get("confirmed_date")
+                        or cleaned_confirmed_note
+                        or record.get("ticket_key")
+                        or record.get("ticket_number")
+                        or record.get("technician_email")
+                        or record.get("user_phone")
+                        or created_by_name
+                        or record.get("user_created_email")
+                        or record.get("technician_type")
+                        or record.get("days_old_in_minutes") not in (None, "")
+                        or record.get("waiting_minutes") not in (None, "")
                         or is_via_email_parser is not None
                         or is_handle_by_callcentre is not None
                     ),
@@ -574,8 +617,18 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "department_key": record.get("department_key"),
                     "department_label": department_label,
                     "department_label_source": department_label_source,
+                    "ticket_number": record.get("ticket_number"),
+                    "ticket_key": record.get("ticket_key"),
+                    "technician_email": record.get("technician_email"),
+                    "user_phone": record.get("user_phone"),
+                    "user_created_name": created_by_name,
+                    "user_created_email": record.get("user_created_email"),
+                    "technician_type": record.get("technician_type"),
+                    "days_old_in_minutes": record.get("days_old_in_minutes"),
+                    "waiting_minutes": record.get("waiting_minutes"),
                     "confirmed_by_name": record.get("confirmed_by_name"),
                     "confirmed_date": record.get("confirmed_date"),
+                    "cleaned_confirmed_note": cleaned_confirmed_note[:400] if cleaned_confirmed_note else None,
                     "is_via_email_parser": is_via_email_parser,
                     "is_handle_by_callcentre": is_handle_by_callcentre,
                     "is_waiting_on_response": is_waiting_on_response,

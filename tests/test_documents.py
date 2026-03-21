@@ -29,6 +29,8 @@ def seed_fixture(db: Path) -> None:
             "status": "Open",
             "priority_name": "High",
             "class_name": "Hardware / Printer",
+            "number": "T-101",
+            "key": "abc-101",
             "created_time": "2026-03-18T01:00:00Z",
             "updated_time": "2026-03-19T03:00:00Z",
             "initial_post": "",
@@ -36,6 +38,14 @@ def seed_fixture(db: Path) -> None:
             "support_group_name": "Dispatch",
             "location_name": "Front Desk",
             "department_key": "service",
+            "user_phone": "520-555-0101",
+            "user_created_email": "dispatcher@example.com",
+            "user_created_firstname": "Casey",
+            "user_created_lastname": "Dispatcher",
+            "technician_email": "queue@example.com",
+            "tech_type": "dispatcher",
+            "days_old_in_minutes": 1440,
+            "waiting_minutes": 30,
             "is_via_email_parser": 1,
             "is_handle_by_callcentre": 0,
             "confirmed_by_name": "Dispatcher",
@@ -78,6 +88,7 @@ def seed_fixture(db: Path) -> None:
             "department_key": "managed-services",
             "confirmed_by_name": "Tech Lead",
             "confirmed_date": "2026-03-19T05:00:00Z",
+            "confirmed_note": "User confirmed the printer was fixed.",
             "is_via_email_parser": 1,
             "is_handle_by_callcentre": 0,
             "is_waiting_on_response": True,
@@ -118,6 +129,12 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "printer broken" in primary["text"]
     assert "Support group: Managed Services" in primary["text"]
     assert "Contract: Gold" in primary["text"]
+    assert "Ticket number: T-101" in primary["text"]
+    assert "Ticket key: abc-101" in primary["text"]
+    assert "Technician email: queue@example.com" in primary["text"]
+    assert "Created by: Casey Dispatcher" in primary["text"]
+    assert "Created by email: dispatcher@example.com" in primary["text"]
+    assert "User phone: 520-555-0101" in primary["text"]
     assert "Location: HQ" in primary["text"]
     assert "Account location: HQ Campus" in primary["text"]
     assert "Department: Managed Services" in primary["text"]
@@ -125,6 +142,10 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Via email parser: True" in primary["text"]
     assert "Handled by call centre: False" in primary["text"]
     assert "Confirmed date: 2026-03-19T05:00:00Z" in primary["text"]
+    assert "Confirmed note: User confirmed the printer was fixed." in primary["text"]
+    assert "Waiting minutes: 30" in primary["text"]
+    assert "Ticket age minutes: 1440" in primary["text"]
+    assert "Technician type: dispatcher" in primary["text"]
     assert "Follow-up note: Waiting on user approval" in primary["text"]
     assert "Latest response date: 2026-03-18T01:00:00Z" in primary["text"]
     assert "Latest response note: printer broken" in primary["text"]
@@ -157,8 +178,18 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["department_key"] == "managed-services"
     assert primary["metadata"]["department_label"] == "Managed Services"
     assert primary["metadata"]["department_label_source"] == "support_group_name"
+    assert primary["metadata"]["ticket_number"] == "T-101"
+    assert primary["metadata"]["ticket_key"] == "abc-101"
+    assert primary["metadata"]["technician_email"] == "queue@example.com"
+    assert primary["metadata"]["user_phone"] == "520-555-0101"
+    assert primary["metadata"]["user_created_name"] == "Casey Dispatcher"
+    assert primary["metadata"]["user_created_email"] == "dispatcher@example.com"
+    assert primary["metadata"]["technician_type"] == "dispatcher"
+    assert primary["metadata"]["days_old_in_minutes"] == 1440
+    assert primary["metadata"]["waiting_minutes"] == 30
     assert primary["metadata"]["confirmed_by_name"] == "Tech Lead"
     assert primary["metadata"]["confirmed_date"] == "2026-03-19T05:00:00Z"
+    assert primary["metadata"]["cleaned_confirmed_note"] == "User confirmed the printer was fixed."
     assert primary["metadata"]["is_via_email_parser"] is True
     assert primary["metadata"]["is_handle_by_callcentre"] is False
     assert primary["metadata"]["is_waiting_on_response"] is True
