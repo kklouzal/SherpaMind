@@ -85,6 +85,7 @@ Rules:
 - when a ticket changes, regenerate its references/chunks/artifacts by stable identity
 - replace old references/chunks for that ticket
 - delete stale chunks that no longer belong to the current materialization
+- when per-account or per-technician public docs are regenerated, remove stale entity docs that no longer belong to the current dataset-derived entity set
 
 This prevents old stale natural-language support artifacts from lingering after ticket updates.
 

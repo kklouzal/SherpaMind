@@ -264,6 +264,8 @@ Current public artifact surface includes:
 - per-account docs under `accounts/`
 - per-technician docs under `technicians/`
 
+Snapshot generation also prunes stale per-account/per-technician Markdown files that no longer match the current dataset-derived entity set, so old fallback-label artifacts do not linger beside newer readable-name docs.
+
 ### Runtime model
 
 SherpaMind’s normal background behavior comes from a local Python backend service, not OpenClaw cron.

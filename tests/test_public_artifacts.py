@@ -126,6 +126,42 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Status breakdown" in acme_doc.read_text()
     assert "Category breakdown" in tech_one_doc.read_text()
 
+    assert result["stale_account_docs_removed"] == 0
+    assert result["stale_technician_docs_removed"] == 0
+    assert result["removed_files"] == []
+
     assert len(result["generated_files"]) >= 9
     for generated in result["generated_files"]:
         assert Path(generated).exists()
+
+
+def test_generate_public_snapshot_removes_stale_entity_docs(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    db = tmp_path / ".SherpaMind" / "private" / "data" / "sherpamind.sqlite3"
+    seed_fixture(db)
+
+    account_dir = tmp_path / ".SherpaMind" / "public" / "docs" / "accounts"
+    technician_dir = tmp_path / ".SherpaMind" / "public" / "docs" / "technicians"
+    account_dir.mkdir(parents=True, exist_ok=True)
+    technician_dir.mkdir(parents=True, exist_ok=True)
+
+    stale_account = account_dir / "99999.md"
+    stale_technician = technician_dir / "Legacy_Tech.md"
+    account_index = account_dir / "index.md"
+    technician_index = technician_dir / "index.md"
+
+    stale_account.write_text("stale account doc\n")
+    stale_technician.write_text("stale technician doc\n")
+    account_index.write_text("old account index\n")
+    technician_index.write_text("old technician index\n")
+
+    result = generate_public_snapshot(db)
+
+    assert result["stale_account_docs_removed"] == 1
+    assert result["stale_technician_docs_removed"] == 1
+    assert str(stale_account) in result["removed_files"]
+    assert str(stale_technician) in result["removed_files"]
+    assert not stale_account.exists()
+    assert not stale_technician.exists()
+    assert account_index.exists()
+    assert technician_index.exists()

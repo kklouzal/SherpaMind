@@ -40,6 +40,19 @@ def _safe_doc_name(name: str) -> str:
     return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in name)[:80]
 
 
+def _cleanup_stale_entity_docs(directory: Path, desired_paths: set[Path]) -> list[str]:
+    removed: list[str] = []
+    desired_names = {path.name for path in desired_paths}
+    for existing in sorted(directory.glob("*.md")):
+        if existing.name == "index.md":
+            continue
+        if existing.name in desired_names:
+            continue
+        existing.unlink()
+        removed.append(str(existing))
+    return removed
+
+
 def generate_public_snapshot(db_path: Path) -> dict:
     paths = ensure_path_layout()
     generated_at = datetime.now(timezone.utc).isoformat()
@@ -286,6 +299,8 @@ def generate_public_snapshot(db_path: Path) -> dict:
     ]
     account_docs_written = 0
     technician_docs_written = 0
+    desired_account_paths: set[Path] = set()
+    desired_technician_paths: set[Path] = set()
 
     for account_row in account_summaries:
         account_name = account_row["account"]
@@ -342,6 +357,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
             _markdown_table(summary["recent_log_types"], [("log_type", "Log Type"), ("log_count", "Count")]),
         ]
         path.write_text("\n".join(lines) + "\n")
+        desired_account_paths.add(path)
         generated_files.append(str(path))
         account_docs_written += 1
 
@@ -400,8 +416,12 @@ def generate_public_snapshot(db_path: Path) -> dict:
             _markdown_table(summary["recent_log_types"], [("log_type", "Log Type"), ("log_count", "Count")]),
         ]
         path.write_text("\n".join(lines) + "\n")
+        desired_technician_paths.add(path)
         generated_files.append(str(path))
         technician_docs_written += 1
+
+    removed_account_docs = _cleanup_stale_entity_docs(account_dir, desired_account_paths)
+    removed_technician_docs = _cleanup_stale_entity_docs(technician_dir, desired_technician_paths)
 
     index_path = paths.docs_root / "index.md"
     index_md = [
@@ -435,4 +455,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "technician_docs_generated": technician_docs_written,
         "account_artifact_candidates": len(account_summaries),
         "technician_artifact_candidates": len(technician_summaries),
+        "stale_account_docs_removed": len(removed_account_docs),
+        "stale_technician_docs_removed": len(removed_technician_docs),
+        "removed_files": removed_account_docs + removed_technician_docs,
     }
