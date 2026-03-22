@@ -108,10 +108,30 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
     output_path.parent.mkdir(parents=True, exist_ok=True)
     chunk_counts_by_doc: dict[str, int] = {}
     doc_total_chunk_chars: dict[str, int] = {}
+    rows_by_doc: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         doc_id = str(row["doc_id"])
         chunk_counts_by_doc[doc_id] = chunk_counts_by_doc.get(doc_id, 0) + 1
         doc_total_chunk_chars[doc_id] = doc_total_chunk_chars.get(doc_id, 0) + int(row.get("chunk_chars") or 0)
+        rows_by_doc.setdefault(doc_id, []).append(row)
+
+    chunk_position_by_id: dict[str, dict[str, Any]] = {}
+    for doc_id, doc_rows in rows_by_doc.items():
+        ordered_rows = sorted(doc_rows, key=lambda item: int(item.get("chunk_index") or 0))
+        running_start = 0
+        doc_total_chars = doc_total_chunk_chars.get(doc_id, 0)
+        for idx, row in enumerate(ordered_rows):
+            chunk_chars = int(row.get("chunk_chars") or 0)
+            chunk_start_char = running_start
+            chunk_end_char = running_start + chunk_chars
+            chunk_position_by_id[str(row["chunk_id"])] = {
+                "chunk_start_char": chunk_start_char,
+                "chunk_end_char": chunk_end_char,
+                "chunk_char_span_ratio": round((chunk_chars / doc_total_chars), 4) if doc_total_chars else 0.0,
+                "previous_chunk_id": ordered_rows[idx - 1]["chunk_id"] if idx > 0 else None,
+                "next_chunk_id": ordered_rows[idx + 1]["chunk_id"] if idx + 1 < len(ordered_rows) else None,
+            }
+            running_start = chunk_end_char
 
     count = 0
     with output_path.open("w", encoding="utf-8") as f:
@@ -120,6 +140,7 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
             chunk_count_for_doc = chunk_counts_by_doc.get(doc_id, 0)
             chunk_chars = int(record.get("chunk_chars") or 0)
             doc_chunk_chars = doc_total_chunk_chars.get(doc_id, 0)
+            position = chunk_position_by_id.get(str(record["chunk_id"]), {})
             payload = {
                 "id": record["chunk_id"],
                 "text": record["text"],
@@ -130,6 +151,11 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                     "chunk_chars": chunk_chars,
                     "chunk_count_for_doc": chunk_count_for_doc,
                     "doc_total_chunk_chars": doc_chunk_chars,
+                    "chunk_start_char": position.get("chunk_start_char", 0),
+                    "chunk_end_char": position.get("chunk_end_char", chunk_chars),
+                    "chunk_char_span_ratio": position.get("chunk_char_span_ratio", 0.0),
+                    "previous_chunk_id": position.get("previous_chunk_id"),
+                    "next_chunk_id": position.get("next_chunk_id"),
                     "is_first_chunk": record["chunk_index"] == 0,
                     "is_last_chunk": chunk_count_for_doc > 0 and record["chunk_index"] == (chunk_count_for_doc - 1),
                     "is_multi_chunk_doc": chunk_count_for_doc > 1,

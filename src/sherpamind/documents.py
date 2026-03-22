@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 7
+DOCUMENT_MATERIALIZATION_VERSION = 8
 
 
 def _content_hash(text: str) -> str:
@@ -132,25 +133,93 @@ def _resolve_department_label(record: dict) -> tuple[str | None, str]:
     return None, "missing"
 
 
-def _chunk_text(text: str, target_chars: int = 1800) -> list[str]:
+def _split_text_hard(text: str, target_chars: int) -> list[str]:
+    text = text.strip()
+    if not text:
+        return []
+    words = text.split()
+    if not words:
+        return []
+    chunks: list[str] = []
+    current = words[0]
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        if len(candidate) <= target_chars:
+            current = candidate
+            continue
+        chunks.append(current)
+        current = word
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _split_text_segment(text: str, target_chars: int) -> list[str]:
+    text = text.strip()
+    if not text:
+        return []
     if len(text) <= target_chars:
         return [text]
-    paragraphs = text.split("\n")
+
+    sentence_candidates = [segment.strip() for segment in re.split(r"(?<=[.!?])\s+", text) if segment and segment.strip()]
+    if len(sentence_candidates) <= 1:
+        return _split_text_hard(text, target_chars)
+
+    chunks: list[str] = []
+    current = ""
+    for sentence in sentence_candidates:
+        if len(sentence) > target_chars:
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.extend(_split_text_hard(sentence, target_chars))
+            continue
+        candidate = sentence if not current else f"{current} {sentence}"
+        if len(candidate) <= target_chars:
+            current = candidate
+            continue
+        if current:
+            chunks.append(current)
+        current = sentence
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _chunk_text(text: str, target_chars: int = 1800, min_chunk_chars: int = 250) -> list[str]:
+    if len(text) <= target_chars:
+        return [text]
+
+    segments: list[str] = []
+    for paragraph in text.split("\n"):
+        cleaned = paragraph.strip()
+        if not cleaned:
+            continue
+        segments.extend(_split_text_segment(cleaned, target_chars))
+
     chunks: list[str] = []
     current: list[str] = []
     current_len = 0
-    for para in paragraphs:
-        para_len = len(para) + 1
-        if current and current_len + para_len > target_chars:
+    for segment in segments:
+        candidate_len = len(segment) if not current else current_len + 1 + len(segment)
+        if current and candidate_len > target_chars:
             chunks.append("\n".join(current).strip())
-            current = [para]
-            current_len = para_len
-        else:
-            current.append(para)
-            current_len += para_len
+            current = [segment]
+            current_len = len(segment)
+            continue
+        current.append(segment)
+        current_len = candidate_len
     if current:
         chunks.append("\n".join(current).strip())
-    return [chunk for chunk in chunks if chunk]
+
+    merged_chunks: list[str] = []
+    for chunk in chunks:
+        if merged_chunks and len(chunk) < min_chunk_chars and len(merged_chunks[-1]) + 1 + len(chunk) <= target_chars:
+            merged_chunks[-1] = f"{merged_chunks[-1]}\n{chunk}".strip()
+            continue
+        merged_chunks.append(chunk)
+
+    return [chunk for chunk in merged_chunks if chunk]
 
 
 def _parse_recent_logs(value: str | None) -> list[dict[str, Any]]:

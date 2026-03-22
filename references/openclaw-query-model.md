@@ -151,6 +151,7 @@ SherpaMind should also expose enough observability that OpenClaw can trust the r
 - whether account/user/technician labels are arriving as human-readable names versus raw-ID fallbacks so metadata filters stay clean
 - explicit entity-label quality summaries showing readable-vs-identifier-like label ratios and fallback-source pressure for account/user/technician/department facets
 - whether chunk sizes and chunk fanout per document look sane for vector/semantic use
+- whether embedding-ready exports preserve chunk order/position metadata cleanly enough for vector-sidecar consumers to reconstruct nearby context without guessing
 - whether important retrieval metadata is materially populated at both the chunk level and the document level so a few multi-chunk tickets do not distort coverage reads
 - a real SQLite column/table
 - a reusable structural query

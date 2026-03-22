@@ -61,7 +61,7 @@ Best source:
 
 Current practical implementation now includes:
 - keyword/full-text style search over references/chunks
-- metadata-rich embedding-ready exports with filter-friendly ticket context
+- metadata-rich embedding-ready exports with filter-friendly ticket context and chunk-order/position sidecar fields
 - a lightweight local vector index/search layer for immediate similarity retrieval without external embedding APIs
 
 ## Recommended retrieval document types

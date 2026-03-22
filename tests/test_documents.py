@@ -4,6 +4,7 @@ from pathlib import Path
 from sherpamind.db import initialize_db, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
 from sherpamind.documents import (
     DOCUMENT_MATERIALIZATION_VERSION,
+    _chunk_text,
     build_ticket_document_chunks,
     build_ticket_documents,
     ensure_current_ticket_materialization,
@@ -112,6 +113,20 @@ def seed_fixture(db: Path) -> None:
         }],
         synced_at="2026-03-19T01:00:00Z",
     )
+
+
+def test_chunk_text_splits_large_single_paragraphs_for_vector_readiness() -> None:
+    sentence = "This is a long sentence about printer troubleshooting and follow-up actions."
+    text = " ".join([sentence] * 80)
+
+    chunks = _chunk_text(text, target_chars=500)
+
+    assert len(chunks) > 1
+    assert max(len(chunk) for chunk in chunks) <= 500
+    assert all(chunk.strip() for chunk in chunks)
+    assert "printer troubleshooting" in chunks[0]
+    assert "follow-up actions" in chunks[-1]
+
 
 
 def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:

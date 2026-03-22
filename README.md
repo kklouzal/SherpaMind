@@ -108,7 +108,7 @@ SherpaMind currently covers five major areas:
    - carries workflow/state metadata such as subject, user email, stable ticket identifiers (ticket number/key), technician and creator contact context, waiting/age timing signals, recent log types, derived waiting/follow-up cues, derived latest-response and closure cues from ticket logs, next-step hints, derived action-cue text/source (from explicit next steps, follow-up notes, request-completion notes, or waiting-log fallback), class/submission/resolution taxonomy, human-readable department labels plus label-source provenance, contract/confirmation context, account-location and department context, intake-channel/handling flags, request-completion cues, attachment presence, and resolution highlights into derived artifacts
    - chunks long documents deterministically
    - supports keyword/text search over docs and chunks
-   - exports metadata-rich embedding-ready chunk payloads
+   - exports metadata-rich embedding-ready chunk payloads, including chunk-order/position metadata for vector sidecars
    - builds and queries a local vector index
 
 4. **Operator and OpenClaw observability**
@@ -555,6 +555,7 @@ Vector and retrieval readiness reporting includes:
 - source-vs-materialized coverage for source-backed metadata fields such as support group, contract, location, department key, ticket identifiers, timing flags, and confirmation fields, including whether low coverage reflects upstream absence or backend materialization drift
 - entity-label quality summaries for account/user/technician/department facets so operators can see readable-vs-identifier-like label ratios and fallback-source pressure before trusting filters heavily
 - chunk-topology readiness signals such as chunks-per-document and multi-chunk-document ratio so vector-sidecar consumers can reason about chunk fanout cleanly
+- embedding-ready exports carry chunk-order/position fields (`chunk_start_char`, `chunk_end_char`, `previous_chunk_id`, `next_chunk_id`) so downstream vector sidecars can reconstruct local document context without guessing
 - freshness windows for materialized chunks vs ticket update timestamps
 
 ## Current limitations and intentionally deferred areas

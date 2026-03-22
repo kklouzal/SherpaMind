@@ -212,6 +212,11 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["chunk_chars"] == len("chunk text")
     assert row["metadata"]["chunk_count_for_doc"] == 1
     assert row["metadata"]["doc_total_chunk_chars"] == len("chunk text")
+    assert row["metadata"]["chunk_start_char"] == 0
+    assert row["metadata"]["chunk_end_char"] == len("chunk text")
+    assert row["metadata"]["chunk_char_span_ratio"] == 1.0
+    assert row["metadata"]["previous_chunk_id"] is None
+    assert row["metadata"]["next_chunk_id"] is None
     assert row["metadata"]["is_first_chunk"] is True
     assert row["metadata"]["is_last_chunk"] is True
     assert row["metadata"]["is_multi_chunk_doc"] is False
@@ -264,6 +269,68 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["technician_label_source"] == "joined"
     assert row["metadata"]["resolution_summary"] == "Closed successfully"
     assert row["metadata"]["has_resolution_summary"] is True
+
+
+def test_export_embedding_ready_chunks_includes_chunk_position_links(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+    replace_ticket_documents(
+        db,
+        [{
+            "doc_id": "ticket:201",
+            "ticket_id": 201,
+            "status": "Open",
+            "account": "Acme",
+            "user_name": "Alice",
+            "technician": "Tech One",
+            "updated_at": "2026-03-19T03:00:00Z",
+            "text": "alpha beta gamma delta",
+            "metadata": {"materialization_version": DOCUMENT_MATERIALIZATION_VERSION},
+            "content_hash": "doc-201",
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+    replace_ticket_document_chunks(
+        db,
+        [
+            {
+                "chunk_id": "ticket:201:chunk:0",
+                "doc_id": "ticket:201",
+                "ticket_id": 201,
+                "chunk_index": 0,
+                "text": "alpha beta",
+                "content_hash": "chunk-0",
+            },
+            {
+                "chunk_id": "ticket:201:chunk:1",
+                "doc_id": "ticket:201",
+                "ticket_id": 201,
+                "chunk_index": 1,
+                "text": "gamma delta",
+                "content_hash": "chunk-1",
+            },
+        ],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+
+    output = tmp_path / "embedding-multi.jsonl"
+    export_embedding_ready_chunks(db, output)
+    rows = {row["id"]: row for row in (json.loads(line) for line in output.read_text().splitlines())}
+
+    first = rows["ticket:201:chunk:0"]["metadata"]
+    second = rows["ticket:201:chunk:1"]["metadata"]
+
+    assert first["chunk_start_char"] == 0
+    assert first["chunk_end_char"] == len("alpha beta")
+    assert first["previous_chunk_id"] is None
+    assert first["next_chunk_id"] == "ticket:201:chunk:1"
+    assert first["chunk_char_span_ratio"] == round(len("alpha beta") / len("alpha betagamma delta"), 4)
+
+    assert second["chunk_start_char"] == len("alpha beta")
+    assert second["chunk_end_char"] == len("alpha beta") + len("gamma delta")
+    assert second["previous_chunk_id"] == "ticket:201:chunk:0"
+    assert second["next_chunk_id"] is None
+
 
 
 def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
