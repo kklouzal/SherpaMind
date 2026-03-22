@@ -126,6 +126,8 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     retrieval_text = retrieval_doc.read_text()
     assert "SherpaMind Retrieval Readiness" in retrieval_text
     assert "Lowest chunk-level metadata coverage" in retrieval_text
+    assert "Follow-up cue source coverage" in retrieval_text
+    assert "Action cue source coverage" in retrieval_text
     assert "Source-backed metadata promotion gaps" in retrieval_text
     assert "Entity label quality" in retrieval_text
 

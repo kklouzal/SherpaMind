@@ -176,6 +176,9 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["cleaned_initial_post"] == "Can you help with issue A?"
     assert primary["metadata"]["cleaned_workpad"] == "Internal note"
     assert primary["metadata"]["cleaned_followup_note"] == "Waiting on user approval"
+    assert primary["metadata"]["cleaned_explicit_followup_note"] == "Waiting on user approval"
+    assert primary["metadata"]["cleaned_waiting_log_note"] == "Waiting on user approval"
+    assert primary["metadata"]["followup_note_source"] == "explicit_followup_note"
     assert primary["metadata"]["cleaned_request_completion_note"] == "Finish after-hours maintenance window"
     assert primary["metadata"]["cleaned_next_step"] == "Call back"
     assert primary["metadata"]["cleaned_action_cue"] == "Call back"
@@ -231,6 +234,10 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Technician: Queue Owner" in fallback["text"]
     assert "Account location: Warehouse" in fallback["text"]
     assert fallback["metadata"]["account_location_name"] == "Warehouse"
+    assert fallback["metadata"]["cleaned_followup_note"] == "Waiting for branch manager approval"
+    assert fallback["metadata"]["cleaned_explicit_followup_note"] == "Waiting for branch manager approval"
+    assert fallback["metadata"]["cleaned_waiting_log_note"] == "Waiting for branch manager approval"
+    assert fallback["metadata"]["followup_note_source"] == "explicit_followup_note"
     assert fallback["metadata"]["cleaned_action_cue"] == "Waiting for branch manager approval"
     assert fallback["metadata"]["action_cue_source"] == "followup_note"
     assert fallback["metadata"]["has_next_step"] is True

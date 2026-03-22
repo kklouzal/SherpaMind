@@ -43,6 +43,9 @@ def _load_rows(db_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
                json_extract(d.raw_json, '$.metadata.cleaned_detail_note') AS cleaned_detail_note,
                json_extract(d.raw_json, '$.metadata.cleaned_workpad') AS cleaned_workpad,
                json_extract(d.raw_json, '$.metadata.cleaned_followup_note') AS cleaned_followup_note,
+               json_extract(d.raw_json, '$.metadata.cleaned_explicit_followup_note') AS cleaned_explicit_followup_note,
+               json_extract(d.raw_json, '$.metadata.cleaned_waiting_log_note') AS cleaned_waiting_log_note,
+               json_extract(d.raw_json, '$.metadata.followup_note_source') AS followup_note_source,
                json_extract(d.raw_json, '$.metadata.cleaned_request_completion_note') AS cleaned_request_completion_note,
                json_extract(d.raw_json, '$.metadata.cleaned_next_step') AS cleaned_next_step,
                json_extract(d.raw_json, '$.metadata.cleaned_action_cue') AS cleaned_action_cue,
@@ -185,6 +188,9 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                     "cleaned_detail_note": record["cleaned_detail_note"],
                     "cleaned_workpad": record["cleaned_workpad"],
                     "cleaned_followup_note": record["cleaned_followup_note"],
+                    "cleaned_explicit_followup_note": record["cleaned_explicit_followup_note"],
+                    "cleaned_waiting_log_note": record["cleaned_waiting_log_note"],
+                    "followup_note_source": record["followup_note_source"],
                     "cleaned_request_completion_note": record["cleaned_request_completion_note"],
                     "cleaned_next_step": record["cleaned_next_step"],
                     "cleaned_action_cue": record["cleaned_action_cue"],
@@ -490,6 +496,8 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "cleaned_detail_note": lambda row: _present(row.get("cleaned_detail_note")),
         "cleaned_workpad": lambda row: _present(row.get("cleaned_workpad")),
         "cleaned_followup_note": lambda row: _present(row.get("cleaned_followup_note")),
+        "cleaned_explicit_followup_note": lambda row: _present(row.get("cleaned_explicit_followup_note")),
+        "cleaned_waiting_log_note": lambda row: _present(row.get("cleaned_waiting_log_note")),
         "cleaned_request_completion_note": lambda row: _present(row.get("cleaned_request_completion_note")),
         "cleaned_next_step": lambda row: _present(row.get("cleaned_next_step")),
         "cleaned_action_cue": lambda row: _present(row.get("cleaned_action_cue")),
@@ -544,7 +552,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         }
 
     label_source_summary = {}
-    for field in ("account_label_source", "user_label_source", "technician_label_source", "department_label_source", "action_cue_source"):
+    for field in ("account_label_source", "user_label_source", "technician_label_source", "department_label_source", "followup_note_source", "action_cue_source"):
         counts: dict[str, int] = {}
         for row in rows:
             value = row.get(field) or "missing"

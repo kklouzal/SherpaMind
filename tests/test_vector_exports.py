@@ -102,6 +102,9 @@ def seed(db: Path) -> None:
                     "cleaned_subject": "hello",
                     "cleaned_initial_post": "Help me",
                     "cleaned_followup_note": "Waiting on customer reply",
+                    "cleaned_explicit_followup_note": "Waiting on customer reply",
+                    "cleaned_waiting_log_note": None,
+                    "followup_note_source": "explicit_followup_note",
                     "cleaned_request_completion_note": "Complete during maintenance window",
                     "cleaned_next_step": "Call back tomorrow",
                     "cleaned_action_cue": "Call back tomorrow",
@@ -227,6 +230,9 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["ticketlogs_count"] == 5
     assert row["metadata"]["has_attachments"] is True
     assert row["metadata"]["cleaned_followup_note"] == "Waiting on customer reply"
+    assert row["metadata"]["cleaned_explicit_followup_note"] == "Waiting on customer reply"
+    assert row["metadata"]["cleaned_waiting_log_note"] is None
+    assert row["metadata"]["followup_note_source"] == "explicit_followup_note"
     assert row["metadata"]["cleaned_request_completion_note"] == "Complete during maintenance window"
     assert row["metadata"]["cleaned_next_step"] == "Call back tomorrow"
     assert row["metadata"]["cleaned_action_cue"] == "Call back tomorrow"
@@ -351,6 +357,8 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["filter_facets"]["departments"] == ["Dispatch", "Managed Services"]
     assert summary["metadata_coverage"]["cleaned_subject"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_followup_note"]["chunks"] == 1
+    assert summary["metadata_coverage"]["cleaned_explicit_followup_note"]["chunks"] == 1
+    assert summary["metadata_coverage"]["cleaned_waiting_log_note"]["chunks"] == 0
     assert summary["metadata_coverage"]["cleaned_action_cue"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_latest_response_note"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_resolution_log_note"]["chunks"] == 1
@@ -391,6 +399,8 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["label_source_summary"]["technician_label_source"]["id"]["chunks"] == 1
     assert summary["label_source_summary"]["department_label_source"]["class_name"]["chunks"] == 1
     assert summary["label_source_summary"]["department_label_source"]["support_group_name"]["chunks"] == 1
+    assert summary["label_source_summary"]["followup_note_source"]["explicit_followup_note"]["chunks"] == 1
+    assert summary["label_source_summary"]["followup_note_source"]["missing"]["chunks"] == 1
     assert summary["label_source_summary"]["action_cue_source"]["missing"]["chunks"] == 1
     assert summary["label_source_summary"]["action_cue_source"]["next_step"]["chunks"] == 1
     assert summary["entity_label_quality"]["account"]["readable_chunks"] == 1

@@ -103,6 +103,7 @@ SherpaMind currently covers five major areas:
 3. **Retrieval preparation**
    - materializes ticket documents from canonical rows
    - normalizes ticket text into cleaner retrieval-ready summaries
+- keeps action-oriented ticket cues honest by separating explicit follow-up notes from waiting-log fallback notes while still publishing a unified action-cue field for retrieval consumers
    - normalizes account/user/technician labels so retrieval/vector facets prefer human-readable names over raw numeric IDs when ticket payloads provide them
    - promotes ticket-observed technician labels into canonical stub rows when that is the cleanest stable source available, so technician-facing summaries/filter facets stay readable even when endpoint coverage is thin
    - carries workflow/state metadata such as subject, user email, stable ticket identifiers (ticket number/key), technician and creator contact context, waiting/age timing signals, recent log types, derived waiting/follow-up cues, derived latest-response and closure cues from ticket logs, next-step hints, derived action-cue text/source (from explicit next steps, follow-up notes, request-completion notes, or waiting-log fallback), class/submission/resolution taxonomy, human-readable department labels plus label-source provenance, contract/confirmation context, account-location and department context, intake-channel/handling flags, request-completion cues, attachment presence, and resolution highlights into derived artifacts
@@ -116,6 +117,7 @@ SherpaMind currently covers five major areas:
    - reports enrichment coverage and retrieval coverage
    - reports retrieval-metadata readiness across the materialized document layer
    - reports source-vs-materialized coverage for source-backed metadata so thin fields can be distinguished as upstream absence vs backend promotion drift
+- reports action-cue provenance so operators can see whether ticket guidance came from literal next-step text, explicit follow-up notes, request-completion notes, or waiting-log fallback
    - reports API usage and hourly budget pressure
    - reports vector index readiness and drift
    - generates public Markdown artifacts for lightweight inspection
@@ -554,7 +556,7 @@ Vector and retrieval readiness reporting includes:
 - outdated content rows
 - chunk-size quality metrics (avg/min/max, tiny, over-target)
 - filter-facet inventories for accounts, technicians, statuses, priorities, and categories
-- chunk-level and document-level metadata coverage for cleaned subject/issue summary/next-step/action-cue/log-type/resolution/attachment readiness plus class/submission/resolution taxonomy, human-readable department labels, account-location, confirmation, and intake-channel metadata
+- chunk-level and document-level metadata coverage for cleaned subject/issue summary/next-step/action-cue/log-type/resolution/attachment readiness plus explicit-followup-vs-waiting-log cue splits, class/submission/resolution taxonomy, human-readable department labels, account-location, confirmation, and intake-channel metadata
 - source-vs-materialized coverage for source-backed metadata fields such as support group, contract, location, department key, ticket identifiers, timing flags, and confirmation fields, including whether low coverage reflects upstream absence or backend materialization drift
 - entity-label quality summaries for account/user/technician/department facets so operators can see readable-vs-identifier-like label ratios and fallback-source pressure before trusting filters heavily
 - chunk-topology readiness signals such as chunks-per-document and multi-chunk-document ratio so vector-sidecar consumers can reason about chunk fanout cleanly

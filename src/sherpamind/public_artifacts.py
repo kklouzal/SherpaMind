@@ -134,6 +134,18 @@ def _entity_label_quality_rows(entity_quality: dict[str, dict[str, Any]]) -> lis
     return rows
 
 
+def _source_breakdown_rows(source_counts: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for source, stats in source_counts.items():
+        rows.append({
+            "source": source,
+            "chunks": stats.get("chunks", 0),
+            "ratio": _format_ratio(stats.get("ratio")),
+        })
+    rows.sort(key=lambda row: (-int(row["chunks"] or 0), row["source"]))
+    return rows
+
+
 def generate_public_snapshot(db_path: Path) -> dict:
     paths = ensure_path_layout()
     generated_at = datetime.now(timezone.utc).isoformat()
@@ -372,6 +384,20 @@ def generate_public_snapshot(db_path: Path) -> dict:
         _markdown_table(
             _top_metadata_gaps(retrieval_readiness.get("document_metadata_coverage", {}), count_key="documents"),
             [("field", "Field"), ("documents", "Documents"), ("ratio", "Coverage")],
+        ),
+        "",
+        "## Follow-up cue source coverage",
+        "",
+        _markdown_table(
+            _source_breakdown_rows(retrieval_readiness.get("label_source_summary", {}).get("followup_note_source", {})),
+            [("source", "Source"), ("chunks", "Chunks"), ("ratio", "Coverage")],
+        ),
+        "",
+        "## Action cue source coverage",
+        "",
+        _markdown_table(
+            _source_breakdown_rows(retrieval_readiness.get("label_source_summary", {}).get("action_cue_source", {})),
+            [("source", "Source"), ("chunks", "Chunks"), ("ratio", "Coverage")],
         ),
         "",
         "## Source-backed metadata promotion gaps",

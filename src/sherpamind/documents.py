@@ -10,7 +10,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 8
+DOCUMENT_MATERIALIZATION_VERSION = 9
 
 
 def _content_hash(text: str) -> str:
@@ -263,20 +263,28 @@ def _derive_recent_log_cues(logs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _resolve_followup_cue(
+    explicit_followup_note: str | None,
+    waiting_log_note: str | None,
+) -> tuple[str | None, str]:
+    if explicit_followup_note:
+        return explicit_followup_note, "explicit_followup_note"
+    if waiting_log_note:
+        return waiting_log_note, "waiting_log"
+    return None, "missing"
+
+
 def _resolve_action_cue(
     cleaned_next_step: str | None,
-    explicit_followup_note: str | None,
+    cleaned_followup_cue: str | None,
     cleaned_request_completion_note: str | None,
-    waiting_log_note: str | None,
 ) -> tuple[str | None, str]:
     if cleaned_next_step:
         return cleaned_next_step, "next_step"
-    if explicit_followup_note:
-        return explicit_followup_note, "followup_note"
+    if cleaned_followup_cue:
+        return cleaned_followup_cue, "followup_note"
     if cleaned_request_completion_note:
         return cleaned_request_completion_note, "request_completion_note"
-    if waiting_log_note:
-        return waiting_log_note, "waiting_log"
     return None, "missing"
 
 
@@ -441,7 +449,7 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         resolution_log = log_cues["resolution_log"]
         explicit_followup_note = normalize_ticket_text(record.get("followup_note"))
         waiting_log_note = waiting_log["cleaned_note"] if waiting_log else None
-        cleaned_followup_note = normalize_ticket_text(_first_present(explicit_followup_note, waiting_log_note))
+        cleaned_followup_note, followup_note_source = _resolve_followup_cue(explicit_followup_note, waiting_log_note)
         followup_date = _first_present(record.get("followup_date"), waiting_log["record_date"] if waiting_log else None)
         cleaned_request_completion_note = normalize_ticket_text(record.get("request_completion_note"))
         cleaned_recent_logs = normalize_ticket_text(record.get("recent_log_text"))
@@ -462,9 +470,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         cleaned_next_step = normalize_ticket_text(_first_present(record.get("detail_next_step"), record.get("next_step")))
         cleaned_action_cue, action_cue_source = _resolve_action_cue(
             cleaned_next_step,
-            explicit_followup_note,
+            cleaned_followup_note,
             cleaned_request_completion_note,
-            waiting_log_note,
         )
         recent_log_types = _split_csv_values(record.get("recent_log_types"))
         account_label, account_label_source = _resolve_account_label(record)
@@ -663,6 +670,9 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "cleaned_detail_note": cleaned_detail_note[:400] if cleaned_detail_note else None,
                     "cleaned_workpad": cleaned_workpad[:400] if cleaned_workpad else None,
                     "cleaned_followup_note": cleaned_followup_note[:400] if cleaned_followup_note else None,
+                    "cleaned_explicit_followup_note": explicit_followup_note[:400] if explicit_followup_note else None,
+                    "cleaned_waiting_log_note": waiting_log_note[:400] if waiting_log_note else None,
+                    "followup_note_source": followup_note_source,
                     "cleaned_request_completion_note": cleaned_request_completion_note[:400] if cleaned_request_completion_note else None,
                     "cleaned_next_step": cleaned_next_step[:300] if cleaned_next_step else None,
                     "cleaned_action_cue": cleaned_action_cue[:400] if cleaned_action_cue else None,
