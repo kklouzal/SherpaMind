@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+from typing import Any
 
 from .analysis import (
     get_dataset_summary,
@@ -22,6 +23,8 @@ from .summaries import (
     list_account_artifact_summaries,
     list_technician_artifact_summaries,
 )
+from .vector_exports import get_retrieval_readiness_summary
+from .vector_index import get_vector_index_status
 
 
 def _markdown_table(rows: list[dict], columns: list[tuple[str, str]]) -> str:
@@ -53,6 +56,84 @@ def _cleanup_stale_entity_docs(directory: Path, desired_paths: set[Path]) -> lis
     return removed
 
 
+def _format_ratio(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        return f"{float(value) * 100:.1f}%"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _format_number(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        return f"{value:.1f}" if not value.is_integer() else str(int(value))
+    return str(value)
+
+
+def _top_metadata_gaps(coverage: dict[str, dict[str, Any]], *, count_key: str, limit: int = 12) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for field, stats in coverage.items():
+        ratio = stats.get("ratio")
+        rows.append({
+            "field": field,
+            count_key: stats.get(count_key, 0),
+            "ratio": _format_ratio(ratio),
+            "missing_ratio_value": 1.0 - float(ratio or 0.0),
+        })
+    rows.sort(key=lambda row: (-row["missing_ratio_value"], row["field"]))
+    return [{k: v for k, v in row.items() if k != "missing_ratio_value"} for row in rows[:limit]]
+
+
+def _source_materialization_gap_rows(coverage: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for field, stats in coverage.items():
+        status = str(stats.get("status") or "")
+        if status not in {"partial_materialization", "missing_materialization"}:
+            continue
+        rows.append({
+            "field": field,
+            "status": status,
+            "source_documents": stats.get("source_documents", 0),
+            "materialized_documents": stats.get("materialized_documents", 0),
+            "promotion_gap": stats.get("promotion_gap", 0),
+            "materialized_ratio": _format_ratio(stats.get("materialized_ratio")),
+        })
+    rows.sort(key=lambda row: (-int(row["promotion_gap"] or 0), row["field"]))
+    return rows
+
+
+def _upstream_absent_rows(coverage: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for field, stats in coverage.items():
+        if str(stats.get("status") or "") != "upstream_absent":
+            continue
+        rows.append({
+            "field": field,
+            "ticket_rows": stats.get("ticket_rows", 0),
+            "detail_rows": stats.get("detail_rows", 0),
+            "source_documents": stats.get("source_documents", 0),
+            "materialized_documents": stats.get("materialized_documents", 0),
+        })
+    rows.sort(key=lambda row: row["field"])
+    return rows
+
+
+def _entity_label_quality_rows(entity_quality: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for entity, stats in entity_quality.items():
+        rows.append({
+            "entity": entity,
+            "readable_ratio": _format_ratio(stats.get("readable_ratio")),
+            "identifier_like_ratio": _format_ratio(stats.get("identifier_like_ratio")),
+            "fallback_source_ratio": _format_ratio(stats.get("fallback_source_ratio")),
+            "sample_identifier_values": ", ".join(stats.get("identifier_like_distinct_value_sample", [])[:3]),
+        })
+    return rows
+
+
 def generate_public_snapshot(db_path: Path) -> dict:
     paths = ensure_path_layout()
     generated_at = datetime.now(timezone.utc).isoformat()
@@ -68,6 +149,8 @@ def generate_public_snapshot(db_path: Path) -> dict:
     recent_tickets = list_recent_tickets(db_path, limit=10)
     account_summaries = list_account_artifact_summaries(db_path)
     technician_summaries = list_technician_artifact_summaries(db_path)
+    retrieval_readiness = get_retrieval_readiness_summary(db_path)
+    vector_index_status = get_vector_index_status(db_path)
 
     account_dir = paths.docs_root / "accounts"
     technician_dir = paths.docs_root / "technicians"
@@ -192,6 +275,159 @@ def generate_public_snapshot(db_path: Path) -> dict:
     ]
     snapshot_path.write_text("\n".join(snapshot_md) + "\n")
 
+    retrieval_path = paths.docs_root / "retrieval-readiness.md"
+    retrieval_md = [
+        "# SherpaMind Retrieval Readiness",
+        "",
+        f"Generated: `{generated_at}`",
+        "",
+        "## Summary",
+        "",
+        f"- Documents: `{retrieval_readiness.get('document_count', 0)}`",
+        f"- Chunks: `{retrieval_readiness.get('chunk_count', 0)}`",
+        f"- Indexed chunks: `{vector_index_status.get('indexed_chunks', 0)}` / `{vector_index_status.get('total_chunk_rows', 0)}`",
+        f"- Vector ready ratio: `{_format_ratio(vector_index_status.get('ready_ratio'))}`",
+        f"- Materialization version: `{retrieval_readiness.get('materialization', {}).get('current_version')}`",
+        f"- Current-version chunk ratio: `{_format_ratio(retrieval_readiness.get('materialization', {}).get('chunk_rows_at_current_version_ratio'))}`",
+        "",
+        "## Chunk quality",
+        "",
+        _markdown_table([
+            {
+                "avg_chunk_chars": _format_number(retrieval_readiness.get("chunk_quality", {}).get("avg_chunk_chars")),
+                "min_chunk_chars": retrieval_readiness.get("chunk_quality", {}).get("min_chunk_chars", 0),
+                "max_chunk_chars": retrieval_readiness.get("chunk_quality", {}).get("max_chunk_chars", 0),
+                "tiny_chunk_count": retrieval_readiness.get("chunk_quality", {}).get("tiny_chunk_count", 0),
+                "over_target_chunk_count": retrieval_readiness.get("chunk_quality", {}).get("over_target_chunk_count", 0),
+            }
+        ], [
+            ("avg_chunk_chars", "Avg Chunk Chars"),
+            ("min_chunk_chars", "Min"),
+            ("max_chunk_chars", "Max"),
+            ("tiny_chunk_count", "Tiny Chunks"),
+            ("over_target_chunk_count", "Over Target"),
+        ]),
+        "",
+        "## Document chunk topology",
+        "",
+        _markdown_table([
+            {
+                "avg_chunks_per_document": _format_number(retrieval_readiness.get("document_chunk_topology", {}).get("avg_chunks_per_document")),
+                "single_chunk_document_count": retrieval_readiness.get("document_chunk_topology", {}).get("single_chunk_document_count", 0),
+                "multi_chunk_document_count": retrieval_readiness.get("document_chunk_topology", {}).get("multi_chunk_document_count", 0),
+                "multi_chunk_document_ratio": _format_ratio(retrieval_readiness.get("document_chunk_topology", {}).get("multi_chunk_document_ratio")),
+                "max_chunks_per_document": retrieval_readiness.get("document_chunk_topology", {}).get("max_chunks_per_document", 0),
+            }
+        ], [
+            ("avg_chunks_per_document", "Avg Chunks / Doc"),
+            ("single_chunk_document_count", "Single-Chunk Docs"),
+            ("multi_chunk_document_count", "Multi-Chunk Docs"),
+            ("multi_chunk_document_ratio", "Multi-Chunk Ratio"),
+            ("max_chunks_per_document", "Max Chunks / Doc"),
+        ]),
+        "",
+        "## Freshness",
+        "",
+        _markdown_table([
+            {
+                "earliest_updated_at": retrieval_readiness.get("freshness", {}).get("earliest_updated_at", ""),
+                "latest_updated_at": retrieval_readiness.get("freshness", {}).get("latest_updated_at", ""),
+                "earliest_chunk_synced_at": retrieval_readiness.get("freshness", {}).get("earliest_chunk_synced_at", ""),
+                "latest_chunk_synced_at": retrieval_readiness.get("freshness", {}).get("latest_chunk_synced_at", ""),
+            }
+        ], [
+            ("earliest_updated_at", "Earliest Ticket Update"),
+            ("latest_updated_at", "Latest Ticket Update"),
+            ("earliest_chunk_synced_at", "Chunk Sync Started"),
+            ("latest_chunk_synced_at", "Chunk Sync Finished"),
+        ]),
+        "",
+        "## Materialization and vector status",
+        "",
+        _markdown_table([
+            {
+                "stale_docs": retrieval_readiness.get("materialization", {}).get("stale_docs", 0),
+                "unversioned_docs": retrieval_readiness.get("materialization", {}).get("unversioned_docs", 0),
+                "missing_index_rows": vector_index_status.get("missing_index_rows", 0),
+                "dangling_index_rows": vector_index_status.get("dangling_index_rows", 0),
+                "outdated_content_rows": vector_index_status.get("outdated_content_rows", 0),
+            }
+        ], [
+            ("stale_docs", "Stale Docs"),
+            ("unversioned_docs", "Unversioned Docs"),
+            ("missing_index_rows", "Missing Index Rows"),
+            ("dangling_index_rows", "Dangling Index Rows"),
+            ("outdated_content_rows", "Outdated Index Rows"),
+        ]),
+        "",
+        "## Lowest chunk-level metadata coverage",
+        "",
+        _markdown_table(
+            _top_metadata_gaps(retrieval_readiness.get("metadata_coverage", {}), count_key="chunks"),
+            [("field", "Field"), ("chunks", "Chunks"), ("ratio", "Coverage")],
+        ),
+        "",
+        "## Lowest document-level metadata coverage",
+        "",
+        _markdown_table(
+            _top_metadata_gaps(retrieval_readiness.get("document_metadata_coverage", {}), count_key="documents"),
+            [("field", "Field"), ("documents", "Documents"), ("ratio", "Coverage")],
+        ),
+        "",
+        "## Source-backed metadata promotion gaps",
+        "",
+        _markdown_table(
+            _source_materialization_gap_rows(retrieval_readiness.get("source_metadata_coverage", {})),
+            [
+                ("field", "Field"),
+                ("status", "Status"),
+                ("source_documents", "Source Docs"),
+                ("materialized_documents", "Materialized Docs"),
+                ("promotion_gap", "Gap"),
+                ("materialized_ratio", "Materialized Ratio"),
+            ],
+        ),
+        "",
+        "## Source-backed metadata still upstream-absent",
+        "",
+        _markdown_table(
+            _upstream_absent_rows(retrieval_readiness.get("source_metadata_coverage", {})),
+            [
+                ("field", "Field"),
+                ("ticket_rows", "Ticket Rows"),
+                ("detail_rows", "Detail Rows"),
+                ("source_documents", "Source Docs"),
+                ("materialized_documents", "Materialized Docs"),
+            ],
+        ),
+        "",
+        "## Entity label quality",
+        "",
+        _markdown_table(
+            _entity_label_quality_rows(retrieval_readiness.get("entity_label_quality", {})),
+            [
+                ("entity", "Entity"),
+                ("readable_ratio", "Readable"),
+                ("identifier_like_ratio", "Identifier-Like"),
+                ("fallback_source_ratio", "Fallback Source"),
+                ("sample_identifier_values", "Identifier Samples"),
+            ],
+        ),
+        "",
+        "## Raw retrieval readiness JSON",
+        "",
+        "```json",
+        json.dumps(retrieval_readiness, indent=2),
+        "```",
+        "",
+        "## Notes",
+        "",
+        "- This file is a derived public artifact for OpenClaw-friendly inspection of retrieval quality and drift.",
+        "- Canonical truth remains in `.SherpaMind/private/data/sherpamind.sqlite3`.",
+        "- Materialized docs, chunks, vector rows, and Markdown outputs remain replaceable caches.",
+    ]
+    retrieval_path.write_text("\n".join(retrieval_md) + "\n")
+
     stale_open_path = paths.docs_root / "stale-open-tickets.md"
     stale_open_md = [
         "# SherpaMind Stale Open Tickets",
@@ -291,6 +527,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
 
     generated_files = [
         str(snapshot_path),
+        str(retrieval_path),
         str(stale_open_path),
         str(account_activity_path),
         str(technician_load_path),
@@ -431,6 +668,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "",
         "Available derived artifacts:",
         "- `insight-snapshot.md`",
+        "- `retrieval-readiness.md`",
         "- `stale-open-tickets.md`",
         "- `recent-account-activity.md`",
         "- `recent-technician-load.md`",

@@ -44,6 +44,7 @@ These are derived from canonical tables and are **replaceable caches**, not sour
 Use for quick human/agent inspection under `.SherpaMind/public/docs/`, including:
 - `index.md`
 - `insight-snapshot.md`
+- `retrieval-readiness.md`
 - `stale-open-tickets.md`
 - `recent-account-activity.md`
 - `recent-technician-load.md`

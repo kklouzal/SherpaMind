@@ -257,6 +257,7 @@ Current public artifact surface includes:
 
 - `index.md`
 - `insight-snapshot.md`
+- `retrieval-readiness.md`
 - `stale-open-tickets.md`
 - `recent-account-activity.md`
 - `recent-technician-load.md`

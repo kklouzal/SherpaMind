@@ -107,6 +107,7 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Technician artifact coverage" in text
     assert ".SherpaMind/private/data/sherpamind.sqlite3" in text
 
+    retrieval_doc = tmp_path / ".SherpaMind" / "public" / "docs" / "retrieval-readiness.md"
     account_index = tmp_path / ".SherpaMind" / "public" / "docs" / "accounts" / "index.md"
     technician_index = tmp_path / ".SherpaMind" / "public" / "docs" / "technicians" / "index.md"
     acme_doc = tmp_path / ".SherpaMind" / "public" / "docs" / "accounts" / "Acme.md"
@@ -114,12 +115,19 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     tech_one_doc = tmp_path / ".SherpaMind" / "public" / "docs" / "technicians" / "Tech_One.md"
     tech_two_doc = tmp_path / ".SherpaMind" / "public" / "docs" / "technicians" / "Tech_Two.md"
 
+    assert retrieval_doc.exists()
     assert account_index.exists()
     assert technician_index.exists()
     assert acme_doc.exists()
     assert beta_doc.exists()
     assert tech_one_doc.exists()
     assert tech_two_doc.exists()
+
+    retrieval_text = retrieval_doc.read_text()
+    assert "SherpaMind Retrieval Readiness" in retrieval_text
+    assert "Lowest chunk-level metadata coverage" in retrieval_text
+    assert "Source-backed metadata promotion gaps" in retrieval_text
+    assert "Entity label quality" in retrieval_text
 
     assert "Total account docs: `2`" in account_index.read_text()
     assert "Total technician docs: `2`" in technician_index.read_text()
