@@ -561,7 +561,7 @@ Vector and retrieval readiness reporting includes:
 - entity-label quality summaries for account/user/technician/department facets so operators can see readable-vs-identifier-like label ratios and fallback-source pressure before trusting filters heavily
 - chunk-topology readiness signals such as chunks-per-document and multi-chunk-document ratio so vector-sidecar consumers can reason about chunk fanout cleanly
 - embedding-ready exports carry chunk-order/position fields (`chunk_start_char`, `chunk_end_char`, `previous_chunk_id`, `next_chunk_id`) so downstream vector sidecars can reconstruct local document context without guessing
-- freshness windows for materialized chunks vs ticket update timestamps
+- freshness windows for materialized chunks vs ticket update timestamps, including per-document lag counts, status splits, lag buckets, and top lagging-document samples
 
 ## Current limitations and intentionally deferred areas
 

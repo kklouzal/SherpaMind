@@ -349,6 +349,17 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["document_chunk_topology"]["avg_chunks_per_document"] == 1.0
     assert summary["document_chunk_topology"]["single_chunk_document_count"] == 2
     assert summary["document_chunk_topology"]["multi_chunk_document_count"] == 0
+    assert summary["freshness"]["document_count_with_timestamps"] == 2
+    assert summary["freshness"]["documents_materialized_behind"] == 1
+    assert summary["freshness"]["documents_materialized_current_or_ahead"] == 1
+    assert summary["freshness"]["lagging_document_ratio"] == 0.5
+    assert summary["freshness"]["max_lag_minutes"] == 120.0
+    assert summary["freshness"]["avg_lag_minutes"] == 120.0
+    assert summary["freshness"]["lag_buckets"]["lag_le_6h"]["documents"] == 1
+    assert summary["freshness"]["status_breakdown"]["Open"]["lagging_documents"] == 1
+    assert summary["freshness"]["status_breakdown"]["Closed"]["lagging_documents"] == 0
+    assert summary["freshness"]["top_lagging_documents"][0]["ticket_id"] == 101
+    assert summary["freshness"]["top_lagging_documents"][0]["lag_minutes"] == 120.0
     assert summary["filter_facets"]["accounts"] == ["44", "Acme"]
     assert summary["filter_facets"]["priorities"] == ["High", "Low"]
     assert summary["filter_facets"]["class_names"] == ["Service Request"]

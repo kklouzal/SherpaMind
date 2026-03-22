@@ -6,6 +6,7 @@ from typing import Any
 
 from .db import connect, initialize_db
 from .documents import DOCUMENT_MATERIALIZATION_VERSION, get_ticket_document_materialization_status
+from .time_utils import parse_sherpadesk_timestamp
 from .vector_index import get_vector_index_status
 
 
@@ -458,6 +459,135 @@ def _get_source_metadata_coverage(
     return summary
 
 
+FRESHNESS_LAG_BUCKETS: list[tuple[str, int | None]] = [
+    ("lag_le_15m", 15),
+    ("lag_le_1h", 60),
+    ("lag_le_6h", 360),
+    ("lag_le_24h", 1440),
+    ("lag_gt_24h", None),
+]
+
+
+FRESHNESS_SAMPLE_LIMIT = 10
+
+
+def _freshness_bucket_name(lag_minutes: float) -> str:
+    for name, upper_bound_minutes in FRESHNESS_LAG_BUCKETS:
+        if upper_bound_minutes is None or lag_minutes <= upper_bound_minutes:
+            return name
+    return "lag_gt_24h"
+
+
+def _build_freshness_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "earliest_updated_at": min((row.get("updated_at") for row in rows if row.get("updated_at")), default=None),
+        "latest_updated_at": max((row.get("updated_at") for row in rows if row.get("updated_at")), default=None),
+        "earliest_chunk_synced_at": min((row.get("chunk_synced_at") for row in rows if row.get("chunk_synced_at")), default=None),
+        "latest_chunk_synced_at": max((row.get("chunk_synced_at") for row in rows if row.get("chunk_synced_at")), default=None),
+        "document_count_with_timestamps": 0,
+        "documents_materialized_current_or_ahead": 0,
+        "documents_materialized_behind": 0,
+        "documents_missing_updated_at": 0,
+        "documents_missing_chunk_synced_at": 0,
+        "documents_missing_any_timestamp": 0,
+        "lagging_document_ratio": 0.0,
+        "max_lag_minutes": 0.0,
+        "avg_lag_minutes": 0.0,
+        "status_breakdown": {
+            "Open": {"documents": 0, "lagging_documents": 0, "lagging_ratio": 0.0},
+            "Closed": {"documents": 0, "lagging_documents": 0, "lagging_ratio": 0.0},
+            "Other": {"documents": 0, "lagging_documents": 0, "lagging_ratio": 0.0},
+        },
+        "lag_buckets": {
+            name: {"documents": 0, "ratio": 0.0}
+            for name, _upper_bound_minutes in FRESHNESS_LAG_BUCKETS
+        },
+        "top_lagging_documents": [],
+    }
+    if not rows:
+        return summary
+
+    docs_by_id: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        docs_by_id.setdefault(str(row["doc_id"]), []).append(row)
+
+    lagging_samples: list[dict[str, Any]] = []
+    lag_minutes_values: list[float] = []
+
+    for doc_id, doc_rows in docs_by_id.items():
+        first = doc_rows[0]
+        updated_at = parse_sherpadesk_timestamp(first.get("updated_at"))
+        chunk_sync_times = [
+            parse_sherpadesk_timestamp(row.get("chunk_synced_at"))
+            for row in doc_rows
+            if row.get("chunk_synced_at")
+        ]
+        latest_chunk_synced_at = max((value for value in chunk_sync_times if value is not None), default=None)
+
+        if updated_at is None:
+            summary["documents_missing_updated_at"] += 1
+        if latest_chunk_synced_at is None:
+            summary["documents_missing_chunk_synced_at"] += 1
+        if updated_at is None or latest_chunk_synced_at is None:
+            summary["documents_missing_any_timestamp"] += 1
+            continue
+
+        summary["document_count_with_timestamps"] += 1
+        status_value = str(first.get("status") or "").strip().lower()
+        if status_value == "open":
+            status_key = "Open"
+        elif status_value == "closed":
+            status_key = "Closed"
+        else:
+            status_key = "Other"
+        summary["status_breakdown"][status_key]["documents"] += 1
+
+        lag_minutes = round((updated_at - latest_chunk_synced_at).total_seconds() / 60.0, 2)
+        if lag_minutes > 0:
+            summary["documents_materialized_behind"] += 1
+            summary["status_breakdown"][status_key]["lagging_documents"] += 1
+            lag_minutes_values.append(lag_minutes)
+            bucket_name = _freshness_bucket_name(lag_minutes)
+            summary["lag_buckets"][bucket_name]["documents"] += 1
+            raw_ticket_id = first.get("ticket_id")
+            if raw_ticket_id is None:
+                ticket_id: Any = None
+            else:
+                candidate_ticket_id = str(raw_ticket_id).strip()
+                ticket_id = int(candidate_ticket_id) if candidate_ticket_id.isdigit() else raw_ticket_id
+            lagging_samples.append(
+                {
+                    "doc_id": doc_id,
+                    "ticket_id": ticket_id,
+                    "status": first.get("status"),
+                    "account": first.get("account"),
+                    "technician": first.get("technician"),
+                    "updated_at": first.get("updated_at"),
+                    "latest_chunk_synced_at": latest_chunk_synced_at.isoformat(),
+                    "lag_minutes": lag_minutes,
+                }
+            )
+        else:
+            summary["documents_materialized_current_or_ahead"] += 1
+
+    valid_documents = summary["document_count_with_timestamps"]
+    summary["lagging_document_ratio"] = round((summary["documents_materialized_behind"] / valid_documents), 4) if valid_documents else 0.0
+    if lag_minutes_values:
+        summary["max_lag_minutes"] = round(max(lag_minutes_values), 2)
+        summary["avg_lag_minutes"] = round(sum(lag_minutes_values) / len(lag_minutes_values), 2)
+
+    for bucket in summary["lag_buckets"].values():
+        bucket["ratio"] = round((bucket["documents"] / valid_documents), 4) if valid_documents else 0.0
+    for status_stats in summary["status_breakdown"].values():
+        documents = int(status_stats["documents"] or 0)
+        lagging_documents = int(status_stats["lagging_documents"] or 0)
+        status_stats["lagging_ratio"] = round((lagging_documents / documents), 4) if documents else 0.0
+
+    lagging_samples.sort(key=lambda item: (-float(item["lag_minutes"]), str(item.get("ticket_id") or "")))
+    summary["top_lagging_documents"] = lagging_samples[:FRESHNESS_SAMPLE_LIMIT]
+    return summary
+
+
 def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> dict[str, Any]:
     initialize_db(db_path)
     rows = _load_rows(db_path, limit=limit)
@@ -572,6 +702,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         total_documents=len(document_ids),
         total_chunks=chunk_count,
     )
+    freshness_summary = _build_freshness_summary(rows)
 
     entity_label_quality = {
         "account": _entity_label_quality_summary(
@@ -608,12 +739,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "chunk_count": chunk_count,
         "document_count": len(document_ids),
         "limit_applied": limit,
-        "freshness": {
-            "earliest_updated_at": min((row.get("updated_at") for row in rows if row.get("updated_at")), default=None),
-            "latest_updated_at": max((row.get("updated_at") for row in rows if row.get("updated_at")), default=None),
-            "earliest_chunk_synced_at": min((row.get("chunk_synced_at") for row in rows if row.get("chunk_synced_at")), default=None),
-            "latest_chunk_synced_at": max((row.get("chunk_synced_at") for row in rows if row.get("chunk_synced_at")), default=None),
-        },
+        "freshness": freshness_summary,
         "chunk_quality": {
             "avg_chunk_chars": round(sum(chunk_lengths) / chunk_count, 1) if chunk_count else 0.0,
             "min_chunk_chars": min(chunk_lengths, default=0),

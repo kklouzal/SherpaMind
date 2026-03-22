@@ -125,6 +125,10 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
 
     retrieval_text = retrieval_doc.read_text()
     assert "SherpaMind Retrieval Readiness" in retrieval_text
+    assert "Materialization lag summary" in retrieval_text
+    assert "Materialization lag by ticket status" in retrieval_text
+    assert "Materialization lag buckets" in retrieval_text
+    assert "Top lagging documents" in retrieval_text
     assert "Lowest chunk-level metadata coverage" in retrieval_text
     assert "Follow-up cue source coverage" in retrieval_text
     assert "Action cue source coverage" in retrieval_text

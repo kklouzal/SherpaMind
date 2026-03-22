@@ -146,6 +146,52 @@ def _source_breakdown_rows(source_counts: dict[str, dict[str, Any]]) -> list[dic
     return rows
 
 
+def _freshness_status_rows(freshness: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for status, stats in (freshness.get("status_breakdown") or {}).items():
+        rows.append({
+            "status": status,
+            "documents": stats.get("documents", 0),
+            "lagging_documents": stats.get("lagging_documents", 0),
+            "lagging_ratio": _format_ratio(stats.get("lagging_ratio")),
+        })
+    rows.sort(key=lambda row: row["status"])
+    return rows
+
+
+def _freshness_bucket_rows(freshness: dict[str, Any]) -> list[dict[str, Any]]:
+    labels = {
+        "lag_le_15m": "<=15m",
+        "lag_le_1h": "<=1h",
+        "lag_le_6h": "<=6h",
+        "lag_le_24h": "<=24h",
+        "lag_gt_24h": ">24h",
+    }
+    rows: list[dict[str, Any]] = []
+    for bucket_name, stats in (freshness.get("lag_buckets") or {}).items():
+        rows.append({
+            "bucket": labels.get(bucket_name, bucket_name),
+            "documents": stats.get("documents", 0),
+            "ratio": _format_ratio(stats.get("ratio")),
+            "bucket_sort": ["lag_le_15m", "lag_le_1h", "lag_le_6h", "lag_le_24h", "lag_gt_24h"].index(bucket_name) if bucket_name in labels else 999,
+        })
+    rows.sort(key=lambda row: row["bucket_sort"])
+    return [{k: v for k, v in row.items() if k != "bucket_sort"} for row in rows]
+
+
+def _top_lagging_document_rows(freshness: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in freshness.get("top_lagging_documents") or []:
+        rows.append({
+            "ticket_id": item.get("ticket_id", ""),
+            "status": item.get("status", ""),
+            "account": item.get("account", ""),
+            "technician": item.get("technician", ""),
+            "lag_minutes": _format_number(item.get("lag_minutes")),
+        })
+    return rows
+
+
 def generate_public_snapshot(db_path: Path) -> dict:
     paths = ensure_path_layout()
     generated_at = datetime.now(timezone.utc).isoformat()
@@ -338,7 +384,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
             ("max_chunks_per_document", "Max Chunks / Doc"),
         ]),
         "",
-        "## Freshness",
+        "## Freshness windows",
         "",
         _markdown_table([
             {
@@ -353,6 +399,47 @@ def generate_public_snapshot(db_path: Path) -> dict:
             ("earliest_chunk_synced_at", "Chunk Sync Started"),
             ("latest_chunk_synced_at", "Chunk Sync Finished"),
         ]),
+        "",
+        "## Materialization lag summary",
+        "",
+        _markdown_table([
+            {
+                "documents_with_timestamps": retrieval_readiness.get("freshness", {}).get("document_count_with_timestamps", 0),
+                "documents_materialized_behind": retrieval_readiness.get("freshness", {}).get("documents_materialized_behind", 0),
+                "lagging_document_ratio": _format_ratio(retrieval_readiness.get("freshness", {}).get("lagging_document_ratio")),
+                "avg_lag_minutes": _format_number(retrieval_readiness.get("freshness", {}).get("avg_lag_minutes")),
+                "max_lag_minutes": _format_number(retrieval_readiness.get("freshness", {}).get("max_lag_minutes")),
+                "documents_missing_any_timestamp": retrieval_readiness.get("freshness", {}).get("documents_missing_any_timestamp", 0),
+            }
+        ], [
+            ("documents_with_timestamps", "Docs With Timestamps"),
+            ("documents_materialized_behind", "Lagging Docs"),
+            ("lagging_document_ratio", "Lagging Ratio"),
+            ("avg_lag_minutes", "Avg Lag Minutes"),
+            ("max_lag_minutes", "Max Lag Minutes"),
+            ("documents_missing_any_timestamp", "Missing Any Timestamp"),
+        ]),
+        "",
+        "## Materialization lag by ticket status",
+        "",
+        _markdown_table(
+            _freshness_status_rows(retrieval_readiness.get("freshness", {})),
+            [("status", "Status"), ("documents", "Documents"), ("lagging_documents", "Lagging Docs"), ("lagging_ratio", "Lagging Ratio")],
+        ),
+        "",
+        "## Materialization lag buckets",
+        "",
+        _markdown_table(
+            _freshness_bucket_rows(retrieval_readiness.get("freshness", {})),
+            [("bucket", "Lag Bucket"), ("documents", "Documents"), ("ratio", "Coverage")],
+        ),
+        "",
+        "## Top lagging documents",
+        "",
+        _markdown_table(
+            _top_lagging_document_rows(retrieval_readiness.get("freshness", {})),
+            [("ticket_id", "Ticket ID"), ("status", "Status"), ("account", "Account"), ("technician", "Technician"), ("lag_minutes", "Lag Minutes")],
+        ),
         "",
         "## Materialization and vector status",
         "",
