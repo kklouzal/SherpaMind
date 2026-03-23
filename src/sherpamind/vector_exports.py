@@ -37,6 +37,14 @@ def _load_rows(db_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
                json_extract(d.raw_json, '$.metadata.resolution_category') AS resolution_category,
                json_extract(d.raw_json, '$.metadata.closed_at') AS closed_at,
                json_extract(d.raw_json, '$.metadata.attachments_count') AS attachments_count,
+               json_extract(d.raw_json, '$.metadata.attachment_extensions_csv') AS attachment_extensions_csv,
+               json_extract(d.raw_json, '$.metadata.attachment_kinds_csv') AS attachment_kinds_csv,
+               json_extract(d.raw_json, '$.metadata.attachment_kind_primary') AS attachment_kind_primary,
+               json_extract(d.raw_json, '$.metadata.attachment_total_size_bytes') AS attachment_total_size_bytes,
+               json_extract(d.raw_json, '$.metadata.attachment_image_count') AS attachment_image_count,
+               json_extract(d.raw_json, '$.metadata.attachment_document_count') AS attachment_document_count,
+               json_extract(d.raw_json, '$.metadata.attachment_archive_count') AS attachment_archive_count,
+               json_extract(d.raw_json, '$.metadata.attachment_log_count') AS attachment_log_count,
                json_extract(d.raw_json, '$.metadata.ticketlogs_count') AS ticketlogs_count,
                json_extract(d.raw_json, '$.metadata.timelogs_count') AS timelogs_count,
                json_extract(d.raw_json, '$.metadata.cleaned_subject') AS cleaned_subject,
@@ -181,6 +189,14 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                     "resolution_category": record["resolution_category"],
                     "closed_at": record["closed_at"],
                     "attachments_count": record["attachments_count"],
+                    "attachment_extensions": record["attachment_extensions_csv"],
+                    "attachment_kinds": record["attachment_kinds_csv"],
+                    "attachment_kind_primary": record["attachment_kind_primary"],
+                    "attachment_total_size_bytes": record["attachment_total_size_bytes"],
+                    "attachment_image_count": record["attachment_image_count"],
+                    "attachment_document_count": record["attachment_document_count"],
+                    "attachment_archive_count": record["attachment_archive_count"],
+                    "attachment_log_count": record["attachment_log_count"],
                     "has_attachments": bool(record["has_attachments"]),
                     "ticketlogs_count": record["ticketlogs_count"],
                     "timelogs_count": record["timelogs_count"],
@@ -248,6 +264,12 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
 
 def _present(value: Any) -> bool:
     return value is not None and value != ""
+
+
+def _split_csv_values(value: Any) -> list[str]:
+    if value in (None, ""):
+        return []
+    return [part.strip() for part in str(value).split(",") if part and part.strip()]
 
 
 def _looks_like_identifier(value: Any) -> bool:
@@ -605,6 +627,8 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
     submission_categories = sorted({row.get("submission_category") for row in rows if row.get("submission_category")})
     resolution_categories = sorted({row.get("resolution_category") for row in rows if row.get("resolution_category")})
     departments = sorted({row.get("department_label") for row in rows if row.get("department_label")})
+    attachment_extensions = sorted({value for row in rows for value in _split_csv_values(row.get("attachment_extensions_csv"))})
+    attachment_kinds = sorted({value for row in rows for value in _split_csv_values(row.get("attachment_kinds_csv"))})
 
     chunk_lengths = [int(row.get("chunk_chars") or 0) for row in rows]
     chunk_counts_by_doc: dict[str, int] = {}
@@ -645,6 +669,14 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "department_label": lambda row: _present(row.get("department_label")),
         "ticket_number": lambda row: _present(row.get("ticket_number")),
         "ticket_key": lambda row: _present(row.get("ticket_key")),
+        "attachment_extensions": lambda row: _present(row.get("attachment_extensions_csv")),
+        "attachment_kinds": lambda row: _present(row.get("attachment_kinds_csv")),
+        "attachment_kind_primary": lambda row: _present(row.get("attachment_kind_primary")),
+        "attachment_total_size_bytes": lambda row: _present(row.get("attachment_total_size_bytes")),
+        "attachment_image_count": lambda row: int(row.get("attachment_image_count") or 0) > 0,
+        "attachment_document_count": lambda row: int(row.get("attachment_document_count") or 0) > 0,
+        "attachment_archive_count": lambda row: int(row.get("attachment_archive_count") or 0) > 0,
+        "attachment_log_count": lambda row: int(row.get("attachment_log_count") or 0) > 0,
         "technician_email": lambda row: _present(row.get("technician_email")),
         "user_phone": lambda row: _present(row.get("user_phone")),
         "user_created_name": lambda row: _present(row.get("user_created_name")),
@@ -782,6 +814,10 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
             "resolution_category_count": len(resolution_categories),
             "departments": departments,
             "department_count": len(departments),
+            "attachment_extensions": attachment_extensions,
+            "attachment_extension_count": len(attachment_extensions),
+            "attachment_kinds": attachment_kinds,
+            "attachment_kind_count": len(attachment_kinds),
         },
         "metadata_coverage": metadata_coverage,
         "document_metadata_coverage": document_metadata_coverage,

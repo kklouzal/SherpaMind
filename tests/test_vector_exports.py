@@ -71,7 +71,7 @@ def seed(db: Path) -> None:
             "is_waiting_on_response": True,
             "is_resolved": False,
             "is_confirmed": True,
-            "attachments": [{"id": 9, "name": "photo.png"}],
+            "attachments": [{"id": 9, "name": "photo.png"}, {"id": 10, "name": "bundle.zip"}, {"id": 11, "name": "agent.log"}],
             "ticketlogs": [{"id": 1, "log_type": "Response", "note": "closed"}],
             "timelogs": [],
         }],
@@ -95,7 +95,15 @@ def seed(db: Path) -> None:
                     "class_name": "Service Request",
                     "submission_category": "Portal",
                     "resolution_category": "Completed",
-                    "attachments_count": 1,
+                    "attachments_count": 3,
+                    "attachment_extensions_csv": "log, png, zip",
+                    "attachment_kinds_csv": "archive, image, log",
+                    "attachment_kind_primary": "image",
+                    "attachment_total_size_bytes": 3794,
+                    "attachment_image_count": 1,
+                    "attachment_document_count": 0,
+                    "attachment_archive_count": 1,
+                    "attachment_log_count": 1,
                     "has_attachments": True,
                     "ticketlogs_count": 5,
                     "timelogs_count": 0,
@@ -228,6 +236,13 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["submission_category"] == "Portal"
     assert row["metadata"]["resolution_category"] == "Completed"
     assert row["metadata"]["ticketlogs_count"] == 5
+    assert row["metadata"]["attachment_extensions"] == "log, png, zip"
+    assert row["metadata"]["attachment_kinds"] == "archive, image, log"
+    assert row["metadata"]["attachment_kind_primary"] == "image"
+    assert row["metadata"]["attachment_total_size_bytes"] == 3794
+    assert row["metadata"]["attachment_image_count"] == 1
+    assert row["metadata"]["attachment_archive_count"] == 1
+    assert row["metadata"]["attachment_log_count"] == 1
     assert row["metadata"]["has_attachments"] is True
     assert row["metadata"]["cleaned_followup_note"] == "Waiting on customer reply"
     assert row["metadata"]["cleaned_explicit_followup_note"] == "Waiting on customer reply"
@@ -366,6 +381,8 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["filter_facets"]["submission_categories"] == ["Portal"]
     assert summary["filter_facets"]["resolution_categories"] == ["Completed"]
     assert summary["filter_facets"]["departments"] == ["Dispatch", "Managed Services"]
+    assert summary["filter_facets"]["attachment_extensions"] == ["log", "png", "zip"]
+    assert summary["filter_facets"]["attachment_kinds"] == ["archive", "image", "log"]
     assert summary["metadata_coverage"]["cleaned_subject"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_followup_note"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_explicit_followup_note"]["chunks"] == 1
@@ -382,6 +399,13 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["department_label"]["chunks"] == 2
     assert summary["metadata_coverage"]["ticket_number"]["chunks"] == 2
     assert summary["metadata_coverage"]["ticket_key"]["chunks"] == 2
+    assert summary["metadata_coverage"]["attachment_extensions"]["chunks"] == 1
+    assert summary["metadata_coverage"]["attachment_kinds"]["chunks"] == 1
+    assert summary["metadata_coverage"]["attachment_kind_primary"]["chunks"] == 1
+    assert summary["metadata_coverage"]["attachment_total_size_bytes"]["chunks"] == 1
+    assert summary["metadata_coverage"]["attachment_image_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["attachment_archive_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["attachment_log_count"]["chunks"] == 1
     assert summary["metadata_coverage"]["technician_email"]["chunks"] == 1
     assert summary["metadata_coverage"]["user_phone"]["chunks"] == 1
     assert summary["metadata_coverage"]["user_created_name"]["chunks"] == 1
@@ -441,6 +465,8 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     assert manifest["chunk_count"] == 2
     assert manifest["filter_facets"]["accounts"] == ["44", "Acme"]
     assert manifest["filter_facets"]["departments"] == ["Dispatch", "Managed Services"]
+    assert manifest["filter_facets"]["attachment_extensions"] == ["log", "png", "zip"]
+    assert manifest["filter_facets"]["attachment_kinds"] == ["archive", "image", "log"]
     assert manifest["document_chunk_topology"]["avg_chunks_per_document"] == 1.0
     assert manifest["metadata_coverage"]["resolution_summary"]["chunks"] == 1
     assert manifest["document_metadata_coverage"]["resolution_summary"]["documents"] == 1

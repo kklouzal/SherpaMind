@@ -101,7 +101,11 @@ def seed_fixture(db: Path) -> None:
                 {"id": 501, "log_type": "Initial Post", "record_date": "2026-03-18T01:00:00Z", "plain_note": "printer broken"}
             ],
             "timelogs": [],
-            "attachments": [{"id": "a1", "name": "shot.png", "url": "https://example/shot.png", "size": 1234, "date": "2026-03-18T01:00:00Z"}],
+            "attachments": [
+                {"id": "a1", "name": "shot.png", "url": "https://example/shot.png", "size": 1234, "date": "2026-03-18T01:00:00Z"},
+                {"id": "a2", "name": "logs.zip", "url": "https://example/logs.zip", "size": 2048, "date": "2026-03-18T01:05:00Z"},
+                {"id": "a3", "name": "agent.log", "url": "https://example/agent.log", "size": 512, "date": "2026-03-18T01:10:00Z"}
+            ],
         }, {
             "id": 102,
             "followup_note": "Waiting for branch manager approval",
@@ -168,8 +172,20 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Resolution log note: Closed after printer service restored" in primary["text"]
     assert "Requested completion note: Finish after-hours maintenance window" in primary["text"]
     assert "Attachments (metadata only)" in primary["text"]
+    assert "Attachment kinds: archive, image, log" in primary["text"]
+    assert "Attachment extensions: log, png, zip" in primary["text"]
+    assert "Attachment total size bytes: 3794" in primary["text"]
     assert primary["metadata"]["attachments"][0]["name"] == "shot.png"
-    assert primary["metadata"]["attachment_names"] == ["shot.png"]
+    assert primary["metadata"]["attachment_names"] == ["shot.png", "logs.zip", "agent.log"]
+    assert primary["metadata"]["attachment_extensions"] == ["log", "png", "zip"]
+    assert primary["metadata"]["attachment_extensions_csv"] == "log, png, zip"
+    assert primary["metadata"]["attachment_kinds"] == ["archive", "image", "log"]
+    assert primary["metadata"]["attachment_kinds_csv"] == "archive, image, log"
+    assert primary["metadata"]["attachment_kind_primary"] == "image"
+    assert primary["metadata"]["attachment_total_size_bytes"] == 3794
+    assert primary["metadata"]["attachment_archive_count"] == 1
+    assert primary["metadata"]["attachment_image_count"] == 1
+    assert primary["metadata"]["attachment_log_count"] == 1
     assert primary["metadata"]["has_attachments"] is True
     assert primary["metadata"]["category"] == "Hardware / Printer"
     assert primary["metadata"]["cleaned_subject"] == "Issue A"

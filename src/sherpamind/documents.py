@@ -10,7 +10,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 9
+DOCUMENT_MATERIALIZATION_VERSION = 10
 
 
 def _content_hash(text: str) -> str:
@@ -131,6 +131,137 @@ def _resolve_department_label(record: dict) -> tuple[str | None, str]:
     if department_key and not _looks_like_identifier(department_key):
         return department_key, "department_key"
     return None, "missing"
+
+
+_ATTACHMENT_KIND_BY_EXTENSION: dict[str, str] = {
+    "png": "image",
+    "jpg": "image",
+    "jpeg": "image",
+    "gif": "image",
+    "webp": "image",
+    "bmp": "image",
+    "heic": "image",
+    "tif": "image",
+    "tiff": "image",
+    "svg": "image",
+    "pdf": "document",
+    "doc": "document",
+    "docx": "document",
+    "txt": "document",
+    "rtf": "document",
+    "odt": "document",
+    "csv": "spreadsheet",
+    "xls": "spreadsheet",
+    "xlsx": "spreadsheet",
+    "ods": "spreadsheet",
+    "tsv": "spreadsheet",
+    "zip": "archive",
+    "7z": "archive",
+    "rar": "archive",
+    "tar": "archive",
+    "gz": "archive",
+    "tgz": "archive",
+    "bz2": "archive",
+    "xz": "archive",
+    "log": "log",
+    "evt": "log",
+    "evtx": "log",
+    "json": "data",
+    "xml": "data",
+    "yaml": "data",
+    "yml": "data",
+    "sql": "data",
+    "pcap": "data",
+    "mp3": "audio",
+    "wav": "audio",
+    "m4a": "audio",
+    "ogg": "audio",
+    "mp4": "video",
+    "mov": "video",
+    "avi": "video",
+    "mkv": "video",
+    "wmv": "video",
+    "eml": "message",
+    "msg": "message",
+}
+
+
+def _attachment_extension(name: str | None) -> str | None:
+    if not name:
+        return None
+    candidate = str(name).strip().rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    if "." not in candidate:
+        return None
+    extension = candidate.rsplit(".", 1)[-1].strip().lower()
+    return extension or None
+
+
+def _attachment_kind(name: str | None) -> str:
+    extension = _attachment_extension(name)
+    if not extension:
+        return "unknown"
+    return _ATTACHMENT_KIND_BY_EXTENSION.get(extension, "other")
+
+
+def _summarize_attachment_metadata(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    names: list[str] = []
+    extensions: list[str] = []
+    kind_counts: dict[str, int] = {}
+    kind_order: list[str] = []
+    total_size_bytes = 0
+    size_count = 0
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = _first_present(row.get("name"))
+        if name:
+            names.append(name)
+        extension = _attachment_extension(name)
+        if extension:
+            extensions.append(extension)
+        kind = _attachment_kind(name)
+        if kind not in kind_counts:
+            kind_order.append(kind)
+        kind_counts[kind] = kind_counts.get(kind, 0) + 1
+        size = row.get("size")
+        if isinstance(size, (int, float)):
+            total_size_bytes += int(size)
+            size_count += 1
+        elif size not in (None, ""):
+            try:
+                total_size_bytes += int(str(size).strip())
+                size_count += 1
+            except ValueError:
+                pass
+
+    unique_extensions = sorted(set(extensions))
+    attachment_kinds = sorted(kind_counts)
+    return {
+        "attachment_names": names,
+        "attachment_extensions": unique_extensions,
+        "attachment_extensions_csv": ", ".join(unique_extensions) if unique_extensions else None,
+        "attachment_kinds": attachment_kinds,
+        "attachment_kinds_csv": ", ".join(attachment_kinds) if attachment_kinds else None,
+        "attachment_kind_counts": kind_counts,
+        "attachment_kind_primary": (
+            max(kind_order, key=lambda kind: (kind_counts.get(kind, 0), -kind_order.index(kind)))
+            if kind_order else None
+        ),
+        "attachment_total_size_bytes": total_size_bytes if size_count else None,
+        "attachment_size_known_count": size_count,
+        "attachment_image_count": kind_counts.get("image", 0),
+        "attachment_document_count": kind_counts.get("document", 0),
+        "attachment_spreadsheet_count": kind_counts.get("spreadsheet", 0),
+        "attachment_archive_count": kind_counts.get("archive", 0),
+        "attachment_log_count": kind_counts.get("log", 0),
+        "attachment_data_count": kind_counts.get("data", 0),
+        "attachment_audio_count": kind_counts.get("audio", 0),
+        "attachment_video_count": kind_counts.get("video", 0),
+        "attachment_message_count": kind_counts.get("message", 0),
+        "attachment_other_count": kind_counts.get("other", 0),
+        "attachment_unknown_count": kind_counts.get("unknown", 0),
+    }
 
 
 def _split_text_hard(text: str, target_chars: int) -> list[str]:
@@ -595,12 +726,19 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                 attachment_metadata = json.loads(record["attachment_metadata_json"]) or []
             except json.JSONDecodeError:
                 attachment_metadata = []
+        attachment_summary = _summarize_attachment_metadata(attachment_metadata)
         if attachment_metadata:
             text_parts.append(
                 "Attachments (metadata only): " + ", ".join(
                     f"{item.get('name')} [{item.get('size')} bytes]" for item in attachment_metadata[:5]
                 )
             )
+        if attachment_summary.get("attachment_kinds_csv"):
+            text_parts.append(f"Attachment kinds: {attachment_summary['attachment_kinds_csv']}")
+        if attachment_summary.get("attachment_extensions_csv"):
+            text_parts.append(f"Attachment extensions: {attachment_summary['attachment_extensions_csv']}")
+        if attachment_summary.get("attachment_total_size_bytes") is not None:
+            text_parts.append(f"Attachment total size bytes: {attachment_summary['attachment_total_size_bytes']}")
 
         text = "\n".join(text_parts)
         docs.append(
@@ -632,7 +770,7 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "timelogs_count": record.get("timelogs_count"),
                     "attachments_count": record.get("attachments_count"),
                     "attachments": attachment_metadata,
-                    "attachment_names": [item.get("name") for item in attachment_metadata if item.get("name")],
+                    **attachment_summary,
                     "has_attachments": bool(attachment_metadata),
                     "detail_available": bool(
                         record.get("detail_note")
