@@ -610,6 +610,71 @@ def _build_freshness_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return summary
 
 
+def _build_source_backed_metadata_summary(source_metadata_coverage: dict[str, Any]) -> dict[str, Any]:
+    status_counts: dict[str, int] = {}
+    fields_with_promotion_gap: list[dict[str, Any]] = []
+    upstream_absent_fields: list[dict[str, Any]] = []
+    for field, stats in source_metadata_coverage.items():
+        status = str(stats.get("status") or "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+        promotion_gap = int(stats.get("promotion_gap_documents") or 0)
+        if promotion_gap > 0:
+            fields_with_promotion_gap.append(
+                {
+                    "field": field,
+                    "status": status,
+                    "source_documents": int(stats.get("source_documents") or 0),
+                    "materialized_documents": int(stats.get("materialized_documents") or 0),
+                    "promotion_gap_documents": promotion_gap,
+                    "materialized_document_ratio": float(stats.get("materialized_document_ratio") or 0.0),
+                }
+            )
+        if status == "upstream_absent":
+            upstream_absent_fields.append(
+                {
+                    "field": field,
+                    "ticket_rows": int(stats.get("ticket_rows") or 0),
+                    "detail_rows": int(stats.get("detail_rows") or 0),
+                    "source_documents": int(stats.get("source_documents") or 0),
+                    "materialized_documents": int(stats.get("materialized_documents") or 0),
+                }
+            )
+
+    fields_with_promotion_gap.sort(key=lambda item: (-item["promotion_gap_documents"], item["field"]))
+    upstream_absent_fields.sort(key=lambda item: item["field"])
+    return {
+        "fields": source_metadata_coverage,
+        "status_counts": status_counts,
+        "fields_with_promotion_gap": fields_with_promotion_gap,
+        "upstream_absent_fields": upstream_absent_fields,
+    }
+
+
+def _build_materialization_freshness_lag_summary(freshness_summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "windows": {
+            "earliest_updated_at": freshness_summary.get("earliest_updated_at"),
+            "latest_updated_at": freshness_summary.get("latest_updated_at"),
+            "earliest_chunk_synced_at": freshness_summary.get("earliest_chunk_synced_at"),
+            "latest_chunk_synced_at": freshness_summary.get("latest_chunk_synced_at"),
+        },
+        "lag_summary": {
+            "document_count_with_timestamps": int(freshness_summary.get("document_count_with_timestamps") or 0),
+            "documents_materialized_current_or_ahead": int(freshness_summary.get("documents_materialized_current_or_ahead") or 0),
+            "documents_materialized_behind": int(freshness_summary.get("documents_materialized_behind") or 0),
+            "documents_missing_updated_at": int(freshness_summary.get("documents_missing_updated_at") or 0),
+            "documents_missing_chunk_synced_at": int(freshness_summary.get("documents_missing_chunk_synced_at") or 0),
+            "documents_missing_any_timestamp": int(freshness_summary.get("documents_missing_any_timestamp") or 0),
+            "lagging_document_ratio": float(freshness_summary.get("lagging_document_ratio") or 0.0),
+            "avg_lag_minutes": float(freshness_summary.get("avg_lag_minutes") or 0.0),
+            "max_lag_minutes": float(freshness_summary.get("max_lag_minutes") or 0.0),
+        },
+        "status_breakdown": freshness_summary.get("status_breakdown", {}),
+        "lag_buckets": freshness_summary.get("lag_buckets", {}),
+        "top_lagging_documents": freshness_summary.get("top_lagging_documents", []),
+    }
+
+
 def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> dict[str, Any]:
     initialize_db(db_path)
     rows = _load_rows(db_path, limit=limit)
@@ -734,7 +799,9 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         total_documents=len(document_ids),
         total_chunks=chunk_count,
     )
+    source_backed_metadata = _build_source_backed_metadata_summary(source_metadata_coverage)
     freshness_summary = _build_freshness_summary(rows)
+    materialization_freshness_lag = _build_materialization_freshness_lag_summary(freshness_summary)
 
     entity_label_quality = {
         "account": _entity_label_quality_summary(
@@ -822,8 +889,10 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "metadata_coverage": metadata_coverage,
         "document_metadata_coverage": document_metadata_coverage,
         "source_metadata_coverage": source_metadata_coverage,
+        "source_backed_metadata": source_backed_metadata,
         "label_source_summary": label_source_summary,
         "entity_label_quality": entity_label_quality,
+        "materialization_freshness_lag": materialization_freshness_lag,
         "vector_index": vector,
         "materialization": {
             **materialization,

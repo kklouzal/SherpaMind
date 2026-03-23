@@ -375,6 +375,11 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["freshness"]["status_breakdown"]["Closed"]["lagging_documents"] == 0
     assert summary["freshness"]["top_lagging_documents"][0]["ticket_id"] == 101
     assert summary["freshness"]["top_lagging_documents"][0]["lag_minutes"] == 120.0
+    assert summary["materialization_freshness_lag"]["windows"]["latest_updated_at"] == summary["freshness"]["latest_updated_at"]
+    assert summary["materialization_freshness_lag"]["lag_summary"]["documents_materialized_behind"] == 1
+    assert summary["materialization_freshness_lag"]["status_breakdown"]["Open"]["lagging_documents"] == 1
+    assert summary["materialization_freshness_lag"]["lag_buckets"]["lag_le_6h"]["documents"] == 1
+    assert summary["materialization_freshness_lag"]["top_lagging_documents"][0]["ticket_id"] == 101
     assert summary["filter_facets"]["accounts"] == ["44", "Acme"]
     assert summary["filter_facets"]["priorities"] == ["High", "Low"]
     assert summary["filter_facets"]["class_names"] == ["Service Request"]
@@ -426,6 +431,11 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["source_metadata_coverage"]["ticket_number"]["detail_rows"] == 0
     assert summary["source_metadata_coverage"]["default_contract_name"]["detail_rows"] == 1
     assert summary["source_metadata_coverage"]["default_contract_name"]["status"] == "materialized"
+    assert summary["source_backed_metadata"]["fields"]["default_contract_name"]["status"] == "materialized"
+    assert summary["source_backed_metadata"]["fields"]["support_group_name"]["status"] == "upstream_absent"
+    assert summary["source_backed_metadata"]["status_counts"]["materialized"] >= 1
+    assert summary["source_backed_metadata"]["status_counts"]["upstream_absent"] >= 1
+    assert any(field["field"] == "support_group_name" for field in summary["source_backed_metadata"]["upstream_absent_fields"])
     assert summary["label_source_summary"]["account_label_source"]["id"]["chunks"] == 1
     assert summary["label_source_summary"]["account_label_source"]["raw"]["chunks"] == 1
     assert summary["label_source_summary"]["user_label_source"]["email"]["chunks"] == 1
@@ -473,5 +483,7 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     assert manifest["metadata_coverage"]["account_location_name"]["chunks"] == 1
     assert manifest["source_metadata_coverage"]["default_contract_name"]["detail_rows"] == 1
     assert manifest["source_metadata_coverage"]["support_group_name"]["status"] == "upstream_absent"
+    assert manifest["source_backed_metadata"]["status_counts"]["upstream_absent"] >= 1
+    assert manifest["materialization_freshness_lag"]["lag_summary"]["documents_materialized_behind"] == 1
     assert manifest["label_source_summary"]["account_label_source"]["raw"]["chunks"] == 1
     assert manifest["entity_label_quality"]["account"]["identifier_like_chunks"] == 1

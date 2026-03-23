@@ -562,6 +562,7 @@ Vector and retrieval readiness reporting includes:
 - chunk-topology readiness signals such as chunks-per-document and multi-chunk-document ratio so vector-sidecar consumers can reason about chunk fanout cleanly
 - embedding-ready exports carry chunk-order/position fields (`chunk_start_char`, `chunk_end_char`, `previous_chunk_id`, `next_chunk_id`) so downstream vector sidecars can reconstruct local document context without guessing
 - freshness windows for materialized chunks vs ticket update timestamps, including per-document lag counts, status splits, lag buckets, and top lagging-document samples
+- raw readiness JSON now exposes both detailed machine-facing maps (`source_metadata_coverage`, `freshness`) and operator-oriented rollups (`source_backed_metadata`, `materialization_freshness_lag`) so consumers do not have to reconstruct those views themselves
 
 ## Current limitations and intentionally deferred areas
 
