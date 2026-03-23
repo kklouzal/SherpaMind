@@ -100,10 +100,18 @@ def seed(db: Path) -> None:
                     "attachment_kinds_csv": "archive, image, log",
                     "attachment_kind_primary": "image",
                     "attachment_total_size_bytes": 3794,
+                    "attachment_size_known_count": 0,
                     "attachment_image_count": 1,
                     "attachment_document_count": 0,
+                    "attachment_spreadsheet_count": 0,
                     "attachment_archive_count": 1,
                     "attachment_log_count": 1,
+                    "attachment_data_count": 0,
+                    "attachment_audio_count": 0,
+                    "attachment_video_count": 0,
+                    "attachment_message_count": 0,
+                    "attachment_other_count": 0,
+                    "attachment_unknown_count": 0,
                     "has_attachments": True,
                     "ticketlogs_count": 5,
                     "timelogs_count": 0,
@@ -260,9 +268,18 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["attachment_kinds"] == "archive, image, log"
     assert row["metadata"]["attachment_kind_primary"] == "image"
     assert row["metadata"]["attachment_total_size_bytes"] == 3794
+    assert row["metadata"]["attachment_size_known_count"] == 0
     assert row["metadata"]["attachment_image_count"] == 1
+    assert row["metadata"]["attachment_document_count"] == 0
+    assert row["metadata"]["attachment_spreadsheet_count"] == 0
     assert row["metadata"]["attachment_archive_count"] == 1
     assert row["metadata"]["attachment_log_count"] == 1
+    assert row["metadata"]["attachment_data_count"] == 0
+    assert row["metadata"]["attachment_audio_count"] == 0
+    assert row["metadata"]["attachment_video_count"] == 0
+    assert row["metadata"]["attachment_message_count"] == 0
+    assert row["metadata"]["attachment_other_count"] == 0
+    assert row["metadata"]["attachment_unknown_count"] == 0
     assert row["metadata"]["has_attachments"] is True
     assert row["metadata"]["cleaned_followup_note"] == "Waiting on customer reply"
     assert row["metadata"]["cleaned_explicit_followup_note"] == "Waiting on customer reply"
@@ -499,9 +516,18 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["attachment_kinds"]["chunks"] == 1
     assert summary["metadata_coverage"]["attachment_kind_primary"]["chunks"] == 1
     assert summary["metadata_coverage"]["attachment_total_size_bytes"]["chunks"] == 1
+    assert summary["metadata_coverage"]["attachment_size_known_count"]["chunks"] == 0
     assert summary["metadata_coverage"]["attachment_image_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["attachment_document_count"]["chunks"] == 0
+    assert summary["metadata_coverage"]["attachment_spreadsheet_count"]["chunks"] == 0
     assert summary["metadata_coverage"]["attachment_archive_count"]["chunks"] == 1
     assert summary["metadata_coverage"]["attachment_log_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["attachment_data_count"]["chunks"] == 0
+    assert summary["metadata_coverage"]["attachment_audio_count"]["chunks"] == 0
+    assert summary["metadata_coverage"]["attachment_video_count"]["chunks"] == 0
+    assert summary["metadata_coverage"]["attachment_message_count"]["chunks"] == 0
+    assert summary["metadata_coverage"]["attachment_other_count"]["chunks"] == 0
+    assert summary["metadata_coverage"]["attachment_unknown_count"]["chunks"] == 0
     assert summary["metadata_coverage"]["technician_email"]["chunks"] == 1
     assert summary["metadata_coverage"]["user_phone"]["chunks"] == 1
     assert summary["metadata_coverage"]["user_created_name"]["chunks"] == 1
