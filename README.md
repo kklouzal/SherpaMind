@@ -560,7 +560,7 @@ Vector and retrieval readiness reporting includes:
 - source-vs-materialized coverage for source-backed metadata fields such as support group, contract, location, department key, ticket identifiers, timing flags, and confirmation fields, including whether low coverage reflects upstream absence or backend materialization drift
 - entity-label quality summaries for account/user/technician/department facets so operators can see readable-vs-identifier-like label ratios and fallback-source pressure before trusting filters heavily
 - chunk-topology readiness signals such as chunks-per-document and multi-chunk-document ratio so vector-sidecar consumers can reason about chunk fanout cleanly
-- embedding-ready exports carry chunk-order/position fields (`chunk_start_char`, `chunk_end_char`, `previous_chunk_id`, `next_chunk_id`) so downstream vector sidecars can reconstruct local document context without guessing
+- embedding-ready exports carry chunk-order/position fields (`chunk_start_char`, `chunk_end_char`, `previous_chunk_id`, `next_chunk_id`) plus inferred chunk semantic section cues (`chunk_primary_section`, `chunk_section_labels`, semantic-context booleans) so downstream vector sidecars can reconstruct both nearby context and chunk intent without guessing
 - freshness windows for materialized chunks vs ticket update timestamps, including per-document lag counts, status splits, lag buckets, and top lagging-document samples
 - raw readiness JSON now exposes both detailed machine-facing maps (`source_metadata_coverage`, `freshness`) and operator-oriented rollups (`source_backed_metadata`, `materialization_freshness_lag`) so consumers do not have to reconstruct those views themselves
 

@@ -245,6 +245,12 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["is_first_chunk"] is True
     assert row["metadata"]["is_last_chunk"] is True
     assert row["metadata"]["is_multi_chunk_doc"] is False
+    assert row["metadata"]["chunk_primary_section"] == "general"
+    assert row["metadata"]["chunk_section_labels"] == "general"
+    assert row["metadata"]["chunk_section_count"] == 1
+    assert row["metadata"]["chunk_has_issue_context"] is False
+    assert row["metadata"]["chunk_has_activity_context"] is False
+    assert row["metadata"]["chunk_section_line_counts"] == {"general": 1}
     assert row["metadata"]["priority"] == "High"
     assert row["metadata"]["class_name"] == "Service Request"
     assert row["metadata"]["submission_category"] == "Portal"
@@ -318,6 +324,57 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["technician_label_source"] == "joined"
     assert row["metadata"]["resolution_summary"] == "Closed successfully"
     assert row["metadata"]["has_resolution_summary"] is True
+
+
+def test_export_embedding_ready_chunks_infers_structured_chunk_sections(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+    replace_ticket_documents(
+        db,
+        [{
+            "doc_id": "ticket:301",
+            "ticket_id": 301,
+            "status": "Open",
+            "account": "Acme",
+            "user_name": "Alice",
+            "technician": "Tech One",
+            "updated_at": "2026-03-19T03:00:00Z",
+            "text": "Issue summary: Printer offline\nNext step: Reboot print spooler\nRecent log summary: Spooler crashed overnight\nResolution log note: Restored after restart\nAttachments (metadata only): shot.png [1024 bytes]",
+            "metadata": {"materialization_version": DOCUMENT_MATERIALIZATION_VERSION},
+            "content_hash": "doc-301",
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+    replace_ticket_document_chunks(
+        db,
+        [{
+            "chunk_id": "ticket:301:chunk:0",
+            "doc_id": "ticket:301",
+            "ticket_id": 301,
+            "chunk_index": 0,
+            "text": "Issue summary: Printer offline\nNext step: Reboot print spooler\nRecent log summary: Spooler crashed overnight\nResolution log note: Restored after restart\nAttachments (metadata only): shot.png [1024 bytes]",
+            "content_hash": "chunk-301",
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+
+    output = tmp_path / "embedding-sections.jsonl"
+    export_embedding_ready_chunks(db, output)
+    row = json.loads(output.read_text().splitlines()[0])
+    metadata = row["metadata"]
+
+    assert metadata["chunk_primary_section"] == "issue"
+    assert metadata["chunk_section_labels"] == "issue, action, activity, resolution, attachments"
+    assert metadata["chunk_section_count"] == 5
+    assert metadata["chunk_has_issue_context"] is True
+    assert metadata["chunk_has_action_context"] is True
+    assert metadata["chunk_has_activity_context"] is True
+    assert metadata["chunk_has_resolution_context"] is True
+    assert metadata["chunk_has_attachment_context"] is True
+    assert metadata["chunk_has_identity_context"] is False
+    assert metadata["chunk_section_line_counts"]["issue"] == 1
+    assert metadata["chunk_section_line_counts"]["attachments"] == 1
+
 
 
 def test_export_embedding_ready_chunks_includes_chunk_position_links(tmp_path: Path) -> None:
@@ -416,6 +473,12 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["filter_facets"]["departments"] == ["Dispatch", "Managed Services"]
     assert summary["filter_facets"]["attachment_extensions"] == ["log", "png", "zip"]
     assert summary["filter_facets"]["attachment_kinds"] == ["archive", "image", "log"]
+    assert summary["filter_facets"]["chunk_primary_sections"] == ["general"]
+    assert summary["filter_facets"]["chunk_section_labels"] == ["general"]
+    assert summary["metadata_coverage"]["chunk_primary_section"]["chunks"] == 2
+    assert summary["metadata_coverage"]["chunk_section_labels"]["chunks"] == 2
+    assert summary["metadata_coverage"]["chunk_has_issue_context"]["chunks"] == 0
+    assert summary["metadata_coverage"]["chunk_has_attachment_context"]["chunks"] == 0
     assert summary["metadata_coverage"]["cleaned_subject"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_followup_note"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_explicit_followup_note"]["chunks"] == 1
@@ -523,6 +586,8 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     assert manifest["filter_facets"]["departments"] == ["Dispatch", "Managed Services"]
     assert manifest["filter_facets"]["attachment_extensions"] == ["log", "png", "zip"]
     assert manifest["filter_facets"]["attachment_kinds"] == ["archive", "image", "log"]
+    assert manifest["filter_facets"]["chunk_primary_sections"] == ["general"]
+    assert manifest["filter_facets"]["chunk_section_labels"] == ["general"]
     assert manifest["document_chunk_topology"]["avg_chunks_per_document"] == 1.0
     assert manifest["metadata_coverage"]["resolution_summary"]["chunks"] == 1
     assert manifest["document_metadata_coverage"]["resolution_summary"]["documents"] == 1

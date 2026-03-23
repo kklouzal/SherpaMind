@@ -167,6 +167,7 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
             chunk_chars = int(record.get("chunk_chars") or 0)
             doc_chunk_chars = doc_total_chunk_chars.get(doc_id, 0)
             position = chunk_position_by_id.get(str(record["chunk_id"]), {})
+            chunk_sections = _infer_chunk_sections(record.get("text"))
             payload = {
                 "id": record["chunk_id"],
                 "text": record["text"],
@@ -185,6 +186,18 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                     "is_first_chunk": record["chunk_index"] == 0,
                     "is_last_chunk": chunk_count_for_doc > 0 and record["chunk_index"] == (chunk_count_for_doc - 1),
                     "is_multi_chunk_doc": chunk_count_for_doc > 1,
+                    "chunk_primary_section": chunk_sections["chunk_primary_section"],
+                    "chunk_section_labels": chunk_sections["chunk_section_labels_csv"],
+                    "chunk_section_count": chunk_sections["chunk_section_count"],
+                    "chunk_has_identity_context": chunk_sections["chunk_has_identity_context"],
+                    "chunk_has_workflow_context": chunk_sections["chunk_has_workflow_context"],
+                    "chunk_has_project_context": chunk_sections["chunk_has_project_context"],
+                    "chunk_has_action_context": chunk_sections["chunk_has_action_context"],
+                    "chunk_has_issue_context": chunk_sections["chunk_has_issue_context"],
+                    "chunk_has_activity_context": chunk_sections["chunk_has_activity_context"],
+                    "chunk_has_resolution_context": chunk_sections["chunk_has_resolution_context"],
+                    "chunk_has_attachment_context": chunk_sections["chunk_has_attachment_context"],
+                    "chunk_section_line_counts": chunk_sections["chunk_section_line_counts"],
                     "status": record["status"],
                     "account": record["account"],
                     "account_id": record["account_id"],
@@ -305,6 +318,143 @@ def _looks_like_identifier(value: Any) -> bool:
         return False
     candidate = str(value).strip()
     return bool(candidate) and candidate.isdigit()
+
+
+CHUNK_SECTION_PREFIXES: dict[str, tuple[str, ...]] = {
+    "identity": (
+        "Ticket #",
+        "Status:",
+        "Priority:",
+        "Category:",
+        "Account:",
+        "User:",
+        "Technician:",
+        "Created:",
+        "Updated:",
+        "Closed:",
+        "Ticket number:",
+        "Ticket key:",
+        "Technician email:",
+        "Created by:",
+        "Created by email:",
+        "User phone:",
+        "Account location:",
+        "Location:",
+        "Department:",
+        "Department key:",
+        "Support group:",
+        "Contract:",
+    ),
+    "workflow": (
+        "Via email parser:",
+        "Handled by call centre:",
+        "Initial response flag/value:",
+        "SLA response date:",
+        "SLA completion date:",
+        "Ticket log count:",
+        "Time log count:",
+        "Attachment count:",
+        "Waiting on response:",
+        "Waiting minutes:",
+        "Confirmed:",
+        "Resolved flag:",
+        "Ticket age minutes:",
+        "Technician type:",
+    ),
+    "project": (
+        "Project:",
+        "Project ID:",
+        "Scheduled ticket ID:",
+        "Related ticket count:",
+        "Estimated time:",
+        "Remaining hours:",
+        "Total hours:",
+        "Total time minutes:",
+        "Labor cost:",
+        "Percent complete:",
+    ),
+    "action": (
+        "Next step:",
+        "Next step date:",
+        "Follow-up date:",
+        "Follow-up note:",
+        "Requested completion date:",
+        "Requested completion note:",
+    ),
+    "issue": (
+        "Issue summary:",
+        "Internal note:",
+        "Workpad summary:",
+    ),
+    "activity": (
+        "Latest response date:",
+        "Latest response note:",
+        "Recent log types:",
+        "Recent log summary:",
+    ),
+    "resolution": (
+        "Confirmed by:",
+        "Confirmed date:",
+        "Confirmed note:",
+        "Resolution log date:",
+        "Resolution log note:",
+        "Resolution/activity highlight:",
+        "Resolution category:",
+    ),
+    "attachments": (
+        "Attachments (metadata only):",
+        "Attachment kinds:",
+        "Attachment extensions:",
+        "Attachment total size bytes:",
+    ),
+}
+
+
+def _infer_chunk_sections(text: Any) -> dict[str, Any]:
+    ordered_sections: list[str] = []
+    section_counts: dict[str, int] = {}
+    first_seen_index: dict[str, int] = {}
+
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    for line in lines:
+        matched_section = None
+        for section, prefixes in CHUNK_SECTION_PREFIXES.items():
+            if any(line.startswith(prefix) for prefix in prefixes):
+                matched_section = section
+                break
+        if matched_section is None:
+            continue
+        if matched_section not in first_seen_index:
+            first_seen_index[matched_section] = len(ordered_sections)
+            ordered_sections.append(matched_section)
+        section_counts[matched_section] = section_counts.get(matched_section, 0) + 1
+
+    if not ordered_sections:
+        ordered_sections = ["general"]
+        section_counts = {"general": len(lines) if lines else 1}
+        first_seen_index = {"general": 0}
+
+    primary_section = min(
+        ordered_sections,
+        key=lambda section: (-section_counts.get(section, 0), first_seen_index.get(section, 0), section),
+    )
+    section_labels_csv = ", ".join(ordered_sections)
+
+    return {
+        "chunk_primary_section": primary_section,
+        "chunk_section_labels": ordered_sections,
+        "chunk_section_labels_csv": section_labels_csv,
+        "chunk_section_count": len(ordered_sections),
+        "chunk_has_identity_context": "identity" in ordered_sections,
+        "chunk_has_workflow_context": "workflow" in ordered_sections,
+        "chunk_has_project_context": "project" in ordered_sections,
+        "chunk_has_action_context": "action" in ordered_sections,
+        "chunk_has_issue_context": "issue" in ordered_sections,
+        "chunk_has_activity_context": "activity" in ordered_sections,
+        "chunk_has_resolution_context": "resolution" in ordered_sections,
+        "chunk_has_attachment_context": "attachments" in ordered_sections,
+        "chunk_section_line_counts": dict(section_counts),
+    }
 
 
 def _entity_label_quality_summary(
@@ -749,6 +899,9 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
     vector = get_vector_index_status(db_path)
     materialization = get_ticket_document_materialization_status(db_path)
 
+    for row in rows:
+        row.update(_infer_chunk_sections(row.get("text")))
+
     chunk_count = len(rows)
     document_ids = {row["doc_id"] for row in rows}
     accounts = sorted({row.get("account") for row in rows if row.get("account")})
@@ -762,6 +915,8 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
     departments = sorted({row.get("department_label") for row in rows if row.get("department_label")})
     attachment_extensions = sorted({value for row in rows for value in _split_csv_values(row.get("attachment_extensions_csv"))})
     attachment_kinds = sorted({value for row in rows for value in _split_csv_values(row.get("attachment_kinds_csv"))})
+    chunk_primary_sections = sorted({row.get("chunk_primary_section") for row in rows if row.get("chunk_primary_section")})
+    chunk_section_labels = sorted({value for row in rows for value in (row.get("chunk_section_labels") or []) if value})
 
     chunk_lengths = [int(row.get("chunk_chars") or 0) for row in rows]
     chunk_counts_by_doc: dict[str, int] = {}
@@ -774,6 +929,16 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "technician": lambda row: _present(row.get("technician")),
         "priority": lambda row: _present(row.get("priority")),
         "category": lambda row: _present(row.get("category")),
+        "chunk_primary_section": lambda row: _present(row.get("chunk_primary_section")),
+        "chunk_section_labels": lambda row: bool(row.get("chunk_section_labels")),
+        "chunk_has_identity_context": lambda row: bool(row.get("chunk_has_identity_context")),
+        "chunk_has_workflow_context": lambda row: bool(row.get("chunk_has_workflow_context")),
+        "chunk_has_project_context": lambda row: bool(row.get("chunk_has_project_context")),
+        "chunk_has_action_context": lambda row: bool(row.get("chunk_has_action_context")),
+        "chunk_has_issue_context": lambda row: bool(row.get("chunk_has_issue_context")),
+        "chunk_has_activity_context": lambda row: bool(row.get("chunk_has_activity_context")),
+        "chunk_has_resolution_context": lambda row: bool(row.get("chunk_has_resolution_context")),
+        "chunk_has_attachment_context": lambda row: bool(row.get("chunk_has_attachment_context")),
         "class_name": lambda row: _present(row.get("class_name")),
         "submission_category": lambda row: _present(row.get("submission_category")),
         "resolution_category": lambda row: _present(row.get("resolution_category")),
@@ -967,6 +1132,10 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
             "attachment_extension_count": len(attachment_extensions),
             "attachment_kinds": attachment_kinds,
             "attachment_kind_count": len(attachment_kinds),
+            "chunk_primary_sections": chunk_primary_sections,
+            "chunk_primary_section_count": len(chunk_primary_sections),
+            "chunk_section_labels": chunk_section_labels,
+            "chunk_section_label_count": len(chunk_section_labels),
         },
         "metadata_coverage": metadata_coverage,
         "document_metadata_coverage": document_metadata_coverage,
