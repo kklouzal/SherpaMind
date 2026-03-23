@@ -10,7 +10,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 10
+DOCUMENT_MATERIALIZATION_VERSION = 11
 
 
 def _content_hash(text: str) -> str:
@@ -58,6 +58,15 @@ def _coerce_bool(value: Any) -> bool | None:
     if candidate in {"0", "false", "no", "n", "off", ""}:
         return False
     return bool(candidate)
+
+
+def _present_metric(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value != 0
+    candidate = str(value).strip()
+    return bool(candidate) and candidate not in {"0", "0.0", "0.00"}
 
 
 def _resolve_account_label(record: dict) -> tuple[str | None, str]:
@@ -489,6 +498,16 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                COALESCE(json_extract(td.raw_json, '$.tech_type'), json_extract(t.raw_json, '$.tech_type')) AS technician_type,
                COALESCE(json_extract(td.raw_json, '$.days_old_in_minutes'), json_extract(t.raw_json, '$.days_old_in_minutes')) AS days_old_in_minutes,
                COALESCE(json_extract(td.raw_json, '$.waiting_minutes'), json_extract(t.raw_json, '$.waiting_minutes')) AS waiting_minutes,
+               COALESCE(json_extract(td.raw_json, '$.project_id'), json_extract(t.raw_json, '$.project_id')) AS project_id,
+               COALESCE(json_extract(td.raw_json, '$.project_name'), json_extract(t.raw_json, '$.project_name')) AS project_name,
+               COALESCE(json_extract(td.raw_json, '$.scheduled_ticket_id'), json_extract(t.raw_json, '$.scheduled_ticket_id')) AS scheduled_ticket_id,
+               COALESCE(json_extract(td.raw_json, '$.related_tickets_count'), json_extract(t.raw_json, '$.related_tickets_count')) AS related_tickets_count,
+               COALESCE(json_extract(td.raw_json, '$.estimated_time'), json_extract(t.raw_json, '$.estimated_time')) AS estimated_time,
+               COALESCE(json_extract(td.raw_json, '$.remaining_hours'), json_extract(t.raw_json, '$.remaining_hours')) AS remaining_hours,
+               COALESCE(json_extract(td.raw_json, '$.total_hours'), json_extract(t.raw_json, '$.total_hours')) AS total_hours,
+               COALESCE(json_extract(td.raw_json, '$.total_time_in_minutes'), json_extract(t.raw_json, '$.total_time_in_minutes')) AS total_time_in_minutes,
+               COALESCE(json_extract(td.raw_json, '$.labor_cost'), json_extract(t.raw_json, '$.labor_cost')) AS labor_cost,
+               COALESCE(json_extract(td.raw_json, '$.percentage_complete'), json_extract(t.raw_json, '$.percentage_complete')) AS percentage_complete,
                td.sla_response_date,
                td.sla_complete_date,
                td.ticketlogs_count,
@@ -614,6 +633,20 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         is_confirmed = _coerce_bool(record.get("is_confirmed"))
         is_via_email_parser = _coerce_bool(record.get("is_via_email_parser"))
         is_handle_by_callcentre = _coerce_bool(record.get("is_handle_by_callcentre"))
+        has_project_context = bool(record.get("project_id") or record.get("project_name"))
+        has_scheduled_parent = _present_metric(record.get("scheduled_ticket_id"))
+        has_related_tickets = _present_metric(record.get("related_tickets_count"))
+        has_effort_tracking = any(
+            _present_metric(record.get(field))
+            for field in (
+                "estimated_time",
+                "remaining_hours",
+                "total_hours",
+                "total_time_in_minutes",
+                "labor_cost",
+                "percentage_complete",
+            )
+        )
 
         text_parts = [
             f"Ticket #{record['id']}: {record.get('subject') or '(no subject)'}",
@@ -685,6 +718,26 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Ticket age minutes: {record['days_old_in_minutes']}")
         if record.get("technician_type"):
             text_parts.append(f"Technician type: {record['technician_type']}")
+        if record.get("project_name"):
+            text_parts.append(f"Project: {record['project_name']}")
+        if record.get("project_id"):
+            text_parts.append(f"Project ID: {record['project_id']}")
+        if _present_metric(record.get("scheduled_ticket_id")):
+            text_parts.append(f"Scheduled ticket ID: {record['scheduled_ticket_id']}")
+        if _present_metric(record.get("related_tickets_count")):
+            text_parts.append(f"Related ticket count: {record['related_tickets_count']}")
+        if _present_metric(record.get("estimated_time")):
+            text_parts.append(f"Estimated time: {record['estimated_time']}")
+        if _present_metric(record.get("remaining_hours")):
+            text_parts.append(f"Remaining hours: {record['remaining_hours']}")
+        if _present_metric(record.get("total_hours")):
+            text_parts.append(f"Total hours: {record['total_hours']}")
+        if _present_metric(record.get("total_time_in_minutes")):
+            text_parts.append(f"Total time minutes: {record['total_time_in_minutes']}")
+        if _present_metric(record.get("labor_cost")):
+            text_parts.append(f"Labor cost: {record['labor_cost']}")
+        if _present_metric(record.get("percentage_complete")):
+            text_parts.append(f"Percent complete: {record['percentage_complete']}")
         if cleaned_next_step:
             text_parts.append(f"Next step: {cleaned_next_step}")
         if record.get("next_step_date"):
@@ -798,6 +851,16 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                         or created_by_name
                         or record.get("user_created_email")
                         or record.get("technician_type")
+                        or record.get("project_id")
+                        or record.get("project_name")
+                        or _present_metric(record.get("scheduled_ticket_id"))
+                        or _present_metric(record.get("related_tickets_count"))
+                        or _present_metric(record.get("estimated_time"))
+                        or _present_metric(record.get("remaining_hours"))
+                        or _present_metric(record.get("total_hours"))
+                        or _present_metric(record.get("total_time_in_minutes"))
+                        or _present_metric(record.get("labor_cost"))
+                        or _present_metric(record.get("percentage_complete"))
                         or record.get("days_old_in_minutes") not in (None, "")
                         or record.get("waiting_minutes") not in (None, "")
                         or is_via_email_parser is not None
@@ -841,6 +904,20 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "user_created_name": created_by_name,
                     "user_created_email": record.get("user_created_email"),
                     "technician_type": record.get("technician_type"),
+                    "project_id": record.get("project_id"),
+                    "project_name": record.get("project_name"),
+                    "scheduled_ticket_id": record.get("scheduled_ticket_id"),
+                    "related_tickets_count": record.get("related_tickets_count"),
+                    "estimated_time": record.get("estimated_time"),
+                    "remaining_hours": record.get("remaining_hours"),
+                    "total_hours": record.get("total_hours"),
+                    "total_time_in_minutes": record.get("total_time_in_minutes"),
+                    "labor_cost": record.get("labor_cost"),
+                    "percentage_complete": record.get("percentage_complete"),
+                    "has_project_context": has_project_context,
+                    "has_scheduled_parent": has_scheduled_parent,
+                    "has_related_tickets": has_related_tickets,
+                    "has_effort_tracking": has_effort_tracking,
                     "days_old_in_minutes": record.get("days_old_in_minutes"),
                     "waiting_minutes": record.get("waiting_minutes"),
                     "confirmed_by_name": record.get("confirmed_by_name"),

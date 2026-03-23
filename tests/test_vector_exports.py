@@ -141,6 +141,20 @@ def seed(db: Path) -> None:
                     "user_created_name": "Casey Dispatcher",
                     "user_created_email": "dispatcher@example.com",
                     "technician_type": "dispatcher",
+                    "project_id": 77,
+                    "project_name": "Printer Rollout",
+                    "scheduled_ticket_id": 909,
+                    "related_tickets_count": 4,
+                    "estimated_time": 2.5,
+                    "remaining_hours": 1.25,
+                    "total_hours": 3.75,
+                    "total_time_in_minutes": 225,
+                    "labor_cost": 450,
+                    "percentage_complete": 60,
+                    "has_project_context": True,
+                    "has_scheduled_parent": True,
+                    "has_related_tickets": True,
+                    "has_effort_tracking": True,
                     "days_old_in_minutes": 1440,
                     "waiting_minutes": 30,
                     "confirmed_by_name": "Tech Lead",
@@ -272,6 +286,20 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["user_created_name"] == "Casey Dispatcher"
     assert row["metadata"]["user_created_email"] == "dispatcher@example.com"
     assert row["metadata"]["technician_type"] == "dispatcher"
+    assert row["metadata"]["project_id"] == 77
+    assert row["metadata"]["project_name"] == "Printer Rollout"
+    assert row["metadata"]["scheduled_ticket_id"] == 909
+    assert row["metadata"]["related_tickets_count"] == 4
+    assert row["metadata"]["estimated_time"] == 2.5
+    assert row["metadata"]["remaining_hours"] == 1.25
+    assert row["metadata"]["total_hours"] == 3.75
+    assert row["metadata"]["total_time_in_minutes"] == 225
+    assert row["metadata"]["labor_cost"] == 450
+    assert row["metadata"]["percentage_complete"] == 60
+    assert row["metadata"]["has_project_context"] is True
+    assert row["metadata"]["has_scheduled_parent"] is True
+    assert row["metadata"]["has_related_tickets"] is True
+    assert row["metadata"]["has_effort_tracking"] is True
     assert row["metadata"]["days_old_in_minutes"] == 1440
     assert row["metadata"]["waiting_minutes"] == 30
     assert row["metadata"]["confirmed_by_name"] == "Tech Lead"
@@ -416,6 +444,20 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["user_created_name"]["chunks"] == 1
     assert summary["metadata_coverage"]["user_created_email"]["chunks"] == 1
     assert summary["metadata_coverage"]["technician_type"]["chunks"] == 1
+    assert summary["metadata_coverage"]["project_id"]["chunks"] == 1
+    assert summary["metadata_coverage"]["project_name"]["chunks"] == 1
+    assert summary["metadata_coverage"]["scheduled_ticket_id"]["chunks"] == 1
+    assert summary["metadata_coverage"]["related_tickets_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["estimated_time"]["chunks"] == 1
+    assert summary["metadata_coverage"]["remaining_hours"]["chunks"] == 1
+    assert summary["metadata_coverage"]["total_hours"]["chunks"] == 1
+    assert summary["metadata_coverage"]["total_time_in_minutes"]["chunks"] == 1
+    assert summary["metadata_coverage"]["labor_cost"]["chunks"] == 1
+    assert summary["metadata_coverage"]["percentage_complete"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_project_context"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_scheduled_parent"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_related_tickets"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_effort_tracking"]["chunks"] == 1
     assert summary["metadata_coverage"]["days_old_in_minutes"]["chunks"] == 1
     assert summary["metadata_coverage"]["waiting_minutes"]["chunks"] == 1
     assert summary["document_metadata_coverage"]["department_label"]["documents"] == 2
@@ -429,6 +471,10 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["source_metadata_coverage"]["support_group_name"]["materialized_documents"] == 1
     assert summary["source_metadata_coverage"]["ticket_number"]["ticket_rows"] == 2
     assert summary["source_metadata_coverage"]["ticket_number"]["detail_rows"] == 0
+    assert summary["source_metadata_coverage"]["project_name"]["detail_rows"] == 0
+    assert summary["source_metadata_coverage"]["project_name"]["status"] == "upstream_absent"
+    assert summary["source_metadata_coverage"]["scheduled_ticket_id"]["detail_rows"] == 0
+    assert summary["source_metadata_coverage"]["scheduled_ticket_id"]["status"] == "upstream_absent"
     assert summary["source_metadata_coverage"]["default_contract_name"]["detail_rows"] == 1
     assert summary["source_metadata_coverage"]["default_contract_name"]["status"] == "materialized"
     assert summary["source_backed_metadata"]["fields"]["default_contract_name"]["status"] == "materialized"
@@ -481,6 +527,8 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     assert manifest["metadata_coverage"]["resolution_summary"]["chunks"] == 1
     assert manifest["document_metadata_coverage"]["resolution_summary"]["documents"] == 1
     assert manifest["metadata_coverage"]["account_location_name"]["chunks"] == 1
+    assert manifest["metadata_coverage"]["project_name"]["chunks"] == 1
+    assert manifest["metadata_coverage"]["has_effort_tracking"]["chunks"] == 1
     assert manifest["source_metadata_coverage"]["default_contract_name"]["detail_rows"] == 1
     assert manifest["source_metadata_coverage"]["support_group_name"]["status"] == "upstream_absent"
     assert manifest["source_backed_metadata"]["status_counts"]["upstream_absent"] >= 1

@@ -45,6 +45,16 @@ def seed_fixture(db: Path) -> None:
             "user_created_lastname": "Dispatcher",
             "technician_email": "queue@example.com",
             "tech_type": "dispatcher",
+            "project_id": 77,
+            "project_name": "Printer Rollout",
+            "scheduled_ticket_id": 909,
+            "related_tickets_count": 4,
+            "estimated_time": 2.5,
+            "remaining_hours": 1.25,
+            "total_hours": 3.75,
+            "total_time_in_minutes": 225,
+            "labor_cost": 450,
+            "percentage_complete": 60,
             "days_old_in_minutes": 1440,
             "waiting_minutes": 30,
             "is_via_email_parser": 1,
@@ -165,6 +175,16 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Waiting minutes: 30" in primary["text"]
     assert "Ticket age minutes: 1440" in primary["text"]
     assert "Technician type: dispatcher" in primary["text"]
+    assert "Project: Printer Rollout" in primary["text"]
+    assert "Project ID: 77" in primary["text"]
+    assert "Scheduled ticket ID: 909" in primary["text"]
+    assert "Related ticket count: 4" in primary["text"]
+    assert "Estimated time: 2.5" in primary["text"]
+    assert "Remaining hours: 1.25" in primary["text"]
+    assert "Total hours: 3.75" in primary["text"]
+    assert "Total time minutes: 225" in primary["text"]
+    assert "Labor cost: 450" in primary["text"]
+    assert "Percent complete: 60" in primary["text"]
     assert "Follow-up note: Waiting on user approval" in primary["text"]
     assert "Latest response date: 2026-03-18T01:00:00Z" in primary["text"]
     assert "Latest response note: printer broken" in primary["text"]
@@ -219,6 +239,20 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["user_created_name"] == "Casey Dispatcher"
     assert primary["metadata"]["user_created_email"] == "dispatcher@example.com"
     assert primary["metadata"]["technician_type"] == "dispatcher"
+    assert primary["metadata"]["project_id"] == 77
+    assert primary["metadata"]["project_name"] == "Printer Rollout"
+    assert primary["metadata"]["scheduled_ticket_id"] == 909
+    assert primary["metadata"]["related_tickets_count"] == 4
+    assert primary["metadata"]["estimated_time"] == 2.5
+    assert primary["metadata"]["remaining_hours"] == 1.25
+    assert primary["metadata"]["total_hours"] == 3.75
+    assert primary["metadata"]["total_time_in_minutes"] == 225
+    assert primary["metadata"]["labor_cost"] == 450
+    assert primary["metadata"]["percentage_complete"] == 60
+    assert primary["metadata"]["has_project_context"] is True
+    assert primary["metadata"]["has_scheduled_parent"] is True
+    assert primary["metadata"]["has_related_tickets"] is True
+    assert primary["metadata"]["has_effort_tracking"] is True
     assert primary["metadata"]["days_old_in_minutes"] == 1440
     assert primary["metadata"]["waiting_minutes"] == 30
     assert primary["metadata"]["confirmed_by_name"] == "Tech Lead"
