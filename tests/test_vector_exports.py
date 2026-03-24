@@ -114,6 +114,16 @@ def seed(db: Path) -> None:
                     "attachment_unknown_count": 0,
                     "has_attachments": True,
                     "ticketlogs_count": 5,
+                    "public_log_count": 4,
+                    "internal_log_count": 1,
+                    "waiting_log_count": 1,
+                    "response_log_count": 2,
+                    "resolution_log_count": 1,
+                    "latest_log_date": "2026-03-19T10:00:00Z",
+                    "latest_public_log_date": "2026-03-19T10:00:00Z",
+                    "latest_internal_log_date": "2026-03-19T09:45:00Z",
+                    "latest_waiting_log_date": "2026-03-20T10:00:00Z",
+                    "latest_resolution_log_date": "2026-03-19T10:00:00Z",
                     "timelogs_count": 0,
                     "cleaned_subject": "hello",
                     "cleaned_initial_post": "Help me",
@@ -163,6 +173,10 @@ def seed(db: Path) -> None:
                     "has_scheduled_parent": True,
                     "has_related_tickets": True,
                     "has_effort_tracking": True,
+                    "has_public_logs": True,
+                    "has_internal_logs": True,
+                    "has_waiting_logs": True,
+                    "has_resolution_logs": True,
                     "days_old_in_minutes": 1440,
                     "waiting_minutes": 30,
                     "confirmed_by_name": "Tech Lead",
@@ -264,6 +278,16 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["submission_category"] == "Portal"
     assert row["metadata"]["resolution_category"] == "Completed"
     assert row["metadata"]["ticketlogs_count"] == 5
+    assert row["metadata"]["public_log_count"] == 4
+    assert row["metadata"]["internal_log_count"] == 1
+    assert row["metadata"]["waiting_log_count"] == 1
+    assert row["metadata"]["response_log_count"] == 2
+    assert row["metadata"]["resolution_log_count"] == 1
+    assert row["metadata"]["latest_log_date"] == "2026-03-19T10:00:00Z"
+    assert row["metadata"]["latest_public_log_date"] == "2026-03-19T10:00:00Z"
+    assert row["metadata"]["latest_internal_log_date"] == "2026-03-19T09:45:00Z"
+    assert row["metadata"]["latest_waiting_log_date"] == "2026-03-20T10:00:00Z"
+    assert row["metadata"]["latest_resolution_log_date"] == "2026-03-19T10:00:00Z"
     assert row["metadata"]["attachment_extensions"] == "log, png, zip"
     assert row["metadata"]["attachment_kinds"] == "archive, image, log"
     assert row["metadata"]["attachment_kind_primary"] == "image"
@@ -323,6 +347,10 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["has_scheduled_parent"] is True
     assert row["metadata"]["has_related_tickets"] is True
     assert row["metadata"]["has_effort_tracking"] is True
+    assert row["metadata"]["has_public_logs"] is True
+    assert row["metadata"]["has_internal_logs"] is True
+    assert row["metadata"]["has_waiting_logs"] is True
+    assert row["metadata"]["has_resolution_logs"] is True
     assert row["metadata"]["days_old_in_minutes"] == 1440
     assert row["metadata"]["waiting_minutes"] == 30
     assert row["metadata"]["confirmed_by_name"] == "Tech Lead"
@@ -497,6 +525,16 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["chunk_has_issue_context"]["chunks"] == 0
     assert summary["metadata_coverage"]["chunk_has_attachment_context"]["chunks"] == 0
     assert summary["metadata_coverage"]["cleaned_subject"]["chunks"] == 1
+    assert summary["metadata_coverage"]["public_log_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["internal_log_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["waiting_log_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["response_log_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["resolution_log_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["latest_log_date"]["chunks"] == 1
+    assert summary["metadata_coverage"]["latest_public_log_date"]["chunks"] == 1
+    assert summary["metadata_coverage"]["latest_internal_log_date"]["chunks"] == 1
+    assert summary["metadata_coverage"]["latest_waiting_log_date"]["chunks"] == 1
+    assert summary["metadata_coverage"]["latest_resolution_log_date"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_followup_note"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_explicit_followup_note"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_waiting_log_note"]["chunks"] == 0
@@ -547,6 +585,10 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["has_scheduled_parent"]["chunks"] == 1
     assert summary["metadata_coverage"]["has_related_tickets"]["chunks"] == 1
     assert summary["metadata_coverage"]["has_effort_tracking"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_public_logs"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_internal_logs"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_waiting_logs"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_resolution_logs"]["chunks"] == 1
     assert summary["metadata_coverage"]["days_old_in_minutes"]["chunks"] == 1
     assert summary["metadata_coverage"]["waiting_minutes"]["chunks"] == 1
     assert summary["document_metadata_coverage"]["department_label"]["documents"] == 2
@@ -617,6 +659,8 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     assert manifest["document_chunk_topology"]["avg_chunks_per_document"] == 1.0
     assert manifest["metadata_coverage"]["resolution_summary"]["chunks"] == 1
     assert manifest["document_metadata_coverage"]["resolution_summary"]["documents"] == 1
+    assert manifest["metadata_coverage"]["public_log_count"]["chunks"] == 1
+    assert manifest["metadata_coverage"]["has_internal_logs"]["chunks"] == 1
     assert manifest["metadata_coverage"]["account_location_name"]["chunks"] == 1
     assert manifest["metadata_coverage"]["project_name"]["chunks"] == 1
     assert manifest["metadata_coverage"]["has_effort_tracking"]["chunks"] == 1

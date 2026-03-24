@@ -10,7 +10,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 11
+DOCUMENT_MATERIALIZATION_VERSION = 12
 
 
 def _content_hash(text: str) -> str:
@@ -67,6 +67,35 @@ def _present_metric(value: Any) -> bool:
         return value != 0
     candidate = str(value).strip()
     return bool(candidate) and candidate not in {"0", "0.0", "0.00"}
+
+
+_RESPONSE_LOG_TYPES = {"response", "initial post", "initial log", "log entry"}
+_RESOLUTION_LOG_TYPES = {"closed", "close log"}
+
+
+def _normalize_log_type(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _coerce_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    candidate = str(value).strip()
+    if not candidate:
+        return None
+    try:
+        return int(candidate)
+    except ValueError:
+        try:
+            return int(float(candidate))
+        except ValueError:
+            return None
 
 
 def _resolve_account_label(record: dict) -> tuple[str | None, str]:
@@ -384,7 +413,7 @@ def _derive_recent_log_cues(logs: list[dict[str, Any]]) -> dict[str, Any]:
     resolution_log = None
     for log in logs:
         cleaned_note = normalize_ticket_text(log.get("plain_note") or log.get("note"))
-        log_type = str(log.get("log_type") or "").strip().lower()
+        log_type = _normalize_log_type(log.get("log_type"))
         log_record = {
             "log_type": log.get("log_type"),
             "record_date": log.get("record_date"),
@@ -392,9 +421,9 @@ def _derive_recent_log_cues(logs: list[dict[str, Any]]) -> dict[str, Any]:
         }
         if waiting_log is None and cleaned_note and (bool(log.get("is_waiting")) or log_type == "waiting on response"):
             waiting_log = log_record
-        if response_log is None and cleaned_note and log_type in {"response", "initial post", "initial log", "log entry"}:
+        if response_log is None and cleaned_note and log_type in _RESPONSE_LOG_TYPES:
             response_log = log_record
-        if resolution_log is None and cleaned_note and log_type in {"closed", "close log"}:
+        if resolution_log is None and cleaned_note and log_type in _RESOLUTION_LOG_TYPES:
             resolution_log = log_record
     return {
         "waiting_log": waiting_log,
@@ -513,6 +542,16 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                td.ticketlogs_count,
                td.timelogs_count,
                td.attachments_count,
+               (SELECT COUNT(*) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND COALESCE(tl.is_tech_only, 0) = 0) AS public_log_count,
+               (SELECT COUNT(*) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND COALESCE(tl.is_tech_only, 0) = 1) AS internal_log_count,
+               (SELECT COUNT(*) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND (COALESCE(tl.is_waiting, 0) = 1 OR lower(COALESCE(tl.log_type, '')) = 'waiting on response')) AS waiting_log_count,
+               (SELECT COUNT(*) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND lower(COALESCE(tl.log_type, '')) IN ('response', 'initial post', 'initial log', 'log entry')) AS response_log_count,
+               (SELECT COUNT(*) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND lower(COALESCE(tl.log_type, '')) IN ('closed', 'close log')) AS resolution_log_count,
+               (SELECT MAX(tl.record_date) FROM ticket_logs tl WHERE tl.ticket_id = t.id) AS latest_log_date,
+               (SELECT MAX(tl.record_date) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND COALESCE(tl.is_tech_only, 0) = 0) AS latest_public_log_date,
+               (SELECT MAX(tl.record_date) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND COALESCE(tl.is_tech_only, 0) = 1) AS latest_internal_log_date,
+               (SELECT MAX(tl.record_date) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND (COALESCE(tl.is_waiting, 0) = 1 OR lower(COALESCE(tl.log_type, '')) = 'waiting on response')) AS latest_waiting_log_date,
+               (SELECT MAX(tl.record_date) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND lower(COALESCE(tl.log_type, '')) IN ('closed', 'close log')) AS latest_resolution_log_date,
                (
                    SELECT group_concat(COALESCE(tl.plain_note, tl.note), '\n---\n')
                    FROM (
@@ -636,6 +675,15 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         has_project_context = bool(record.get("project_id") or record.get("project_name"))
         has_scheduled_parent = _present_metric(record.get("scheduled_ticket_id"))
         has_related_tickets = _present_metric(record.get("related_tickets_count"))
+        public_log_count = _coerce_int(record.get("public_log_count"))
+        internal_log_count = _coerce_int(record.get("internal_log_count"))
+        waiting_log_count = _coerce_int(record.get("waiting_log_count"))
+        response_log_count = _coerce_int(record.get("response_log_count"))
+        resolution_log_count = _coerce_int(record.get("resolution_log_count"))
+        has_public_logs = bool(public_log_count and public_log_count > 0)
+        has_internal_logs = bool(internal_log_count and internal_log_count > 0)
+        has_waiting_logs = bool(waiting_log_count and waiting_log_count > 0)
+        has_resolution_logs = bool(resolution_log_count and resolution_log_count > 0)
         has_effort_tracking = any(
             _present_metric(record.get(field))
             for field in (
@@ -692,6 +740,26 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"SLA completion date: {record['sla_complete_date']}")
         if record.get("ticketlogs_count") is not None:
             text_parts.append(f"Ticket log count: {record['ticketlogs_count']}")
+        if public_log_count is not None:
+            text_parts.append(f"Public log count: {public_log_count}")
+        if internal_log_count is not None:
+            text_parts.append(f"Internal log count: {internal_log_count}")
+        if waiting_log_count is not None:
+            text_parts.append(f"Waiting log count: {waiting_log_count}")
+        if response_log_count is not None:
+            text_parts.append(f"Response log count: {response_log_count}")
+        if resolution_log_count is not None:
+            text_parts.append(f"Resolution log count: {resolution_log_count}")
+        if record.get("latest_log_date"):
+            text_parts.append(f"Latest log date: {record['latest_log_date']}")
+        if record.get("latest_public_log_date"):
+            text_parts.append(f"Latest public log date: {record['latest_public_log_date']}")
+        if record.get("latest_internal_log_date"):
+            text_parts.append(f"Latest internal log date: {record['latest_internal_log_date']}")
+        if record.get("latest_waiting_log_date"):
+            text_parts.append(f"Latest waiting log date: {record['latest_waiting_log_date']}")
+        if record.get("latest_resolution_log_date"):
+            text_parts.append(f"Latest resolution log date: {record['latest_resolution_log_date']}")
         if record.get("timelogs_count") is not None:
             text_parts.append(f"Time log count: {record['timelogs_count']}")
         if record.get("attachments_count") is not None:
@@ -820,6 +888,16 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "department_label_source": department_label_source,
                     "closed_at": record.get("closed_at"),
                     "ticketlogs_count": record.get("ticketlogs_count"),
+                    "public_log_count": public_log_count,
+                    "internal_log_count": internal_log_count,
+                    "waiting_log_count": waiting_log_count,
+                    "response_log_count": response_log_count,
+                    "resolution_log_count": resolution_log_count,
+                    "latest_log_date": record.get("latest_log_date"),
+                    "latest_public_log_date": record.get("latest_public_log_date"),
+                    "latest_internal_log_date": record.get("latest_internal_log_date"),
+                    "latest_waiting_log_date": record.get("latest_waiting_log_date"),
+                    "latest_resolution_log_date": record.get("latest_resolution_log_date"),
                     "timelogs_count": record.get("timelogs_count"),
                     "attachments_count": record.get("attachments_count"),
                     "attachments": attachment_metadata,
@@ -918,6 +996,10 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "has_scheduled_parent": has_scheduled_parent,
                     "has_related_tickets": has_related_tickets,
                     "has_effort_tracking": has_effort_tracking,
+                    "has_public_logs": has_public_logs,
+                    "has_internal_logs": has_internal_logs,
+                    "has_waiting_logs": has_waiting_logs,
+                    "has_resolution_logs": has_resolution_logs,
                     "days_old_in_minutes": record.get("days_old_in_minutes"),
                     "waiting_minutes": record.get("waiting_minutes"),
                     "confirmed_by_name": record.get("confirmed_by_name"),

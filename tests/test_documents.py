@@ -160,6 +160,15 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Contract: Gold" in primary["text"]
     assert "Ticket number: T-101" in primary["text"]
     assert "Ticket key: abc-101" in primary["text"]
+    assert "Public log count: 3" in primary["text"]
+    assert "Internal log count: 0" in primary["text"]
+    assert "Waiting log count: 1" in primary["text"]
+    assert "Response log count: 1" in primary["text"]
+    assert "Resolution log count: 1" in primary["text"]
+    assert "Latest log date: 2026-03-19T06:30:00Z" in primary["text"]
+    assert "Latest public log date: 2026-03-19T06:30:00Z" in primary["text"]
+    assert "Latest waiting log date: 2026-03-19T06:00:00Z" in primary["text"]
+    assert "Latest resolution log date: 2026-03-19T06:30:00Z" in primary["text"]
     assert "Technician email: queue@example.com" in primary["text"]
     assert "Created by: Casey Dispatcher" in primary["text"]
     assert "Created by email: dispatcher@example.com" in primary["text"]
@@ -208,6 +217,16 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["attachment_log_count"] == 1
     assert primary["metadata"]["has_attachments"] is True
     assert primary["metadata"]["category"] == "Hardware / Printer"
+    assert primary["metadata"]["public_log_count"] == 3
+    assert primary["metadata"]["internal_log_count"] == 0
+    assert primary["metadata"]["waiting_log_count"] == 1
+    assert primary["metadata"]["response_log_count"] == 1
+    assert primary["metadata"]["resolution_log_count"] == 1
+    assert primary["metadata"]["latest_log_date"] == "2026-03-19T06:30:00Z"
+    assert primary["metadata"]["latest_public_log_date"] == "2026-03-19T06:30:00Z"
+    assert primary["metadata"]["latest_internal_log_date"] is None
+    assert primary["metadata"]["latest_waiting_log_date"] == "2026-03-19T06:00:00Z"
+    assert primary["metadata"]["latest_resolution_log_date"] == "2026-03-19T06:30:00Z"
     assert primary["metadata"]["cleaned_subject"] == "Issue A"
     assert primary["metadata"]["cleaned_initial_post"] == "Can you help with issue A?"
     assert primary["metadata"]["cleaned_workpad"] == "Internal note"
@@ -253,6 +272,10 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["has_scheduled_parent"] is True
     assert primary["metadata"]["has_related_tickets"] is True
     assert primary["metadata"]["has_effort_tracking"] is True
+    assert primary["metadata"]["has_public_logs"] is True
+    assert primary["metadata"]["has_internal_logs"] is False
+    assert primary["metadata"]["has_waiting_logs"] is True
+    assert primary["metadata"]["has_resolution_logs"] is True
     assert primary["metadata"]["days_old_in_minutes"] == 1440
     assert primary["metadata"]["waiting_minutes"] == 30
     assert primary["metadata"]["confirmed_by_name"] == "Tech Lead"
