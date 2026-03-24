@@ -116,12 +116,19 @@ def seed(db: Path) -> None:
                     "ticketlogs_count": 5,
                     "public_log_count": 4,
                     "internal_log_count": 1,
+                    "public_actor_count": 2,
+                    "internal_actor_count": 1,
+                    "total_actor_count": 3,
                     "waiting_log_count": 1,
                     "response_log_count": 2,
                     "resolution_log_count": 1,
                     "latest_log_date": "2026-03-19T10:00:00Z",
                     "latest_public_log_date": "2026-03-19T10:00:00Z",
                     "latest_internal_log_date": "2026-03-19T09:45:00Z",
+                    "latest_public_actor_label": "Alice",
+                    "latest_internal_actor_label": "Tech One",
+                    "recent_public_actor_labels_csv": "Alice, Casey Dispatcher",
+                    "recent_internal_actor_labels_csv": "Tech One",
                     "latest_waiting_log_date": "2026-03-20T10:00:00Z",
                     "latest_resolution_log_date": "2026-03-19T10:00:00Z",
                     "timelogs_count": 0,
@@ -175,6 +182,11 @@ def seed(db: Path) -> None:
                     "has_effort_tracking": True,
                     "has_public_logs": True,
                     "has_internal_logs": True,
+                    "has_multi_public_participants": True,
+                    "has_multi_internal_participants": False,
+                    "has_named_public_participants": True,
+                    "has_named_internal_participants": True,
+                    "has_mixed_visibility_activity": True,
                     "has_waiting_logs": True,
                     "has_resolution_logs": True,
                     "days_old_in_minutes": 1440,
@@ -280,12 +292,19 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["ticketlogs_count"] == 5
     assert row["metadata"]["public_log_count"] == 4
     assert row["metadata"]["internal_log_count"] == 1
+    assert row["metadata"]["public_actor_count"] == 2
+    assert row["metadata"]["internal_actor_count"] == 1
+    assert row["metadata"]["total_actor_count"] == 3
     assert row["metadata"]["waiting_log_count"] == 1
     assert row["metadata"]["response_log_count"] == 2
     assert row["metadata"]["resolution_log_count"] == 1
     assert row["metadata"]["latest_log_date"] == "2026-03-19T10:00:00Z"
     assert row["metadata"]["latest_public_log_date"] == "2026-03-19T10:00:00Z"
     assert row["metadata"]["latest_internal_log_date"] == "2026-03-19T09:45:00Z"
+    assert row["metadata"]["latest_public_actor_label"] == "Alice"
+    assert row["metadata"]["latest_internal_actor_label"] == "Tech One"
+    assert row["metadata"]["recent_public_actor_labels"] == "Alice, Casey Dispatcher"
+    assert row["metadata"]["recent_internal_actor_labels"] == "Tech One"
     assert row["metadata"]["latest_waiting_log_date"] == "2026-03-20T10:00:00Z"
     assert row["metadata"]["latest_resolution_log_date"] == "2026-03-19T10:00:00Z"
     assert row["metadata"]["attachment_extensions"] == "log, png, zip"
@@ -349,6 +368,11 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["has_effort_tracking"] is True
     assert row["metadata"]["has_public_logs"] is True
     assert row["metadata"]["has_internal_logs"] is True
+    assert row["metadata"]["has_multi_public_participants"] is True
+    assert row["metadata"]["has_multi_internal_participants"] is False
+    assert row["metadata"]["has_named_public_participants"] is True
+    assert row["metadata"]["has_named_internal_participants"] is True
+    assert row["metadata"]["has_mixed_visibility_activity"] is True
     assert row["metadata"]["has_waiting_logs"] is True
     assert row["metadata"]["has_resolution_logs"] is True
     assert row["metadata"]["days_old_in_minutes"] == 1440
@@ -527,12 +551,19 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["cleaned_subject"]["chunks"] == 1
     assert summary["metadata_coverage"]["public_log_count"]["chunks"] == 1
     assert summary["metadata_coverage"]["internal_log_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["public_actor_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["internal_actor_count"]["chunks"] == 1
+    assert summary["metadata_coverage"]["total_actor_count"]["chunks"] == 1
     assert summary["metadata_coverage"]["waiting_log_count"]["chunks"] == 1
     assert summary["metadata_coverage"]["response_log_count"]["chunks"] == 1
     assert summary["metadata_coverage"]["resolution_log_count"]["chunks"] == 1
     assert summary["metadata_coverage"]["latest_log_date"]["chunks"] == 1
     assert summary["metadata_coverage"]["latest_public_log_date"]["chunks"] == 1
     assert summary["metadata_coverage"]["latest_internal_log_date"]["chunks"] == 1
+    assert summary["metadata_coverage"]["latest_public_actor_label"]["chunks"] == 1
+    assert summary["metadata_coverage"]["latest_internal_actor_label"]["chunks"] == 1
+    assert summary["metadata_coverage"]["recent_public_actor_labels"]["chunks"] == 1
+    assert summary["metadata_coverage"]["recent_internal_actor_labels"]["chunks"] == 1
     assert summary["metadata_coverage"]["latest_waiting_log_date"]["chunks"] == 1
     assert summary["metadata_coverage"]["latest_resolution_log_date"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_followup_note"]["chunks"] == 1
@@ -587,6 +618,11 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["has_effort_tracking"]["chunks"] == 1
     assert summary["metadata_coverage"]["has_public_logs"]["chunks"] == 1
     assert summary["metadata_coverage"]["has_internal_logs"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_multi_public_participants"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_multi_internal_participants"]["chunks"] == 0
+    assert summary["metadata_coverage"]["has_named_public_participants"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_named_internal_participants"]["chunks"] == 1
+    assert summary["metadata_coverage"]["has_mixed_visibility_activity"]["chunks"] == 1
     assert summary["metadata_coverage"]["has_waiting_logs"]["chunks"] == 1
     assert summary["metadata_coverage"]["has_resolution_logs"]["chunks"] == 1
     assert summary["metadata_coverage"]["days_old_in_minutes"]["chunks"] == 1
@@ -660,7 +696,10 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     assert manifest["metadata_coverage"]["resolution_summary"]["chunks"] == 1
     assert manifest["document_metadata_coverage"]["resolution_summary"]["documents"] == 1
     assert manifest["metadata_coverage"]["public_log_count"]["chunks"] == 1
+    assert manifest["metadata_coverage"]["public_actor_count"]["chunks"] == 1
+    assert manifest["metadata_coverage"]["latest_public_actor_label"]["chunks"] == 1
     assert manifest["metadata_coverage"]["has_internal_logs"]["chunks"] == 1
+    assert manifest["metadata_coverage"]["has_mixed_visibility_activity"]["chunks"] == 1
     assert manifest["metadata_coverage"]["account_location_name"]["chunks"] == 1
     assert manifest["metadata_coverage"]["project_name"]["chunks"] == 1
     assert manifest["metadata_coverage"]["has_effort_tracking"]["chunks"] == 1

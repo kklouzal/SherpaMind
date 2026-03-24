@@ -106,9 +106,10 @@ def seed_fixture(db: Path) -> None:
             "is_resolved": False,
             "is_confirmed": True,
             "ticketlogs": [
-                {"id": 503, "log_type": "Closed", "record_date": "2026-03-19T06:30:00Z", "plain_note": "Closed after printer service restored"},
-                {"id": 502, "log_type": "Waiting on Response", "record_date": "2026-03-19T06:00:00Z", "plain_note": "Waiting on user approval"},
-                {"id": 501, "log_type": "Initial Post", "record_date": "2026-03-18T01:00:00Z", "plain_note": "printer broken"}
+                {"id": 503, "log_type": "Closed", "record_date": "2026-03-19T06:30:00Z", "plain_note": "Closed after printer service restored", "user_firstname": "Tech", "user_lastname": "One", "user_email": "tech@example.com", "is_tech_only": True},
+                {"id": 502, "log_type": "Waiting on Response", "record_date": "2026-03-19T06:00:00Z", "plain_note": "Waiting on user approval", "user_firstname": "Alice", "user_lastname": "User", "user_email": "alice@example.com"},
+                {"id": 501, "log_type": "Response", "record_date": "2026-03-19T05:30:00Z", "plain_note": "printer broken", "user_firstname": "Casey", "user_lastname": "Dispatcher", "user_email": "dispatcher@example.com"},
+                {"id": 500, "log_type": "Initial Post", "record_date": "2026-03-18T01:00:00Z", "plain_note": "printer broken", "user_firstname": "Alice", "user_lastname": "User", "user_email": "alice@example.com"}
             ],
             "timelogs": [],
             "attachments": [
@@ -120,7 +121,7 @@ def seed_fixture(db: Path) -> None:
             "id": 102,
             "followup_note": "Waiting for branch manager approval",
             "ticketlogs": [
-                {"id": 601, "log_type": "Waiting on Response", "record_date": "2026-03-19T07:00:00Z", "plain_note": "Waiting for branch manager approval"}
+                {"id": 601, "log_type": "Waiting on Response", "record_date": "2026-03-19T07:00:00Z", "plain_note": "Waiting for branch manager approval", "user_firstname": "Bob", "user_lastname": "Jones", "user_email": "bob@example.com"}
             ],
             "timelogs": [],
             "attachments": [],
@@ -161,12 +162,21 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Ticket number: T-101" in primary["text"]
     assert "Ticket key: abc-101" in primary["text"]
     assert "Public log count: 3" in primary["text"]
-    assert "Internal log count: 0" in primary["text"]
+    assert "Internal log count: 1" in primary["text"]
+    assert "Distinct public participant count: 2" in primary["text"]
+    assert "Distinct internal participant count: 1" in primary["text"]
+    assert "Distinct participant count: 3" in primary["text"]
     assert "Waiting log count: 1" in primary["text"]
-    assert "Response log count: 1" in primary["text"]
+    assert "Response log count: 2" in primary["text"]
     assert "Resolution log count: 1" in primary["text"]
     assert "Latest log date: 2026-03-19T06:30:00Z" in primary["text"]
-    assert "Latest public log date: 2026-03-19T06:30:00Z" in primary["text"]
+    assert "Latest public log date: 2026-03-19T06:00:00Z" in primary["text"]
+    assert "Latest internal log date: 2026-03-19T06:30:00Z" in primary["text"]
+    assert "Latest public participant: Alice User" in primary["text"]
+    assert "Latest internal participant: Tech One" in primary["text"]
+    assert "Recent public participants: Alice User, Casey Dispatcher" in primary["text"]
+    assert "Recent internal participants: Tech One" in primary["text"]
+    assert "Mixed visibility activity: True" in primary["text"]
     assert "Latest waiting log date: 2026-03-19T06:00:00Z" in primary["text"]
     assert "Latest resolution log date: 2026-03-19T06:30:00Z" in primary["text"]
     assert "Technician email: queue@example.com" in primary["text"]
@@ -195,7 +205,7 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Labor cost: 450" in primary["text"]
     assert "Percent complete: 60" in primary["text"]
     assert "Follow-up note: Waiting on user approval" in primary["text"]
-    assert "Latest response date: 2026-03-18T01:00:00Z" in primary["text"]
+    assert "Latest response date: 2026-03-19T05:30:00Z" in primary["text"]
     assert "Latest response note: printer broken" in primary["text"]
     assert "Resolution log date: 2026-03-19T06:30:00Z" in primary["text"]
     assert "Resolution log note: Closed after printer service restored" in primary["text"]
@@ -218,13 +228,22 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["has_attachments"] is True
     assert primary["metadata"]["category"] == "Hardware / Printer"
     assert primary["metadata"]["public_log_count"] == 3
-    assert primary["metadata"]["internal_log_count"] == 0
+    assert primary["metadata"]["internal_log_count"] == 1
+    assert primary["metadata"]["public_actor_count"] == 2
+    assert primary["metadata"]["internal_actor_count"] == 1
+    assert primary["metadata"]["total_actor_count"] == 3
     assert primary["metadata"]["waiting_log_count"] == 1
-    assert primary["metadata"]["response_log_count"] == 1
+    assert primary["metadata"]["response_log_count"] == 2
     assert primary["metadata"]["resolution_log_count"] == 1
     assert primary["metadata"]["latest_log_date"] == "2026-03-19T06:30:00Z"
-    assert primary["metadata"]["latest_public_log_date"] == "2026-03-19T06:30:00Z"
-    assert primary["metadata"]["latest_internal_log_date"] is None
+    assert primary["metadata"]["latest_public_log_date"] == "2026-03-19T06:00:00Z"
+    assert primary["metadata"]["latest_internal_log_date"] == "2026-03-19T06:30:00Z"
+    assert primary["metadata"]["latest_public_actor_label"] == "Alice User"
+    assert primary["metadata"]["latest_internal_actor_label"] == "Tech One"
+    assert primary["metadata"]["recent_public_actor_labels"] == ["Alice User", "Casey Dispatcher"]
+    assert primary["metadata"]["recent_public_actor_labels_csv"] == "Alice User, Casey Dispatcher"
+    assert primary["metadata"]["recent_internal_actor_labels"] == ["Tech One"]
+    assert primary["metadata"]["recent_internal_actor_labels_csv"] == "Tech One"
     assert primary["metadata"]["latest_waiting_log_date"] == "2026-03-19T06:00:00Z"
     assert primary["metadata"]["latest_resolution_log_date"] == "2026-03-19T06:30:00Z"
     assert primary["metadata"]["cleaned_subject"] == "Issue A"
@@ -239,7 +258,7 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["cleaned_action_cue"] == "Call back"
     assert primary["metadata"]["action_cue_source"] == "next_step"
     assert primary["metadata"]["cleaned_latest_response_note"] == "printer broken"
-    assert primary["metadata"]["latest_response_date"] == "2026-03-18T01:00:00Z"
+    assert primary["metadata"]["latest_response_date"] == "2026-03-19T05:30:00Z"
     assert primary["metadata"]["cleaned_resolution_log_note"] == "Closed after printer service restored"
     assert primary["metadata"]["resolution_log_date"] == "2026-03-19T06:30:00Z"
     assert primary["metadata"]["followup_date"] == "2026-03-20T10:00:00Z"
@@ -273,7 +292,12 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["has_related_tickets"] is True
     assert primary["metadata"]["has_effort_tracking"] is True
     assert primary["metadata"]["has_public_logs"] is True
-    assert primary["metadata"]["has_internal_logs"] is False
+    assert primary["metadata"]["has_internal_logs"] is True
+    assert primary["metadata"]["has_multi_public_participants"] is True
+    assert primary["metadata"]["has_multi_internal_participants"] is False
+    assert primary["metadata"]["has_named_public_participants"] is True
+    assert primary["metadata"]["has_named_internal_participants"] is True
+    assert primary["metadata"]["has_mixed_visibility_activity"] is True
     assert primary["metadata"]["has_waiting_logs"] is True
     assert primary["metadata"]["has_resolution_logs"] is True
     assert primary["metadata"]["days_old_in_minutes"] == 1440
@@ -287,8 +311,8 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["is_resolved"] is False
     assert primary["metadata"]["is_confirmed"] is True
     assert primary["metadata"]["has_next_step"] is True
-    assert primary["metadata"]["recent_log_types"] == ["Closed", "Waiting on Response", "Initial Post"]
-    assert primary["metadata"]["recent_log_types_csv"] == "Closed, Waiting on Response, Initial Post"
+    assert primary["metadata"]["recent_log_types"] == ["Closed", "Waiting on Response", "Response", "Initial Post"]
+    assert primary["metadata"]["recent_log_types_csv"] == "Closed, Waiting on Response, Response, Initial Post"
     assert primary["metadata"]["initial_response_present"] is True
     assert primary["metadata"]["user_email"] == "alice@example.com"
     assert primary["metadata"]["detail_available"] is True
@@ -311,6 +335,12 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert fallback["metadata"]["cleaned_explicit_followup_note"] == "Waiting for branch manager approval"
     assert fallback["metadata"]["cleaned_waiting_log_note"] == "Waiting for branch manager approval"
     assert fallback["metadata"]["followup_note_source"] == "explicit_followup_note"
+    assert fallback["metadata"]["public_actor_count"] == 1
+    assert fallback["metadata"]["internal_actor_count"] == 0
+    assert fallback["metadata"]["total_actor_count"] == 1
+    assert fallback["metadata"]["latest_public_actor_label"] == "Bob Jones"
+    assert fallback["metadata"]["recent_public_actor_labels"] == ["Bob Jones"]
+    assert fallback["metadata"]["has_named_public_participants"] is True
     assert fallback["metadata"]["cleaned_action_cue"] == "Waiting for branch manager approval"
     assert fallback["metadata"]["action_cue_source"] == "followup_note"
     assert fallback["metadata"]["has_next_step"] is True

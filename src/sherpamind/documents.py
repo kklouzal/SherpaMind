@@ -10,7 +10,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 12
+DOCUMENT_MATERIALIZATION_VERSION = 13
 
 
 def _content_hash(text: str) -> str:
@@ -407,6 +407,53 @@ def _parse_recent_logs(value: str | None) -> list[dict[str, Any]]:
     return rows
 
 
+def _normalize_log_actor_label(log: dict[str, Any]) -> str | None:
+    for value in (log.get("user_name"), log.get("user_email"), log.get("user_id")):
+        if value is None:
+            continue
+        cleaned = str(value).strip()
+        if cleaned:
+            return cleaned
+    return None
+
+
+def _summarize_recent_log_participants(logs: list[dict[str, Any]]) -> dict[str, Any]:
+    recent_public_actor_labels: list[str] = []
+    recent_internal_actor_labels: list[str] = []
+    seen_public: set[str] = set()
+    seen_internal: set[str] = set()
+    latest_public_actor_label: str | None = None
+    latest_internal_actor_label: str | None = None
+
+    for log in logs:
+        actor_label = _normalize_log_actor_label(log)
+        if not actor_label:
+            continue
+        actor_key = actor_label.strip().lower()
+        is_internal = bool(log.get("is_tech_only"))
+        if is_internal:
+            if latest_internal_actor_label is None:
+                latest_internal_actor_label = actor_label
+            if actor_key not in seen_internal:
+                seen_internal.add(actor_key)
+                recent_internal_actor_labels.append(actor_label)
+            continue
+        if latest_public_actor_label is None:
+            latest_public_actor_label = actor_label
+        if actor_key not in seen_public:
+            seen_public.add(actor_key)
+            recent_public_actor_labels.append(actor_label)
+
+    return {
+        "recent_public_actor_labels": recent_public_actor_labels,
+        "recent_public_actor_labels_csv": ", ".join(recent_public_actor_labels) if recent_public_actor_labels else None,
+        "recent_internal_actor_labels": recent_internal_actor_labels,
+        "recent_internal_actor_labels_csv": ", ".join(recent_internal_actor_labels) if recent_internal_actor_labels else None,
+        "latest_public_actor_label": latest_public_actor_label,
+        "latest_internal_actor_label": latest_internal_actor_label,
+    }
+
+
 def _derive_recent_log_cues(logs: list[dict[str, Any]]) -> dict[str, Any]:
     waiting_log = None
     response_log = None
@@ -544,12 +591,50 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                td.attachments_count,
                (SELECT COUNT(*) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND COALESCE(tl.is_tech_only, 0) = 0) AS public_log_count,
                (SELECT COUNT(*) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND COALESCE(tl.is_tech_only, 0) = 1) AS internal_log_count,
+               (
+                   SELECT COUNT(*)
+                   FROM (
+                       SELECT DISTINCT COALESCE(NULLIF(lower(trim(tl.user_email)), ''), NULLIF(lower(trim(tl.user_name)), ''), NULLIF(trim(tl.user_id), ''), 'log:' || tl.id)
+                       FROM ticket_logs tl
+                       WHERE tl.ticket_id = t.id AND COALESCE(tl.is_tech_only, 0) = 0
+                   ) participant_keys
+               ) AS public_actor_count,
+               (
+                   SELECT COUNT(*)
+                   FROM (
+                       SELECT DISTINCT COALESCE(NULLIF(lower(trim(tl.user_email)), ''), NULLIF(lower(trim(tl.user_name)), ''), NULLIF(trim(tl.user_id), ''), 'log:' || tl.id)
+                       FROM ticket_logs tl
+                       WHERE tl.ticket_id = t.id AND COALESCE(tl.is_tech_only, 0) = 1
+                   ) participant_keys
+               ) AS internal_actor_count,
+               (
+                   SELECT COUNT(*)
+                   FROM (
+                       SELECT DISTINCT COALESCE(NULLIF(lower(trim(tl.user_email)), ''), NULLIF(lower(trim(tl.user_name)), ''), NULLIF(trim(tl.user_id), ''), 'log:' || tl.id)
+                       FROM ticket_logs tl
+                       WHERE tl.ticket_id = t.id
+                   ) participant_keys
+               ) AS total_actor_count,
                (SELECT COUNT(*) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND (COALESCE(tl.is_waiting, 0) = 1 OR lower(COALESCE(tl.log_type, '')) = 'waiting on response')) AS waiting_log_count,
                (SELECT COUNT(*) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND lower(COALESCE(tl.log_type, '')) IN ('response', 'initial post', 'initial log', 'log entry')) AS response_log_count,
                (SELECT COUNT(*) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND lower(COALESCE(tl.log_type, '')) IN ('closed', 'close log')) AS resolution_log_count,
                (SELECT MAX(tl.record_date) FROM ticket_logs tl WHERE tl.ticket_id = t.id) AS latest_log_date,
                (SELECT MAX(tl.record_date) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND COALESCE(tl.is_tech_only, 0) = 0) AS latest_public_log_date,
                (SELECT MAX(tl.record_date) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND COALESCE(tl.is_tech_only, 0) = 1) AS latest_internal_log_date,
+               (
+                   SELECT COALESCE(NULLIF(tl.user_name, ''), NULLIF(tl.user_email, ''), NULLIF(tl.user_id, ''))
+                   FROM ticket_logs tl
+                   WHERE tl.ticket_id = t.id AND COALESCE(tl.is_tech_only, 0) = 0
+                   ORDER BY tl.record_date DESC, tl.id DESC
+                   LIMIT 1
+               ) AS latest_public_actor_label,
+               (
+                   SELECT COALESCE(NULLIF(tl.user_name, ''), NULLIF(tl.user_email, ''), NULLIF(tl.user_id, ''))
+                   FROM ticket_logs tl
+                   WHERE tl.ticket_id = t.id AND COALESCE(tl.is_tech_only, 0) = 1
+                   ORDER BY tl.record_date DESC, tl.id DESC
+                   LIMIT 1
+               ) AS latest_internal_actor_label,
                (SELECT MAX(tl.record_date) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND (COALESCE(tl.is_waiting, 0) = 1 OR lower(COALESCE(tl.log_type, '')) = 'waiting on response')) AS latest_waiting_log_date,
                (SELECT MAX(tl.record_date) FROM ticket_logs tl WHERE tl.ticket_id = t.id AND lower(COALESCE(tl.log_type, '')) IN ('closed', 'close log')) AS latest_resolution_log_date,
                (
@@ -632,6 +717,7 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         cleaned_detail_note = normalize_ticket_text(record.get("detail_note"))
         cleaned_workpad = normalize_ticket_text(record.get("workpad"))
         recent_logs = _parse_recent_logs(record.get("recent_logs_json"))
+        participant_summary = _summarize_recent_log_participants(recent_logs)
         log_cues = _derive_recent_log_cues(recent_logs)
         waiting_log = log_cues["waiting_log"]
         response_log = log_cues["response_log"]
@@ -680,10 +766,18 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         waiting_log_count = _coerce_int(record.get("waiting_log_count"))
         response_log_count = _coerce_int(record.get("response_log_count"))
         resolution_log_count = _coerce_int(record.get("resolution_log_count"))
+        public_actor_count = _coerce_int(record.get("public_actor_count"))
+        internal_actor_count = _coerce_int(record.get("internal_actor_count"))
+        total_actor_count = _coerce_int(record.get("total_actor_count"))
         has_public_logs = bool(public_log_count and public_log_count > 0)
         has_internal_logs = bool(internal_log_count and internal_log_count > 0)
         has_waiting_logs = bool(waiting_log_count and waiting_log_count > 0)
         has_resolution_logs = bool(resolution_log_count and resolution_log_count > 0)
+        has_multi_public_participants = bool(public_actor_count and public_actor_count > 1)
+        has_multi_internal_participants = bool(internal_actor_count and internal_actor_count > 1)
+        has_mixed_visibility_activity = bool(has_public_logs and has_internal_logs)
+        has_named_public_participants = bool(participant_summary["recent_public_actor_labels"])
+        has_named_internal_participants = bool(participant_summary["recent_internal_actor_labels"])
         has_effort_tracking = any(
             _present_metric(record.get(field))
             for field in (
@@ -744,6 +838,12 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Public log count: {public_log_count}")
         if internal_log_count is not None:
             text_parts.append(f"Internal log count: {internal_log_count}")
+        if public_actor_count is not None:
+            text_parts.append(f"Distinct public participant count: {public_actor_count}")
+        if internal_actor_count is not None:
+            text_parts.append(f"Distinct internal participant count: {internal_actor_count}")
+        if total_actor_count is not None:
+            text_parts.append(f"Distinct participant count: {total_actor_count}")
         if waiting_log_count is not None:
             text_parts.append(f"Waiting log count: {waiting_log_count}")
         if response_log_count is not None:
@@ -756,6 +856,19 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Latest public log date: {record['latest_public_log_date']}")
         if record.get("latest_internal_log_date"):
             text_parts.append(f"Latest internal log date: {record['latest_internal_log_date']}")
+        if participant_summary["latest_public_actor_label"]:
+            text_parts.append(f"Latest public participant: {participant_summary['latest_public_actor_label']}")
+        elif record.get("latest_public_actor_label"):
+            text_parts.append(f"Latest public participant: {record['latest_public_actor_label']}")
+        if participant_summary["latest_internal_actor_label"]:
+            text_parts.append(f"Latest internal participant: {participant_summary['latest_internal_actor_label']}")
+        elif record.get("latest_internal_actor_label"):
+            text_parts.append(f"Latest internal participant: {record['latest_internal_actor_label']}")
+        if participant_summary["recent_public_actor_labels_csv"]:
+            text_parts.append(f"Recent public participants: {participant_summary['recent_public_actor_labels_csv']}")
+        if participant_summary["recent_internal_actor_labels_csv"]:
+            text_parts.append(f"Recent internal participants: {participant_summary['recent_internal_actor_labels_csv']}")
+        text_parts.append(f"Mixed visibility activity: {has_mixed_visibility_activity}")
         if record.get("latest_waiting_log_date"):
             text_parts.append(f"Latest waiting log date: {record['latest_waiting_log_date']}")
         if record.get("latest_resolution_log_date"):
@@ -890,12 +1003,21 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "ticketlogs_count": record.get("ticketlogs_count"),
                     "public_log_count": public_log_count,
                     "internal_log_count": internal_log_count,
+                    "public_actor_count": public_actor_count,
+                    "internal_actor_count": internal_actor_count,
+                    "total_actor_count": total_actor_count,
                     "waiting_log_count": waiting_log_count,
                     "response_log_count": response_log_count,
                     "resolution_log_count": resolution_log_count,
                     "latest_log_date": record.get("latest_log_date"),
                     "latest_public_log_date": record.get("latest_public_log_date"),
                     "latest_internal_log_date": record.get("latest_internal_log_date"),
+                    "latest_public_actor_label": participant_summary["latest_public_actor_label"] or record.get("latest_public_actor_label"),
+                    "latest_internal_actor_label": participant_summary["latest_internal_actor_label"] or record.get("latest_internal_actor_label"),
+                    "recent_public_actor_labels": participant_summary["recent_public_actor_labels"],
+                    "recent_public_actor_labels_csv": participant_summary["recent_public_actor_labels_csv"],
+                    "recent_internal_actor_labels": participant_summary["recent_internal_actor_labels"],
+                    "recent_internal_actor_labels_csv": participant_summary["recent_internal_actor_labels_csv"],
                     "latest_waiting_log_date": record.get("latest_waiting_log_date"),
                     "latest_resolution_log_date": record.get("latest_resolution_log_date"),
                     "timelogs_count": record.get("timelogs_count"),
@@ -998,6 +1120,11 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "has_effort_tracking": has_effort_tracking,
                     "has_public_logs": has_public_logs,
                     "has_internal_logs": has_internal_logs,
+                    "has_multi_public_participants": has_multi_public_participants,
+                    "has_multi_internal_participants": has_multi_internal_participants,
+                    "has_named_public_participants": has_named_public_participants,
+                    "has_named_internal_participants": has_named_internal_participants,
+                    "has_mixed_visibility_activity": has_mixed_visibility_activity,
                     "has_waiting_logs": has_waiting_logs,
                     "has_resolution_logs": has_resolution_logs,
                     "days_old_in_minutes": record.get("days_old_in_minutes"),
