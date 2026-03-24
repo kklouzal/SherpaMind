@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from .db import connect
@@ -168,6 +169,257 @@ def list_technician_artifact_summaries(db_path: Path) -> list[dict]:
             "chunk_count": int(row["chunk_count"] or 0),
         })
     return summaries
+
+
+def list_ticket_artifact_summaries(db_path: Path) -> list[dict]:
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            WITH chunk_counts AS (
+                SELECT ticket_id, COUNT(*) AS chunk_count
+                FROM ticket_document_chunks
+                GROUP BY ticket_id
+            )
+            SELECT t.id,
+                   json_extract(t.raw_json, '$.number') AS ticket_number,
+                   json_extract(t.raw_json, '$.key') AS ticket_key,
+                   t.subject,
+                   t.status,
+                   t.priority,
+                   t.category,
+                   COALESCE(a.name, t.account_id, 'unknown') AS account,
+                   COALESCE(te.display_name, t.assigned_technician_id, 'unassigned') AS technician,
+                   COALESCE(t.updated_at, t.created_at) AS updated_at,
+                   CASE WHEN td.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS detail_available,
+                   CASE WHEN doc.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS document_available,
+                   COALESCE(json_extract(doc.raw_json, '$.metadata.has_next_step'), 0) AS has_next_step,
+                   COALESCE(json_extract(doc.raw_json, '$.metadata.has_attachments'), 0) AS has_attachments,
+                   COALESCE(json_extract(doc.raw_json, '$.metadata.has_resolution_summary'), 0) AS has_resolution_summary,
+                   COALESCE(json_extract(doc.raw_json, '$.metadata.cleaned_action_cue'), json_extract(doc.raw_json, '$.metadata.cleaned_followup_note')) AS action_cue,
+                   COALESCE(log_counts.log_count, 0) AS log_count,
+                   COALESCE(attachment_counts.attachment_count, 0) AS attachment_count,
+                   COALESCE(chunk_counts.chunk_count, 0) AS chunk_count
+            FROM tickets t
+            LEFT JOIN accounts a ON a.id = t.account_id
+            LEFT JOIN technicians te ON te.id = t.assigned_technician_id
+            LEFT JOIN ticket_details td ON td.ticket_id = t.id
+            LEFT JOIN ticket_documents doc ON doc.ticket_id = t.id
+            LEFT JOIN (
+                SELECT ticket_id, COUNT(*) AS log_count
+                FROM ticket_logs
+                GROUP BY ticket_id
+            ) log_counts ON log_counts.ticket_id = t.id
+            LEFT JOIN (
+                SELECT ticket_id, COUNT(*) AS attachment_count
+                FROM ticket_attachments
+                GROUP BY ticket_id
+            ) attachment_counts ON attachment_counts.ticket_id = t.id
+            LEFT JOIN chunk_counts ON chunk_counts.ticket_id = t.id
+            WHERE t.status = 'Open'
+               OR td.ticket_id IS NOT NULL
+               OR COALESCE(log_counts.log_count, 0) > 0
+               OR COALESCE(attachment_counts.attachment_count, 0) > 0
+            ORDER BY CASE WHEN t.status = 'Open' THEN 0 ELSE 1 END,
+                     COALESCE(t.updated_at, t.created_at) DESC,
+                     t.id DESC
+            """
+        ).fetchall()
+    return [
+        {
+            "ticket_id": row["id"],
+            "ticket_number": row["ticket_number"],
+            "ticket_key": row["ticket_key"],
+            "subject": row["subject"],
+            "status": row["status"],
+            "priority": row["priority"],
+            "category": row["category"],
+            "account": row["account"],
+            "technician": row["technician"],
+            "updated_at": row["updated_at"],
+            "detail_available": bool(row["detail_available"]),
+            "document_available": bool(row["document_available"]),
+            "has_next_step": bool(row["has_next_step"]),
+            "has_attachments": bool(row["has_attachments"]),
+            "has_resolution_summary": bool(row["has_resolution_summary"]),
+            "action_cue": row["action_cue"],
+            "log_count": int(row["log_count"] or 0),
+            "attachment_count": int(row["attachment_count"] or 0),
+            "chunk_count": int(row["chunk_count"] or 0),
+        }
+        for row in rows
+    ]
+
+
+def get_ticket_summary(db_path: Path, ticket_query: str, limit_logs: int = 10, limit_attachments: int = 10) -> dict:
+    with connect(db_path) as conn:
+        ticket = conn.execute(
+            """
+            SELECT t.id,
+                   json_extract(t.raw_json, '$.number') AS ticket_number,
+                   json_extract(t.raw_json, '$.key') AS ticket_key,
+                   t.subject,
+                   t.status,
+                   t.priority,
+                   t.category,
+                   t.created_at,
+                   t.updated_at,
+                   t.closed_at,
+                   t.account_id,
+                   t.user_id,
+                   t.assigned_technician_id,
+                   COALESCE(a.name, t.account_id) AS account,
+                   COALESCE(u.display_name, t.user_id) AS user_name,
+                   COALESCE(u.email, json_extract(t.raw_json, '$.user_email')) AS user_email,
+                   COALESCE(te.display_name, t.assigned_technician_id) AS technician,
+                   COALESCE(te.email, json_extract(t.raw_json, '$.technician_email'), json_extract(t.raw_json, '$.tech_email')) AS technician_email,
+                   doc.raw_json AS document_raw_json,
+                   CASE WHEN td.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS detail_row_present,
+                   COALESCE(log_counts.log_count, 0) AS log_count,
+                   COALESCE(log_counts.public_log_count, 0) AS public_log_count,
+                   COALESCE(log_counts.internal_log_count, 0) AS internal_log_count,
+                   COALESCE(attachment_counts.attachment_count, 0) AS attachment_count,
+                   COALESCE(chunk_counts.chunk_count, 0) AS chunk_count
+            FROM tickets t
+            LEFT JOIN accounts a ON a.id = t.account_id
+            LEFT JOIN users u ON u.id = t.user_id
+            LEFT JOIN technicians te ON te.id = t.assigned_technician_id
+            LEFT JOIN ticket_details td ON td.ticket_id = t.id
+            LEFT JOIN ticket_documents doc ON doc.ticket_id = t.id
+            LEFT JOIN (
+                SELECT ticket_id,
+                       COUNT(*) AS log_count,
+                       SUM(CASE WHEN COALESCE(is_tech_only, 0) = 0 THEN 1 ELSE 0 END) AS public_log_count,
+                       SUM(CASE WHEN COALESCE(is_tech_only, 0) = 1 THEN 1 ELSE 0 END) AS internal_log_count
+                FROM ticket_logs
+                GROUP BY ticket_id
+            ) log_counts ON log_counts.ticket_id = t.id
+            LEFT JOIN (
+                SELECT ticket_id, COUNT(*) AS attachment_count
+                FROM ticket_attachments
+                GROUP BY ticket_id
+            ) attachment_counts ON attachment_counts.ticket_id = t.id
+            LEFT JOIN (
+                SELECT ticket_id, COUNT(*) AS chunk_count
+                FROM ticket_document_chunks
+                GROUP BY ticket_id
+            ) chunk_counts ON chunk_counts.ticket_id = t.id
+            WHERE CAST(t.id AS TEXT) = ?
+               OR json_extract(t.raw_json, '$.number') = ?
+               OR json_extract(t.raw_json, '$.key') = ?
+               OR t.subject = ? COLLATE NOCASE
+            ORDER BY CASE
+                       WHEN CAST(t.id AS TEXT) = ? THEN 0
+                       WHEN json_extract(t.raw_json, '$.number') = ? THEN 1
+                       WHEN json_extract(t.raw_json, '$.key') = ? THEN 2
+                       WHEN t.subject = ? COLLATE NOCASE THEN 3
+                       ELSE 4
+                     END,
+                     t.updated_at DESC,
+                     t.id DESC
+            LIMIT 1
+            """,
+            (ticket_query, ticket_query, ticket_query, ticket_query, ticket_query, ticket_query, ticket_query, ticket_query),
+        ).fetchone()
+        if not ticket:
+            return {"status": "not_found", "ticket_query": ticket_query}
+
+        recent_logs = conn.execute(
+            """
+            SELECT id,
+                   COALESCE(log_type, 'unknown') AS log_type,
+                   record_date,
+                   COALESCE(user_name, user_email, user_id) AS actor,
+                   COALESCE(is_tech_only, 0) AS is_tech_only,
+                   COALESCE(plain_note, note) AS note
+            FROM ticket_logs
+            WHERE ticket_id = ?
+            ORDER BY record_date DESC, id DESC
+            LIMIT ?
+            """,
+            (ticket["id"], limit_logs),
+        ).fetchall()
+        attachments = conn.execute(
+            """
+            SELECT id, name, size, recorded_at, url
+            FROM ticket_attachments
+            WHERE ticket_id = ?
+            ORDER BY recorded_at DESC, id DESC
+            LIMIT ?
+            """,
+            (ticket["id"], limit_attachments),
+        ).fetchall()
+
+    document_metadata = {}
+    if ticket["document_raw_json"]:
+        try:
+            document_metadata = (json.loads(ticket["document_raw_json"]) or {}).get("metadata", {})
+        except Exception:
+            document_metadata = {}
+
+    return {
+        "status": "ok",
+        "ticket": {
+            "id": ticket["id"],
+            "ticket_number": ticket["ticket_number"],
+            "ticket_key": ticket["ticket_key"],
+            "subject": ticket["subject"],
+            "status": ticket["status"],
+            "priority": ticket["priority"],
+            "category": ticket["category"],
+            "account": ticket["account"],
+            "account_id": ticket["account_id"],
+            "user_name": ticket["user_name"],
+            "user_id": ticket["user_id"],
+            "user_email": ticket["user_email"],
+            "technician": ticket["technician"],
+            "technician_id": ticket["assigned_technician_id"],
+            "technician_email": ticket["technician_email"],
+            "created_at": ticket["created_at"],
+            "updated_at": ticket["updated_at"],
+            "closed_at": ticket["closed_at"],
+        },
+        "artifact_stats": {
+            "detail_available": bool(ticket["detail_row_present"] or document_metadata.get("detail_available")),
+            "document_available": bool(ticket["document_raw_json"]),
+            "log_count": int(ticket["log_count"] or 0),
+            "public_log_count": int(ticket["public_log_count"] or 0),
+            "internal_log_count": int(ticket["internal_log_count"] or 0),
+            "attachment_count": int(ticket["attachment_count"] or 0),
+            "chunk_count": int(ticket["chunk_count"] or 0),
+            "has_next_step": bool(document_metadata.get("has_next_step")),
+            "has_attachments": bool(document_metadata.get("has_attachments")),
+            "has_resolution_summary": bool(document_metadata.get("has_resolution_summary")),
+        },
+        "retrieval_metadata": {
+            "cleaned_subject": document_metadata.get("cleaned_subject"),
+            "cleaned_initial_post": document_metadata.get("cleaned_initial_post"),
+            "cleaned_detail_note": document_metadata.get("cleaned_detail_note"),
+            "cleaned_workpad": document_metadata.get("cleaned_workpad"),
+            "cleaned_action_cue": document_metadata.get("cleaned_action_cue"),
+            "action_cue_source": document_metadata.get("action_cue_source"),
+            "cleaned_followup_note": document_metadata.get("cleaned_followup_note"),
+            "followup_note_source": document_metadata.get("followup_note_source"),
+            "cleaned_request_completion_note": document_metadata.get("cleaned_request_completion_note"),
+            "resolution_summary": document_metadata.get("resolution_summary"),
+            "latest_response_date": document_metadata.get("latest_response_date"),
+            "latest_resolution_log_date": document_metadata.get("latest_resolution_log_date"),
+            "recent_log_types_csv": document_metadata.get("recent_log_types_csv"),
+            "department_label": document_metadata.get("department_label"),
+            "department_label_source": document_metadata.get("department_label_source"),
+            "support_group_name": document_metadata.get("support_group_name"),
+            "default_contract_name": document_metadata.get("default_contract_name"),
+            "account_location_name": document_metadata.get("account_location_name"),
+            "location_name": document_metadata.get("location_name"),
+            "project_name": document_metadata.get("project_name"),
+            "scheduled_ticket_id": document_metadata.get("scheduled_ticket_id"),
+            "attachment_kinds_csv": document_metadata.get("attachment_kinds_csv"),
+            "attachment_extensions_csv": document_metadata.get("attachment_extensions_csv"),
+            "attachment_total_size_bytes": document_metadata.get("attachment_total_size_bytes"),
+            "materialization_version": document_metadata.get("materialization_version"),
+        },
+        "recent_logs": [dict(row) for row in recent_logs],
+        "attachments": [dict(row) for row in attachments],
+    }
 
 
 def get_account_summary(db_path: Path, account_query: str, limit_open: int = 10, limit_recent: int = 10) -> dict:

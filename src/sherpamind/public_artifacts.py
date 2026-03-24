@@ -20,8 +20,10 @@ from .paths import ensure_path_layout
 from .summaries import (
     get_account_summary,
     get_technician_summary,
+    get_ticket_summary,
     list_account_artifact_summaries,
     list_technician_artifact_summaries,
+    list_ticket_artifact_summaries,
 )
 from .vector_exports import get_retrieval_readiness_summary
 from .vector_index import get_vector_index_status
@@ -207,13 +209,16 @@ def generate_public_snapshot(db_path: Path) -> dict:
     recent_tickets = list_recent_tickets(db_path, limit=10)
     account_summaries = list_account_artifact_summaries(db_path)
     technician_summaries = list_technician_artifact_summaries(db_path)
+    ticket_summaries = list_ticket_artifact_summaries(db_path)
     retrieval_readiness = get_retrieval_readiness_summary(db_path)
     vector_index_status = get_vector_index_status(db_path)
 
     account_dir = paths.docs_root / "accounts"
     technician_dir = paths.docs_root / "technicians"
+    ticket_dir = paths.docs_root / "tickets"
     account_dir.mkdir(parents=True, exist_ok=True)
     technician_dir.mkdir(parents=True, exist_ok=True)
+    ticket_dir.mkdir(parents=True, exist_ok=True)
 
     snapshot_path = paths.docs_root / "insight-snapshot.md"
     snapshot_md = [
@@ -301,6 +306,20 @@ def generate_public_snapshot(db_path: Path) -> dict:
             ("log_tickets", "Log Tickets"),
             ("attachment_tickets", "Attachment Tickets"),
             ("document_tickets", "Document Tickets"),
+            ("chunk_count", "Chunks"),
+        ]),
+        "",
+        "## Ticket artifact coverage",
+        "",
+        _markdown_table(ticket_summaries[:10], [
+            ("ticket_id", "Ticket ID"),
+            ("ticket_number", "Ticket #"),
+            ("status", "Status"),
+            ("account", "Account"),
+            ("technician", "Technician"),
+            ("detail_available", "Detail"),
+            ("log_count", "Logs"),
+            ("attachment_count", "Attachments"),
             ("chunk_count", "Chunks"),
         ]),
         "",
@@ -638,6 +657,32 @@ def generate_public_snapshot(db_path: Path) -> dict:
     ]
     technician_index_path.write_text("\n".join(technician_index_md) + "\n")
 
+    ticket_index_path = ticket_dir / "index.md"
+    ticket_index_md = [
+        "# SherpaMind Ticket Artifact Index",
+        "",
+        f"Generated: `{generated_at}`",
+        "",
+        f"Total ticket docs: `{len(ticket_summaries)}`",
+        "",
+        _markdown_table(ticket_summaries, [
+            ("ticket_id", "Ticket ID"),
+            ("ticket_number", "Ticket #"),
+            ("status", "Status"),
+            ("priority", "Priority"),
+            ("account", "Account"),
+            ("technician", "Technician"),
+            ("detail_available", "Detail"),
+            ("log_count", "Logs"),
+            ("attachment_count", "Attachments"),
+            ("chunk_count", "Chunks"),
+            ("updated_at", "Updated"),
+        ]),
+        "",
+        "These are derived per-ticket inspection artifacts, not canonical truth.",
+    ]
+    ticket_index_path.write_text("\n".join(ticket_index_md) + "\n")
+
     generated_files = [
         str(snapshot_path),
         str(retrieval_path),
@@ -646,11 +691,14 @@ def generate_public_snapshot(db_path: Path) -> dict:
         str(technician_load_path),
         str(account_index_path),
         str(technician_index_path),
+        str(ticket_index_path),
     ]
     account_docs_written = 0
     technician_docs_written = 0
+    ticket_docs_written = 0
     desired_account_paths: set[Path] = set()
     desired_technician_paths: set[Path] = set()
+    desired_ticket_paths: set[Path] = set()
 
     for account_row in account_summaries:
         account_name = account_row["account"]
@@ -770,8 +818,64 @@ def generate_public_snapshot(db_path: Path) -> dict:
         generated_files.append(str(path))
         technician_docs_written += 1
 
+    for ticket_row in ticket_summaries:
+        ticket_id = ticket_row["ticket_id"]
+        summary = get_ticket_summary(db_path, str(ticket_id))
+        if summary.get("status") != "ok":
+            continue
+        path = ticket_dir / f"ticket_{ticket_id}.md"
+        lines = [
+            f"# Ticket Summary: {summary['ticket']['ticket_number'] or summary['ticket']['id']} — {summary['ticket']['subject'] or '(no subject)'}",
+            "",
+            f"Generated: `{generated_at}`",
+            "",
+            "## Ticket identity",
+            "",
+            "```json",
+            json.dumps(summary["ticket"], indent=2),
+            "```",
+            "",
+            "## Artifact stats",
+            "",
+            "```json",
+            json.dumps(summary["artifact_stats"], indent=2),
+            "```",
+            "",
+            "## Retrieval metadata",
+            "",
+            "```json",
+            json.dumps(summary["retrieval_metadata"], indent=2),
+            "```",
+            "",
+            "## Recent logs",
+            "",
+            _markdown_table(summary["recent_logs"], [
+                ("id", "Log ID"),
+                ("log_type", "Type"),
+                ("record_date", "Recorded"),
+                ("actor", "Actor"),
+                ("is_tech_only", "Internal"),
+                ("note", "Note"),
+            ]),
+            "",
+            "## Attachments",
+            "",
+            _markdown_table(summary["attachments"], [
+                ("id", "Attachment ID"),
+                ("name", "Name"),
+                ("size", "Size"),
+                ("recorded_at", "Recorded"),
+                ("url", "URL"),
+            ]),
+        ]
+        path.write_text("\n".join(lines) + "\n")
+        desired_ticket_paths.add(path)
+        generated_files.append(str(path))
+        ticket_docs_written += 1
+
     removed_account_docs = _cleanup_stale_entity_docs(account_dir, desired_account_paths)
     removed_technician_docs = _cleanup_stale_entity_docs(technician_dir, desired_technician_paths)
+    removed_ticket_docs = _cleanup_stale_entity_docs(ticket_dir, desired_ticket_paths)
 
     index_path = paths.docs_root / "index.md"
     index_md = [
@@ -787,8 +891,10 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "- `recent-technician-load.md`",
         "- `accounts/index.md`",
         "- `technicians/index.md`",
+        "- `tickets/index.md`",
         f"- account docs directory: `{account_dir}` ({account_docs_written} docs)",
         f"- technician docs directory: `{technician_dir}` ({technician_docs_written} docs)",
+        f"- ticket docs directory: `{ticket_dir}` ({ticket_docs_written} docs)",
         "",
         "These are derived/public artifacts for OpenClaw-friendly access. Canonical truth remains in `.SherpaMind/private/data/`.",
         "The matching vector-ready export lives under `.SherpaMind/public/exports/embedding-ticket-chunks.jsonl` when generated.",
@@ -804,9 +910,12 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "generated_files": generated_files,
         "account_docs_generated": account_docs_written,
         "technician_docs_generated": technician_docs_written,
+        "ticket_docs_generated": ticket_docs_written,
         "account_artifact_candidates": len(account_summaries),
         "technician_artifact_candidates": len(technician_summaries),
+        "ticket_artifact_candidates": len(ticket_summaries),
         "stale_account_docs_removed": len(removed_account_docs),
         "stale_technician_docs_removed": len(removed_technician_docs),
-        "removed_files": removed_account_docs + removed_technician_docs,
+        "stale_ticket_docs_removed": len(removed_ticket_docs),
+        "removed_files": removed_account_docs + removed_technician_docs + removed_ticket_docs,
     }

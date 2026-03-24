@@ -95,6 +95,7 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert result["status"] == "ok"
     assert result["account_docs_generated"] == 2
     assert result["technician_docs_generated"] == 2
+    assert result["ticket_docs_generated"] == 1
 
     output = Path(result["output_path"])
     text = output.read_text()
@@ -105,23 +106,28 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Retrieval metadata readiness" in text
     assert "Account artifact coverage" in text
     assert "Technician artifact coverage" in text
+    assert "Ticket artifact coverage" in text
     assert ".SherpaMind/private/data/sherpamind.sqlite3" in text
 
     retrieval_doc = tmp_path / ".SherpaMind" / "public" / "docs" / "retrieval-readiness.md"
     account_index = tmp_path / ".SherpaMind" / "public" / "docs" / "accounts" / "index.md"
     technician_index = tmp_path / ".SherpaMind" / "public" / "docs" / "technicians" / "index.md"
+    ticket_index = tmp_path / ".SherpaMind" / "public" / "docs" / "tickets" / "index.md"
     acme_doc = tmp_path / ".SherpaMind" / "public" / "docs" / "accounts" / "Acme.md"
     beta_doc = tmp_path / ".SherpaMind" / "public" / "docs" / "accounts" / "Beta_Org.md"
     tech_one_doc = tmp_path / ".SherpaMind" / "public" / "docs" / "technicians" / "Tech_One.md"
     tech_two_doc = tmp_path / ".SherpaMind" / "public" / "docs" / "technicians" / "Tech_Two.md"
+    ticket_101_doc = tmp_path / ".SherpaMind" / "public" / "docs" / "tickets" / "ticket_101.md"
 
     assert retrieval_doc.exists()
     assert account_index.exists()
     assert technician_index.exists()
+    assert ticket_index.exists()
     assert acme_doc.exists()
     assert beta_doc.exists()
     assert tech_one_doc.exists()
     assert tech_two_doc.exists()
+    assert ticket_101_doc.exists()
 
     retrieval_text = retrieval_doc.read_text()
     assert "SherpaMind Retrieval Readiness" in retrieval_text
@@ -137,14 +143,18 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
 
     assert "Total account docs: `2`" in account_index.read_text()
     assert "Total technician docs: `2`" in technician_index.read_text()
+    assert "Total ticket docs: `1`" in ticket_index.read_text()
     assert "Status breakdown" in acme_doc.read_text()
     assert "Category breakdown" in tech_one_doc.read_text()
+    assert "Artifact stats" in ticket_101_doc.read_text()
+    assert "Recent logs" in ticket_101_doc.read_text()
 
     assert result["stale_account_docs_removed"] == 0
     assert result["stale_technician_docs_removed"] == 0
+    assert result["stale_ticket_docs_removed"] == 0
     assert result["removed_files"] == []
 
-    assert len(result["generated_files"]) >= 9
+    assert len(result["generated_files"]) >= 10
     for generated in result["generated_files"]:
         assert Path(generated).exists()
 
@@ -156,26 +166,36 @@ def test_generate_public_snapshot_removes_stale_entity_docs(monkeypatch, tmp_pat
 
     account_dir = tmp_path / ".SherpaMind" / "public" / "docs" / "accounts"
     technician_dir = tmp_path / ".SherpaMind" / "public" / "docs" / "technicians"
+    ticket_dir = tmp_path / ".SherpaMind" / "public" / "docs" / "tickets"
     account_dir.mkdir(parents=True, exist_ok=True)
     technician_dir.mkdir(parents=True, exist_ok=True)
+    ticket_dir.mkdir(parents=True, exist_ok=True)
 
     stale_account = account_dir / "99999.md"
     stale_technician = technician_dir / "Legacy_Tech.md"
+    stale_ticket = ticket_dir / "ticket_99999.md"
     account_index = account_dir / "index.md"
     technician_index = technician_dir / "index.md"
+    ticket_index = ticket_dir / "index.md"
 
     stale_account.write_text("stale account doc\n")
     stale_technician.write_text("stale technician doc\n")
+    stale_ticket.write_text("stale ticket doc\n")
     account_index.write_text("old account index\n")
     technician_index.write_text("old technician index\n")
+    ticket_index.write_text("old ticket index\n")
 
     result = generate_public_snapshot(db)
 
     assert result["stale_account_docs_removed"] == 1
     assert result["stale_technician_docs_removed"] == 1
+    assert result["stale_ticket_docs_removed"] == 1
     assert str(stale_account) in result["removed_files"]
     assert str(stale_technician) in result["removed_files"]
+    assert str(stale_ticket) in result["removed_files"]
     assert not stale_account.exists()
     assert not stale_technician.exists()
+    assert not stale_ticket.exists()
     assert account_index.exists()
     assert technician_index.exists()
+    assert ticket_index.exists()

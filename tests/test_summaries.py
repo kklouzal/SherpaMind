@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from sherpamind.db import initialize_db, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
-from sherpamind.summaries import get_account_summary, get_technician_summary
+from sherpamind.summaries import get_account_summary, get_technician_summary, get_ticket_summary, list_ticket_artifact_summaries
 
 
 def seed_fixture(db: Path) -> None:
@@ -32,3 +32,22 @@ def test_technician_summary(tmp_path: Path) -> None:
     assert summary["status"] == "ok"
     assert summary["stats"]["total_tickets"] == 2
     assert len(summary["open_tickets"]) == 1
+
+
+def test_ticket_summary_and_artifact_listing(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    seed_fixture(db)
+
+    artifacts = list_ticket_artifact_summaries(db)
+    assert len(artifacts) == 1
+    assert artifacts[0]["ticket_id"] == "101"
+    assert artifacts[0]["detail_available"] is True
+    assert artifacts[0]["log_count"] == 1
+
+    summary = get_ticket_summary(db, "101")
+    assert summary["status"] == "ok"
+    assert summary["ticket"]["id"] == "101"
+    assert summary["artifact_stats"]["detail_available"] is True
+    assert summary["artifact_stats"]["log_count"] == 1
+    assert summary["artifact_stats"]["attachment_count"] == 0
+    assert len(summary["recent_logs"]) == 1

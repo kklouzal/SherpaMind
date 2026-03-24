@@ -52,7 +52,7 @@ from .ingest import (
     sync_warm_closed_tickets,
 )
 from .settings import load_settings, stage_api_key, stage_api_user, stage_connection_settings
-from .summaries import get_account_summary, get_technician_summary
+from .summaries import get_account_summary, get_technician_summary, get_ticket_summary
 from .vector_exports import export_embedding_manifest, export_embedding_ready_chunks, get_retrieval_readiness_summary
 from .vector_index import build_vector_index, get_vector_index_status, search_vector_index
 from .watch import watch_new_tickets
@@ -587,6 +587,12 @@ def account_summary(account_query: str, limit_open: int = 10, limit_recent: int 
 def technician_summary(technician_query: str, limit_open: int = 10, limit_recent: int = 10) -> None:
     settings = load_settings()
     print(json.dumps(get_technician_summary(settings.db_path, technician_query, limit_open=limit_open, limit_recent=limit_recent), indent=2))
+
+
+@app.command("ticket-summary")
+def ticket_summary(ticket_query: str, limit_logs: int = 10, limit_attachments: int = 10) -> None:
+    settings = load_settings()
+    print(json.dumps(get_ticket_summary(settings.db_path, ticket_query, limit_logs=limit_logs, limit_attachments=limit_attachments), indent=2))
 
 
 @app.command("search-ticket-docs")

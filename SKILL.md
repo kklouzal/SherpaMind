@@ -70,11 +70,13 @@ Start with structured commands:
 - `python3 scripts/run.py recent-technician-load`
 - `python3 scripts/run.py account-summary "<account>"`
 - `python3 scripts/run.py technician-summary "<technician>"`
+- `python3 scripts/run.py ticket-summary "<ticket-id|ticket-number|ticket-key>"`
 
 Examples:
 - open-ticket count → `report-status-counts`
 - technician backlog/load → `technician-summary "<technician>"`
 - account snapshot → `account-summary "<account>"`
+- ticket inspection / retrieval-ready context → `ticket-summary "<ticket-id|ticket-number|ticket-key>"`
 
 ### Fuzzy investigation, prior-art lookup, and support-history recall
 
@@ -107,8 +109,10 @@ Read these when a concise derived artifact is enough:
 - `{baseDir}/.SherpaMind/public/docs/runtime/status.md`
 - `{baseDir}/.SherpaMind/public/docs/accounts/index.md`
 - `{baseDir}/.SherpaMind/public/docs/technicians/index.md`
+- `{baseDir}/.SherpaMind/public/docs/tickets/index.md`
 - `{baseDir}/.SherpaMind/public/docs/accounts/*.md`
 - `{baseDir}/.SherpaMind/public/docs/technicians/*.md`
+- `{baseDir}/.SherpaMind/public/docs/tickets/ticket_*.md`
 
 ## Preferred answer flow
 

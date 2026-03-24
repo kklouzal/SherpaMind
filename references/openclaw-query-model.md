@@ -50,6 +50,7 @@ Use for quick human/agent inspection under `.SherpaMind/public/docs/`, including
 - `recent-technician-load.md`
 - `accounts/index.md`
 - `technicians/index.md`
+- `tickets/index.md`
 - `runtime/status.md`
 
 These are generated/replaced artifacts, not append-only memory files.
@@ -86,7 +87,7 @@ Rules:
 - when a ticket changes, regenerate its references/chunks/artifacts by stable identity
 - replace old references/chunks for that ticket
 - delete stale chunks that no longer belong to the current materialization
-- when per-account or per-technician public docs are regenerated, remove stale entity docs that no longer belong to the current dataset-derived entity set
+- when per-account, per-technician, or per-ticket public docs are regenerated, remove stale entity docs that no longer belong to the current dataset-derived entity set
 
 This prevents old stale natural-language support artifacts from lingering after ticket updates.
 
@@ -124,6 +125,7 @@ Possible future exception:
 - `python3 scripts/run.py open-ticket-ages`
 - `python3 scripts/run.py recent-account-activity`
 - `python3 scripts/run.py recent-technician-load`
+- `python3 scripts/run.py ticket-summary "<ticket-id|ticket-number|ticket-key>"`
 
 ### Retrieval-oriented commands
 - `python3 scripts/run.py materialize-ticket-docs`

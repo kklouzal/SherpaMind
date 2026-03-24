@@ -266,8 +266,9 @@ Current public artifact surface includes:
 - `runtime/status.md`
 - per-account docs under `accounts/`
 - per-technician docs under `technicians/`
+- per-ticket docs under `tickets/` for open and artifact-bearing/enriched tickets
 
-Snapshot generation also prunes stale per-account/per-technician Markdown files that no longer match the current dataset-derived entity set, so old fallback-label artifacts do not linger beside newer readable-name docs.
+Snapshot generation also prunes stale per-account/per-technician/per-ticket Markdown files that no longer match the current dataset-derived entity set, so old fallback-label artifacts do not linger beside newer readable-name docs.
 
 ### Runtime model
 
@@ -396,6 +397,7 @@ python3 scripts/run.py <command> [args...]
 - `python3 scripts/run.py recent-technician-load`
 - `python3 scripts/run.py account-summary`
 - `python3 scripts/run.py technician-summary`
+- `python3 scripts/run.py ticket-summary`
 
 ### Search and export
 
