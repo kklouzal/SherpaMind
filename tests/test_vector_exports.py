@@ -152,6 +152,15 @@ def seed(db: Path) -> None:
                     "recent_log_types_csv": "Initial Post, Response",
                     "initial_response_present": True,
                     "user_email": "alice@example.com",
+                    "user_email_domain": "example.com",
+                    "user_created_email_domain": "example.com",
+                    "technician_email_domain": "example.com",
+                    "participant_email_domains_csv": "example.com",
+                    "participant_email_domain_count": 1,
+                    "public_participant_email_domains_csv": "example.com",
+                    "public_participant_email_domain_count": 1,
+                    "internal_participant_email_domains_csv": "example.com",
+                    "internal_participant_email_domain_count": 1,
                     "support_group_name": "Managed Services",
                     "default_contract_name": "Gold",
                     "location_name": "HQ",
@@ -338,6 +347,15 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["resolution_log_date"] == "2026-03-19T10:00:00Z"
     assert row["metadata"]["followup_date"] == "2026-03-20T10:00:00Z"
     assert row["metadata"]["request_completion_date"] == "2026-03-21T17:00:00Z"
+    assert row["metadata"]["user_email_domain"] == "example.com"
+    assert row["metadata"]["user_created_email_domain"] == "example.com"
+    assert row["metadata"]["technician_email_domain"] == "example.com"
+    assert row["metadata"]["participant_email_domains"] == "example.com"
+    assert row["metadata"]["participant_email_domain_count"] == 1
+    assert row["metadata"]["public_participant_email_domains"] == "example.com"
+    assert row["metadata"]["public_participant_email_domain_count"] == 1
+    assert row["metadata"]["internal_participant_email_domains"] == "example.com"
+    assert row["metadata"]["internal_participant_email_domain_count"] == 1
     assert row["metadata"]["support_group_name"] == "Managed Services"
     assert row["metadata"]["default_contract_name"] == "Gold"
     assert row["metadata"]["location_name"] == "HQ"
@@ -542,6 +560,10 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["filter_facets"]["departments"] == ["Dispatch", "Managed Services"]
     assert summary["filter_facets"]["attachment_extensions"] == ["log", "png", "zip"]
     assert summary["filter_facets"]["attachment_kinds"] == ["archive", "image", "log"]
+    assert summary["filter_facets"]["user_email_domains"] == ["example.com"]
+    assert summary["filter_facets"]["user_created_email_domains"] == ["example.com"]
+    assert summary["filter_facets"]["technician_email_domains"] == ["example.com"]
+    assert summary["filter_facets"]["participant_email_domains"] == ["example.com"]
     assert summary["filter_facets"]["chunk_primary_sections"] == ["general"]
     assert summary["filter_facets"]["chunk_section_labels"] == ["general"]
     assert summary["metadata_coverage"]["chunk_primary_section"]["chunks"] == 2
@@ -576,6 +598,12 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["submission_category"]["chunks"] == 1
     assert summary["metadata_coverage"]["resolution_category"]["chunks"] == 1
     assert summary["metadata_coverage"]["support_group_name"]["chunks"] == 1
+    assert summary["metadata_coverage"]["user_email_domain"]["chunks"] == 1
+    assert summary["metadata_coverage"]["user_created_email_domain"]["chunks"] == 1
+    assert summary["metadata_coverage"]["technician_email_domain"]["chunks"] == 1
+    assert summary["metadata_coverage"]["participant_email_domains"]["chunks"] == 1
+    assert summary["metadata_coverage"]["public_participant_email_domains"]["chunks"] == 1
+    assert summary["metadata_coverage"]["internal_participant_email_domains"]["chunks"] == 1
     assert summary["metadata_coverage"]["account_location_name"]["chunks"] == 1
     assert summary["metadata_coverage"]["department_key"]["chunks"] == 1
     assert summary["metadata_coverage"]["department_label"]["chunks"] == 2
@@ -642,6 +670,12 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["source_metadata_coverage"]["project_name"]["status"] == "upstream_absent"
     assert summary["source_metadata_coverage"]["scheduled_ticket_id"]["detail_rows"] == 0
     assert summary["source_metadata_coverage"]["scheduled_ticket_id"]["status"] == "upstream_absent"
+    assert summary["source_metadata_coverage"]["user_email_domain"]["ticket_rows"] == 0
+    assert summary["source_metadata_coverage"]["user_email_domain"]["status"] == "upstream_absent"
+    assert summary["source_metadata_coverage"]["user_created_email_domain"]["detail_rows"] == 1
+    assert summary["source_metadata_coverage"]["user_created_email_domain"]["status"] == "materialized"
+    assert summary["source_metadata_coverage"]["technician_email_domain"]["ticket_rows"] == 1
+    assert summary["source_metadata_coverage"]["technician_email_domain"]["status"] == "materialized"
     assert summary["source_metadata_coverage"]["default_contract_name"]["detail_rows"] == 1
     assert summary["source_metadata_coverage"]["default_contract_name"]["status"] == "materialized"
     assert summary["source_backed_metadata"]["fields"]["default_contract_name"]["status"] == "materialized"
@@ -690,6 +724,10 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     assert manifest["filter_facets"]["departments"] == ["Dispatch", "Managed Services"]
     assert manifest["filter_facets"]["attachment_extensions"] == ["log", "png", "zip"]
     assert manifest["filter_facets"]["attachment_kinds"] == ["archive", "image", "log"]
+    assert manifest["filter_facets"]["user_email_domains"] == ["example.com"]
+    assert manifest["filter_facets"]["user_created_email_domains"] == ["example.com"]
+    assert manifest["filter_facets"]["technician_email_domains"] == ["example.com"]
+    assert manifest["filter_facets"]["participant_email_domains"] == ["example.com"]
     assert manifest["filter_facets"]["chunk_primary_sections"] == ["general"]
     assert manifest["filter_facets"]["chunk_section_labels"] == ["general"]
     assert manifest["document_chunk_topology"]["avg_chunks_per_document"] == 1.0
@@ -703,6 +741,7 @@ def test_export_embedding_manifest(tmp_path: Path) -> None:
     assert manifest["metadata_coverage"]["account_location_name"]["chunks"] == 1
     assert manifest["metadata_coverage"]["project_name"]["chunks"] == 1
     assert manifest["metadata_coverage"]["has_effort_tracking"]["chunks"] == 1
+    assert manifest["metadata_coverage"]["participant_email_domains"]["chunks"] == 1
     assert manifest["source_metadata_coverage"]["default_contract_name"]["detail_rows"] == 1
     assert manifest["source_metadata_coverage"]["support_group_name"]["status"] == "upstream_absent"
     assert manifest["source_backed_metadata"]["status_counts"]["upstream_absent"] >= 1

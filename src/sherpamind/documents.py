@@ -10,7 +10,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 13
+DOCUMENT_MATERIALIZATION_VERSION = 14
 
 
 def _content_hash(text: str) -> str:
@@ -43,6 +43,36 @@ def _looks_like_identifier(value: str | None) -> bool:
 def _join_name_parts(*parts: str | None) -> str | None:
     joined = " ".join(part.strip() for part in parts if part and part.strip())
     return joined or None
+
+
+def _extract_email_domain(value: Any) -> str | None:
+    if value is None:
+        return None
+    candidate = str(value).strip().lower()
+    if not candidate or "@" not in candidate:
+        return None
+    domain = candidate.rsplit("@", 1)[-1].strip(" >).,;:'\"")
+    if not domain or "." not in domain:
+        return None
+    return domain
+
+
+def _collect_email_domains(*values: Any) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        if isinstance(value, (list, tuple, set)):
+            for item in value:
+                domain = _extract_email_domain(item)
+                if domain and domain not in seen:
+                    seen.add(domain)
+                    ordered.append(domain)
+            continue
+        domain = _extract_email_domain(value)
+        if domain and domain not in seen:
+            seen.add(domain)
+            ordered.append(domain)
+    return ordered
 
 
 def _coerce_bool(value: Any) -> bool | None:
@@ -424,26 +454,38 @@ def _summarize_recent_log_participants(logs: list[dict[str, Any]]) -> dict[str, 
     seen_internal: set[str] = set()
     latest_public_actor_label: str | None = None
     latest_internal_actor_label: str | None = None
+    recent_public_email_domains: list[str] = []
+    recent_internal_email_domains: list[str] = []
+    seen_public_domains: set[str] = set()
+    seen_internal_domains: set[str] = set()
 
     for log in logs:
         actor_label = _normalize_log_actor_label(log)
-        if not actor_label:
-            continue
-        actor_key = actor_label.strip().lower()
+        actor_domain = _extract_email_domain(log.get("user_email"))
         is_internal = bool(log.get("is_tech_only"))
+        if not actor_label and not actor_domain:
+            continue
+        actor_key = actor_label.strip().lower() if actor_label else None
         if is_internal:
-            if latest_internal_actor_label is None:
+            if actor_label and latest_internal_actor_label is None:
                 latest_internal_actor_label = actor_label
-            if actor_key not in seen_internal:
+            if actor_label and actor_key and actor_key not in seen_internal:
                 seen_internal.add(actor_key)
                 recent_internal_actor_labels.append(actor_label)
+            if actor_domain and actor_domain not in seen_internal_domains:
+                seen_internal_domains.add(actor_domain)
+                recent_internal_email_domains.append(actor_domain)
             continue
-        if latest_public_actor_label is None:
+        if actor_label and latest_public_actor_label is None:
             latest_public_actor_label = actor_label
-        if actor_key not in seen_public:
+        if actor_label and actor_key and actor_key not in seen_public:
             seen_public.add(actor_key)
             recent_public_actor_labels.append(actor_label)
+        if actor_domain and actor_domain not in seen_public_domains:
+            seen_public_domains.add(actor_domain)
+            recent_public_email_domains.append(actor_domain)
 
+    participant_email_domains = _collect_email_domains(recent_public_email_domains, recent_internal_email_domains)
     return {
         "recent_public_actor_labels": recent_public_actor_labels,
         "recent_public_actor_labels_csv": ", ".join(recent_public_actor_labels) if recent_public_actor_labels else None,
@@ -451,6 +493,12 @@ def _summarize_recent_log_participants(logs: list[dict[str, Any]]) -> dict[str, 
         "recent_internal_actor_labels_csv": ", ".join(recent_internal_actor_labels) if recent_internal_actor_labels else None,
         "latest_public_actor_label": latest_public_actor_label,
         "latest_internal_actor_label": latest_internal_actor_label,
+        "recent_public_email_domains": recent_public_email_domains,
+        "recent_public_email_domains_csv": ", ".join(recent_public_email_domains) if recent_public_email_domains else None,
+        "recent_internal_email_domains": recent_internal_email_domains,
+        "recent_internal_email_domains_csv": ", ".join(recent_internal_email_domains) if recent_internal_email_domains else None,
+        "participant_email_domains": participant_email_domains,
+        "participant_email_domains_csv": ", ".join(participant_email_domains) if participant_email_domains else None,
     }
 
 
@@ -753,6 +801,24 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         user_label, user_label_source = _resolve_user_label(record)
         technician_label, technician_label_source = _resolve_technician_label(record)
         department_label, department_label_source = _resolve_department_label(record)
+        user_email_domain = _extract_email_domain(record.get("user_email"))
+        user_created_email_domain = _extract_email_domain(record.get("user_created_email"))
+        technician_email_domain = _extract_email_domain(record.get("technician_email"))
+        participant_email_domains = _collect_email_domains(
+            participant_summary["participant_email_domains"],
+            record.get("user_email"),
+            record.get("user_created_email"),
+            record.get("technician_email"),
+        )
+        public_participant_email_domains = _collect_email_domains(
+            participant_summary["recent_public_email_domains"],
+            record.get("user_email"),
+            record.get("user_created_email"),
+        )
+        internal_participant_email_domains = _collect_email_domains(
+            participant_summary["recent_internal_email_domains"],
+            record.get("technician_email"),
+        )
         is_waiting_on_response = _coerce_bool(record.get("is_waiting_on_response"))
         is_resolved = _coerce_bool(record.get("is_resolved"))
         is_confirmed = _coerce_bool(record.get("is_confirmed"))
@@ -806,12 +872,26 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Ticket number: {record['ticket_number']}")
         if record.get("ticket_key"):
             text_parts.append(f"Ticket key: {record['ticket_key']}")
+        if record.get("user_email"):
+            text_parts.append(f"User email: {record['user_email']}")
+        if user_email_domain:
+            text_parts.append(f"User email domain: {user_email_domain}")
         if record.get("technician_email"):
             text_parts.append(f"Technician email: {record['technician_email']}")
+        if technician_email_domain:
+            text_parts.append(f"Technician email domain: {technician_email_domain}")
         if created_by_name:
             text_parts.append(f"Created by: {created_by_name}")
         if record.get("user_created_email"):
             text_parts.append(f"Created by email: {record['user_created_email']}")
+        if user_created_email_domain:
+            text_parts.append(f"Created by email domain: {user_created_email_domain}")
+        if participant_email_domains:
+            text_parts.append(f"Participant email domains: {', '.join(participant_email_domains)}")
+        if public_participant_email_domains:
+            text_parts.append(f"Public participant email domains: {', '.join(public_participant_email_domains)}")
+        if internal_participant_email_domains:
+            text_parts.append(f"Internal participant email domains: {', '.join(internal_participant_email_domains)}")
         if record.get("user_phone"):
             text_parts.append(f"User phone: {record['user_phone']}")
         if record.get("account_location_name"):
@@ -1090,6 +1170,18 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "recent_log_types_csv": ", ".join(recent_log_types) if recent_log_types else None,
                     "initial_response_present": record.get("initial_response") is not None,
                     "user_email": record.get("user_email"),
+                    "user_email_domain": user_email_domain,
+                    "user_created_email_domain": user_created_email_domain,
+                    "technician_email_domain": technician_email_domain,
+                    "participant_email_domains": participant_email_domains,
+                    "participant_email_domains_csv": ", ".join(participant_email_domains) if participant_email_domains else None,
+                    "participant_email_domain_count": len(participant_email_domains),
+                    "public_participant_email_domains": public_participant_email_domains,
+                    "public_participant_email_domains_csv": ", ".join(public_participant_email_domains) if public_participant_email_domains else None,
+                    "public_participant_email_domain_count": len(public_participant_email_domains),
+                    "internal_participant_email_domains": internal_participant_email_domains,
+                    "internal_participant_email_domains_csv": ", ".join(internal_participant_email_domains) if internal_participant_email_domains else None,
+                    "internal_participant_email_domain_count": len(internal_participant_email_domains),
                     "support_group_name": record.get("support_group_name"),
                     "default_contract_name": record.get("default_contract_name"),
                     "location_name": record.get("location_name"),

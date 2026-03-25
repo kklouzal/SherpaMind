@@ -94,6 +94,15 @@ def _load_rows(db_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
                json_extract(d.raw_json, '$.metadata.recent_log_types_csv') AS recent_log_types,
                json_extract(d.raw_json, '$.metadata.initial_response_present') AS initial_response_present,
                json_extract(d.raw_json, '$.metadata.user_email') AS user_email,
+               json_extract(d.raw_json, '$.metadata.user_email_domain') AS user_email_domain,
+               json_extract(d.raw_json, '$.metadata.user_created_email_domain') AS user_created_email_domain,
+               json_extract(d.raw_json, '$.metadata.technician_email_domain') AS technician_email_domain,
+               json_extract(d.raw_json, '$.metadata.participant_email_domains_csv') AS participant_email_domains_csv,
+               json_extract(d.raw_json, '$.metadata.participant_email_domain_count') AS participant_email_domain_count,
+               json_extract(d.raw_json, '$.metadata.public_participant_email_domains_csv') AS public_participant_email_domains_csv,
+               json_extract(d.raw_json, '$.metadata.public_participant_email_domain_count') AS public_participant_email_domain_count,
+               json_extract(d.raw_json, '$.metadata.internal_participant_email_domains_csv') AS internal_participant_email_domains_csv,
+               json_extract(d.raw_json, '$.metadata.internal_participant_email_domain_count') AS internal_participant_email_domain_count,
                json_extract(d.raw_json, '$.metadata.support_group_name') AS support_group_name,
                json_extract(d.raw_json, '$.metadata.default_contract_name') AS default_contract_name,
                json_extract(d.raw_json, '$.metadata.location_name') AS location_name,
@@ -238,6 +247,7 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                     "user_name": record["user_name"],
                     "user_id": record["user_id"],
                     "user_email": record["user_email"],
+                    "user_email_domain": record["user_email_domain"],
                     "technician": record["technician"],
                     "technician_id": record["technician_id"],
                     "account_label_source": record["account_label_source"],
@@ -308,6 +318,14 @@ def export_embedding_ready_chunks(db_path: Path, output_path: Path, limit: int |
                     "has_next_step": bool(record["has_next_step"]),
                     "recent_log_types": record["recent_log_types"],
                     "initial_response_present": bool(record["initial_response_present"]),
+                    "user_created_email_domain": record["user_created_email_domain"],
+                    "technician_email_domain": record["technician_email_domain"],
+                    "participant_email_domains": record["participant_email_domains_csv"],
+                    "participant_email_domain_count": record["participant_email_domain_count"],
+                    "public_participant_email_domains": record["public_participant_email_domains_csv"],
+                    "public_participant_email_domain_count": record["public_participant_email_domain_count"],
+                    "internal_participant_email_domains": record["internal_participant_email_domains_csv"],
+                    "internal_participant_email_domain_count": record["internal_participant_email_domain_count"],
                     "support_group_name": record["support_group_name"],
                     "default_contract_name": record["default_contract_name"],
                     "location_name": record["location_name"],
@@ -635,6 +653,16 @@ SOURCE_METADATA_FIELDS: dict[str, dict[str, Any]] = {
     "user_created_email": {
         "tickets": {"paths": ["$.user_created_email"], "kind": "text"},
         "ticket_details": {"paths": ["$.user_created_email"], "kind": "text"},
+    },
+    "user_email_domain": {
+        "tickets": {"paths": ["$.user_email"], "kind": "text"},
+    },
+    "user_created_email_domain": {
+        "tickets": {"paths": ["$.user_created_email"], "kind": "text"},
+        "ticket_details": {"paths": ["$.user_created_email"], "kind": "text"},
+    },
+    "technician_email_domain": {
+        "tickets": {"paths": ["$.technician_email", "$.tech_email"], "kind": "text"},
     },
     "technician_type": {
         "tickets": {"paths": ["$.tech_type"], "kind": "text"},
@@ -991,6 +1019,10 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
     departments = sorted({row.get("department_label") for row in rows if row.get("department_label")})
     attachment_extensions = sorted({value for row in rows for value in _split_csv_values(row.get("attachment_extensions_csv"))})
     attachment_kinds = sorted({value for row in rows for value in _split_csv_values(row.get("attachment_kinds_csv"))})
+    user_email_domains = sorted({row.get("user_email_domain") for row in rows if row.get("user_email_domain")})
+    user_created_email_domains = sorted({row.get("user_created_email_domain") for row in rows if row.get("user_created_email_domain")})
+    technician_email_domains = sorted({row.get("technician_email_domain") for row in rows if row.get("technician_email_domain")})
+    participant_email_domains = sorted({value for row in rows for value in _split_csv_values(row.get("participant_email_domains_csv"))})
     chunk_primary_sections = sorted({row.get("chunk_primary_section") for row in rows if row.get("chunk_primary_section")})
     chunk_section_labels = sorted({value for row in rows for value in (row.get("chunk_section_labels") or []) if value})
 
@@ -1019,6 +1051,12 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "submission_category": lambda row: _present(row.get("submission_category")),
         "resolution_category": lambda row: _present(row.get("resolution_category")),
         "user_email": lambda row: _present(row.get("user_email")),
+        "user_email_domain": lambda row: _present(row.get("user_email_domain")),
+        "user_created_email_domain": lambda row: _present(row.get("user_created_email_domain")),
+        "technician_email_domain": lambda row: _present(row.get("technician_email_domain")),
+        "participant_email_domains": lambda row: _present(row.get("participant_email_domains_csv")),
+        "public_participant_email_domains": lambda row: _present(row.get("public_participant_email_domains_csv")),
+        "internal_participant_email_domains": lambda row: _present(row.get("internal_participant_email_domains_csv")),
         "cleaned_subject": lambda row: _present(row.get("cleaned_subject")),
         "public_log_count": lambda row: _present(row.get("public_log_count")),
         "internal_log_count": lambda row: _present(row.get("internal_log_count")),
@@ -1242,6 +1280,14 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
             "attachment_extension_count": len(attachment_extensions),
             "attachment_kinds": attachment_kinds,
             "attachment_kind_count": len(attachment_kinds),
+            "user_email_domains": user_email_domains,
+            "user_email_domain_count": len(user_email_domains),
+            "user_created_email_domains": user_created_email_domains,
+            "user_created_email_domain_count": len(user_created_email_domains),
+            "technician_email_domains": technician_email_domains,
+            "technician_email_domain_count": len(technician_email_domains),
+            "participant_email_domains": participant_email_domains,
+            "participant_email_domain_count": len(participant_email_domains),
             "chunk_primary_sections": chunk_primary_sections,
             "chunk_primary_section_count": len(chunk_primary_sections),
             "chunk_section_labels": chunk_section_labels,

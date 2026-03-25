@@ -179,9 +179,16 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Mixed visibility activity: True" in primary["text"]
     assert "Latest waiting log date: 2026-03-19T06:00:00Z" in primary["text"]
     assert "Latest resolution log date: 2026-03-19T06:30:00Z" in primary["text"]
+    assert "User email: alice@example.com" in primary["text"]
+    assert "User email domain: example.com" in primary["text"]
     assert "Technician email: queue@example.com" in primary["text"]
+    assert "Technician email domain: example.com" in primary["text"]
     assert "Created by: Casey Dispatcher" in primary["text"]
     assert "Created by email: dispatcher@example.com" in primary["text"]
+    assert "Created by email domain: example.com" in primary["text"]
+    assert "Participant email domains: example.com" in primary["text"]
+    assert "Public participant email domains: example.com" in primary["text"]
+    assert "Internal participant email domains: example.com" in primary["text"]
     assert "User phone: 520-555-0101" in primary["text"]
     assert "Location: HQ" in primary["text"]
     assert "Account location: HQ Campus" in primary["text"]
@@ -315,6 +322,18 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["recent_log_types_csv"] == "Closed, Waiting on Response, Response, Initial Post"
     assert primary["metadata"]["initial_response_present"] is True
     assert primary["metadata"]["user_email"] == "alice@example.com"
+    assert primary["metadata"]["user_email_domain"] == "example.com"
+    assert primary["metadata"]["user_created_email_domain"] == "example.com"
+    assert primary["metadata"]["technician_email_domain"] == "example.com"
+    assert primary["metadata"]["participant_email_domains"] == ["example.com"]
+    assert primary["metadata"]["participant_email_domains_csv"] == "example.com"
+    assert primary["metadata"]["participant_email_domain_count"] == 1
+    assert primary["metadata"]["public_participant_email_domains"] == ["example.com"]
+    assert primary["metadata"]["public_participant_email_domains_csv"] == "example.com"
+    assert primary["metadata"]["public_participant_email_domain_count"] == 1
+    assert primary["metadata"]["internal_participant_email_domains"] == ["example.com"]
+    assert primary["metadata"]["internal_participant_email_domains_csv"] == "example.com"
+    assert primary["metadata"]["internal_participant_email_domain_count"] == 1
     assert primary["metadata"]["detail_available"] is True
     assert primary["metadata"]["account_label_source"] == "joined"
     assert primary["metadata"]["user_label_source"] == "joined"
@@ -340,6 +359,10 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert fallback["metadata"]["total_actor_count"] == 1
     assert fallback["metadata"]["latest_public_actor_label"] == "Bob Jones"
     assert fallback["metadata"]["recent_public_actor_labels"] == ["Bob Jones"]
+    assert fallback["metadata"]["participant_email_domains"] == []
+    assert fallback["metadata"]["participant_email_domains_csv"] is None
+    assert fallback["metadata"]["public_participant_email_domains"] == []
+    assert fallback["metadata"]["internal_participant_email_domains"] == []
     assert fallback["metadata"]["has_named_public_participants"] is True
     assert fallback["metadata"]["cleaned_action_cue"] == "Waiting for branch manager approval"
     assert fallback["metadata"]["action_cue_source"] == "followup_note"
