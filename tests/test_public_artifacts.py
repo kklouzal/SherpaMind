@@ -101,6 +101,9 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     text = output.read_text()
     assert "SherpaMind Public Insight Snapshot" in text
     assert "Enrichment coverage" in text
+    assert "Enrichment pressure — under-covered accounts" in text
+    assert "Enrichment pressure — under-covered categories" in text
+    assert "Enrichment pressure — under-covered technicians" in text
     assert "Sync freshness" in text
     assert "Attachment metadata summary" in text
     assert "Retrieval metadata readiness" in text

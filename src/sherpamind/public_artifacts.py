@@ -136,6 +136,22 @@ def _entity_label_quality_rows(entity_quality: dict[str, dict[str, Any]]) -> lis
     return rows
 
 
+def _detail_gap_rows(coverage: dict[str, Any], dimension: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for row in ((coverage.get("detail_gap_pressure") or {}).get(dimension) or {}).get("rows", []):
+        rows.append({
+            "label": row.get("label", "unknown"),
+            "tickets": row.get("total_tickets", 0),
+            "detail_tickets": row.get("detail_tickets", 0),
+            "detail_ratio": _format_ratio(row.get("detail_ratio")),
+            "detail_backlog": row.get("detail_backlog", 0),
+            "open_without_detail": row.get("open_without_detail", 0),
+            "warm_closed_without_detail": row.get("warm_closed_without_detail", 0),
+            "latest_activity_at": row.get("latest_activity_at", ""),
+        })
+    return rows
+
+
 def _source_breakdown_rows(source_counts: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for source, stats in source_counts.items():
@@ -237,6 +253,42 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "```json",
         json.dumps(enrichment_coverage, indent=2),
         "```",
+        "",
+        "## Enrichment pressure — under-covered accounts",
+        "",
+        _markdown_table(_detail_gap_rows(enrichment_coverage, "accounts"), [
+            ("label", "Account"),
+            ("tickets", "Tickets"),
+            ("detail_tickets", "Detail Tickets"),
+            ("detail_ratio", "Detail Coverage"),
+            ("detail_backlog", "Backlog"),
+            ("open_without_detail", "Open Missing Detail"),
+            ("warm_closed_without_detail", "Warm Closed Missing Detail"),
+        ]),
+        "",
+        "## Enrichment pressure — under-covered categories",
+        "",
+        _markdown_table(_detail_gap_rows(enrichment_coverage, "categories"), [
+            ("label", "Category"),
+            ("tickets", "Tickets"),
+            ("detail_tickets", "Detail Tickets"),
+            ("detail_ratio", "Detail Coverage"),
+            ("detail_backlog", "Backlog"),
+            ("open_without_detail", "Open Missing Detail"),
+            ("warm_closed_without_detail", "Warm Closed Missing Detail"),
+        ]),
+        "",
+        "## Enrichment pressure — under-covered technicians",
+        "",
+        _markdown_table(_detail_gap_rows(enrichment_coverage, "technicians"), [
+            ("label", "Technician"),
+            ("tickets", "Tickets"),
+            ("detail_tickets", "Detail Tickets"),
+            ("detail_ratio", "Detail Coverage"),
+            ("detail_backlog", "Backlog"),
+            ("open_without_detail", "Open Missing Detail"),
+            ("warm_closed_without_detail", "Warm Closed Missing Detail"),
+        ]),
         "",
         "## Sync freshness",
         "",

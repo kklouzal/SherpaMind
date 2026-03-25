@@ -6,6 +6,17 @@ from .db import connect, initialize_db
 from .documents import DOCUMENT_MATERIALIZATION_VERSION
 
 
+_DETAIL_PRESSURE_DIMENSIONS: tuple[tuple[str, str, int], ...] = (
+    ("accounts", "COALESCE(NULLIF(a.name, ''), NULLIF(t.account_id, ''), 'unknown')", 10),
+    (
+        "categories",
+        "COALESCE(NULLIF(t.category, ''), NULLIF(json_extract(t.raw_json, '$.creation_category_name'), ''), NULLIF(json_extract(t.raw_json, '$.class_name'), ''), NULLIF(json_extract(t.raw_json, '$.submission_category'), ''), 'unknown')",
+        10,
+    ),
+    ("technicians", "COALESCE(NULLIF(te.display_name, ''), NULLIF(t.assigned_technician_id, ''), 'unassigned')", 3),
+)
+
+
 def list_ticket_counts_by_account(db_path: Path, limit: int = 20) -> list[dict]:
     with connect(db_path) as conn:
         rows = conn.execute(
@@ -334,6 +345,60 @@ def search_ticket_document_chunks(
     return [dict(row) for row in rows]
 
 
+def _list_detail_gap_groups(conn, label_sql: str, *, min_tickets: int, limit: int = 10) -> list[dict]:
+    rows = conn.execute(
+        f"""
+        WITH grouped AS (
+            SELECT {label_sql} AS label,
+                   CASE WHEN td.ticket_id IS NULL THEN 0 ELSE 1 END AS has_detail,
+                   t.status,
+                   CASE
+                       WHEN t.status = 'Closed'
+                            AND t.closed_at IS NOT NULL
+                            AND julianday(REPLACE(substr(t.closed_at, 1, 19), 'T', ' ')) >= julianday('now', '-7 days') THEN 1
+                       ELSE 0
+                   END AS is_warm_closed,
+                   COALESCE(t.updated_at, t.created_at) AS activity_at
+            FROM tickets t
+            LEFT JOIN ticket_details td ON td.ticket_id = t.id
+            LEFT JOIN accounts a ON a.id = t.account_id
+            LEFT JOIN technicians te ON te.id = t.assigned_technician_id
+        )
+        SELECT label,
+               COUNT(*) AS total_tickets,
+               SUM(has_detail) AS detail_tickets,
+               SUM(CASE WHEN has_detail = 0 THEN 1 ELSE 0 END) AS detail_backlog,
+               ROUND(CAST(SUM(has_detail) AS FLOAT) / COUNT(*), 4) AS detail_ratio,
+               SUM(CASE WHEN status = 'Open' THEN 1 ELSE 0 END) AS open_tickets,
+               SUM(CASE WHEN status = 'Open' AND has_detail = 1 THEN 1 ELSE 0 END) AS open_detail_tickets,
+               SUM(CASE WHEN status = 'Open' AND has_detail = 0 THEN 1 ELSE 0 END) AS open_without_detail,
+               SUM(is_warm_closed) AS warm_closed_tickets,
+               SUM(CASE WHEN is_warm_closed = 1 AND has_detail = 1 THEN 1 ELSE 0 END) AS warm_closed_detail_tickets,
+               SUM(CASE WHEN is_warm_closed = 1 AND has_detail = 0 THEN 1 ELSE 0 END) AS warm_closed_without_detail,
+               MAX(activity_at) AS latest_activity_at
+        FROM grouped
+        GROUP BY label
+        HAVING COUNT(*) >= ?
+        ORDER BY detail_ratio ASC, detail_backlog DESC, total_tickets DESC, label ASC
+        LIMIT ?
+        """,
+        (min_tickets, limit),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _summarize_detail_gap_groups(rows: list[dict], *, min_tickets: int) -> dict:
+    return {
+        "min_tickets": min_tickets,
+        "group_count": len(rows),
+        "zero_detail_groups": sum(1 for row in rows if int(row.get("detail_tickets") or 0) == 0),
+        "low_coverage_groups": sum(1 for row in rows if float(row.get("detail_ratio") or 0.0) < 0.25),
+        "backlog_tickets": sum(int(row.get("detail_backlog") or 0) for row in rows),
+        "open_backlog_tickets": sum(int(row.get("open_without_detail") or 0) for row in rows),
+        "warm_closed_backlog_tickets": sum(int(row.get("warm_closed_without_detail") or 0) for row in rows),
+    }
+
+
 def get_enrichment_coverage(db_path: Path) -> dict:
     initialize_db(db_path)
     with connect(db_path) as conn:
@@ -410,6 +475,13 @@ def get_enrichment_coverage(db_path: Path) -> dict:
             FROM ticket_documents
             """
         ).fetchone()
+        detail_gap_pressure = {
+            dimension: {
+                "summary": _summarize_detail_gap_groups(rows := _list_detail_gap_groups(conn, label_sql, min_tickets=min_tickets), min_tickets=min_tickets),
+                "rows": rows,
+            }
+            for dimension, label_sql, min_tickets in _DETAIL_PRESSURE_DIMENSIONS
+        }
     total_tickets = int(totals["total_tickets"] or 0)
     open_tickets = int(totals["open_tickets"] or 0)
     closed_tickets = int(totals["closed_tickets"] or 0)
@@ -441,6 +513,7 @@ def get_enrichment_coverage(db_path: Path) -> dict:
             "open": open_tickets,
             "closed": closed_tickets,
         },
+        "detail_gap_pressure": detail_gap_pressure,
         "enrichment": {
             "ticket_details_covered": detail_count,
             "ticket_logs_covered": log_count,
@@ -451,6 +524,7 @@ def get_enrichment_coverage(db_path: Path) -> dict:
             "warm_detail_coverage": warm_detail_count,
             "warm_detail_coverage_ratio": round((warm_detail_count / closed_tickets), 4) if closed_tickets else 0.0,
             "detail_backlog": max(total_tickets - detail_count, 0),
+            "detail_gap_pressure": detail_gap_pressure,
         },
         "retrieval": {
             "ticket_documents": document_count,

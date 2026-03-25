@@ -173,6 +173,11 @@ def test_analysis_reports(tmp_path: Path) -> None:
     assert usage["requests_last_hour"] == 1
     assert coverage["ticket_details_covered"] == 1
     assert coverage["open_detail_coverage"] == 1
+    assert coverage["detail_gap_pressure"]["accounts"]["summary"]["min_tickets"] == 10
+    assert coverage["detail_gap_pressure"]["categories"]["summary"]["min_tickets"] == 10
+    assert coverage["detail_gap_pressure"]["technicians"]["summary"]["min_tickets"] == 3
+    assert coverage["detail_gap_pressure"]["accounts"]["rows"] == []
+    assert coverage["enrichment"]["detail_gap_pressure"]["technicians"]["rows"] == []
     assert coverage["retrieval"]["ticket_documents"] == 1
     assert coverage["retrieval"]["ticket_document_chunks"] == 1
     assert coverage["metadata"]["priority_docs"] == 1
@@ -193,3 +198,75 @@ def test_analysis_reports(tmp_path: Path) -> None:
     assert search_chunks[0]["chunk_id"] == "ticket:101:chunk:0"
     assert search_chunks[0]["class_name"] == "Technical Incident"
     assert search_chunks[0]["resolution_category"] == "In Progress"
+
+
+def test_enrichment_coverage_surfaces_detail_gap_pressure(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+    upsert_accounts(db, [{"id": 1, "name": "Acme"}, {"id": 2, "name": "Beta"}], synced_at="2026-03-19T01:00:00Z")
+    upsert_technicians(
+        db,
+        [{"id": 21, "FullName": "Tech One"}, {"id": 22, "FullName": "Tech Two"}],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+    tickets = []
+    for offset in range(10):
+        tickets.append(
+            {
+                "id": 200 + offset,
+                "account_id": 1,
+                "tech_id": 21,
+                "subject": f"Acme issue {offset}",
+                "status": "Open" if offset < 2 else "Closed",
+                "closed_time": "2099-03-18T01:00:00Z" if offset >= 2 else None,
+                "priority_name": "High",
+                "creation_category_name": "Networking",
+                "created_time": "2026-03-18T01:00:00Z",
+                "updated_time": f"2026-03-19T0{(offset % 9) + 1}:00:00Z",
+            }
+        )
+    for offset in range(4):
+        tickets.append(
+            {
+                "id": 400 + offset,
+                "account_id": 2,
+                "tech_id": 22,
+                "subject": f"Beta issue {offset}",
+                "status": "Closed",
+                "closed_time": "2026-02-01T01:00:00Z",
+                "priority_name": "Low",
+                "creation_category_name": "Printer",
+                "created_time": "2026-01-01T01:00:00Z",
+                "updated_time": f"2026-02-01T0{offset + 1}:00:00Z",
+            }
+        )
+    upsert_tickets(db, tickets, synced_at="2026-03-19T01:00:00Z")
+    upsert_ticket_details(
+        db,
+        [
+            {"id": 200, "ticketlogs": [], "timelogs": [], "attachments": []},
+            {"id": 400, "ticketlogs": [], "timelogs": [], "attachments": []},
+            {"id": 401, "ticketlogs": [], "timelogs": [], "attachments": []},
+        ],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+
+    coverage = get_enrichment_coverage(db)
+
+    account_rows = coverage["detail_gap_pressure"]["accounts"]["rows"]
+    assert account_rows[0]["label"] == "Acme"
+    assert account_rows[0]["total_tickets"] == 10
+    assert account_rows[0]["detail_tickets"] == 1
+    assert account_rows[0]["detail_backlog"] == 9
+    assert account_rows[0]["open_without_detail"] == 1
+    assert account_rows[0]["warm_closed_without_detail"] == 8
+    assert account_rows[0]["detail_ratio"] == 0.1
+
+    category_rows = coverage["detail_gap_pressure"]["categories"]["rows"]
+    assert category_rows[0]["label"] == "Networking"
+    assert category_rows[0]["detail_backlog"] == 9
+
+    technician_rows = coverage["detail_gap_pressure"]["technicians"]["rows"]
+    assert technician_rows[0]["label"] == "Tech One"
+    assert technician_rows[0]["detail_ratio"] == 0.1
+    assert coverage["detail_gap_pressure"]["technicians"]["summary"]["low_coverage_groups"] >= 1
