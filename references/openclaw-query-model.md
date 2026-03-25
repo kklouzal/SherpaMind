@@ -130,10 +130,13 @@ Possible future exception:
 ### Retrieval-oriented commands
 - `python3 scripts/run.py materialize-ticket-docs`
 - `python3 scripts/run.py search-ticket-docs "printer"`
+- `python3 scripts/run.py search-ticket-docs "printer" --account "<account>" --status Open --department "<department>"`
 - `python3 scripts/run.py search-ticket-chunks "printer"`
+- `python3 scripts/run.py search-ticket-chunks "printer" --priority High --category Hardware --class-name "<class>"`
 - `python3 scripts/run.py search-vector-index "printer"`
 - `python3 scripts/run.py search-vector-index "printer" --account "<account>" --status Open`
 - `python3 scripts/run.py search-vector-index "printer" --technician "<technician>" --priority High --category Hardware`
+- `python3 scripts/run.py search-vector-index "printer" --department "<department>" --class-name "<class>" --submission-category "<channel>" --resolution-category "<resolution>"`
 - `python3 scripts/run.py report-vector-index-status`
 - `python3 scripts/run.py report-retrieval-readiness`
 - `python3 scripts/run.py export-ticket-docs`

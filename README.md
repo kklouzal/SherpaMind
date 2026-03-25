@@ -402,7 +402,9 @@ python3 scripts/run.py <command> [args...]
 ### Search and export
 
 - `python3 scripts/run.py search-ticket-docs <query>`
+- `python3 scripts/run.py search-ticket-docs <query> --account <account> --status Open --department <department>`
 - `python3 scripts/run.py search-ticket-chunks <query>`
+- `python3 scripts/run.py search-ticket-chunks <query> --priority High --category <category> --class-name <class>`
 - `python3 scripts/run.py export-ticket-docs`
 - `python3 scripts/run.py export-ticket-chunks`
 - `python3 scripts/run.py export-embedding-chunks`
@@ -411,6 +413,7 @@ python3 scripts/run.py <command> [args...]
 - `python3 scripts/run.py report-vector-index-status`
 - `python3 scripts/run.py report-retrieval-readiness`
 - `python3 scripts/run.py search-vector-index <query>`
+- `python3 scripts/run.py search-vector-index <query> --department <department> --class-name <class> --submission-category <channel> --resolution-category <resolution>`
 - `python3 scripts/run.py generate-public-snapshot`
 - `python3 scripts/run.py generate-runtime-status`
 

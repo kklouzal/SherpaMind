@@ -596,16 +596,66 @@ def ticket_summary(ticket_query: str, limit_logs: int = 10, limit_attachments: i
 
 
 @app.command("search-ticket-docs")
-def search_docs(query: str, limit: int = 20) -> None:
+def search_docs(
+    query: str,
+    limit: int = 20,
+    account: str | None = None,
+    status: str | None = None,
+    technician: str | None = None,
+    priority: str | None = None,
+    category: str | None = None,
+    class_name: str | None = None,
+    submission_category: str | None = None,
+    resolution_category: str | None = None,
+    department: str | None = None,
+) -> None:
     settings = load_settings()
-    rows = search_ticket_documents(settings.db_path, query=query, limit=limit)
+    rows = search_ticket_documents(
+        settings.db_path,
+        query=query,
+        limit=limit,
+        account=account,
+        status=status,
+        technician=technician,
+        priority=priority,
+        category=category,
+        class_name=class_name,
+        submission_category=submission_category,
+        resolution_category=resolution_category,
+        department=department,
+    )
     print(json.dumps(rows, indent=2))
 
 
 @app.command("search-ticket-chunks")
-def search_chunks(query: str, limit: int = 20) -> None:
+def search_chunks(
+    query: str,
+    limit: int = 20,
+    account: str | None = None,
+    status: str | None = None,
+    technician: str | None = None,
+    priority: str | None = None,
+    category: str | None = None,
+    class_name: str | None = None,
+    submission_category: str | None = None,
+    resolution_category: str | None = None,
+    department: str | None = None,
+) -> None:
     settings = load_settings()
-    rows = search_ticket_document_chunks(settings.db_path, query=query, limit=limit)
+    rows = search_ticket_document_chunks(
+        settings.db_path,
+        query=query,
+        limit=limit,
+        account=account,
+        status=status,
+        technician=technician,
+        priority=priority,
+        category=category,
+        class_name=class_name,
+        submission_category=submission_category,
+        resolution_category=resolution_category,
+        department=department,
+    )
     print(json.dumps(rows, indent=2))
 
 
@@ -679,6 +729,10 @@ def search_vector_index_cmd(
     technician: str | None = None,
     priority: str | None = None,
     category: str | None = None,
+    class_name: str | None = None,
+    submission_category: str | None = None,
+    resolution_category: str | None = None,
+    department: str | None = None,
 ) -> None:
     settings = load_settings()
     rows = search_vector_index(
@@ -690,6 +744,10 @@ def search_vector_index_cmd(
         technician=technician,
         priority=priority,
         category=category,
+        class_name=class_name,
+        submission_category=submission_category,
+        resolution_category=resolution_category,
+        department=department,
     )
     print(json.dumps(rows, indent=2))
 

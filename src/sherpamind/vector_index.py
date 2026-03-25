@@ -170,6 +170,10 @@ def search_vector_index(
     technician: str | None = None,
     priority: str | None = None,
     category: str | None = None,
+    class_name: str | None = None,
+    submission_category: str | None = None,
+    resolution_category: str | None = None,
+    department: str | None = None,
 ) -> list[dict[str, Any]]:
     initialize_db(db_path)
     with connect(db_path) as conn:
@@ -195,6 +199,18 @@ def search_vector_index(
         if category:
             clauses.append("json_extract(d.raw_json, '$.metadata.category') LIKE ? COLLATE NOCASE")
             params.append(f"%{category}%")
+        if class_name:
+            clauses.append("json_extract(d.raw_json, '$.metadata.class_name') LIKE ? COLLATE NOCASE")
+            params.append(f"%{class_name}%")
+        if submission_category:
+            clauses.append("json_extract(d.raw_json, '$.metadata.submission_category') LIKE ? COLLATE NOCASE")
+            params.append(f"%{submission_category}%")
+        if resolution_category:
+            clauses.append("json_extract(d.raw_json, '$.metadata.resolution_category') LIKE ? COLLATE NOCASE")
+            params.append(f"%{resolution_category}%")
+        if department:
+            clauses.append("json_extract(d.raw_json, '$.metadata.department_label') LIKE ? COLLATE NOCASE")
+            params.append(f"%{department}%")
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         rows = conn.execute(
             f"""
@@ -204,6 +220,7 @@ def search_vector_index(
                    json_extract(d.raw_json, '$.metadata.priority') AS priority,
                    json_extract(d.raw_json, '$.metadata.category') AS category,
                    json_extract(d.raw_json, '$.metadata.class_name') AS class_name,
+                   json_extract(d.raw_json, '$.metadata.submission_category') AS submission_category,
                    json_extract(d.raw_json, '$.metadata.resolution_category') AS resolution_category,
                    json_extract(d.raw_json, '$.metadata.department_label') AS department_label
             FROM vector_chunk_index v
@@ -231,6 +248,7 @@ def search_vector_index(
                 "priority": row["priority"],
                 "category": row["category"],
                 "class_name": row["class_name"],
+                "submission_category": row["submission_category"],
                 "resolution_category": row["resolution_category"],
                 "department_label": row["department_label"],
                 "updated_at": row["updated_at"],

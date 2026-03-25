@@ -84,7 +84,25 @@ def seed_fixture(db: Path) -> None:
     )
     replace_ticket_documents(
         db,
-        [{"doc_id": "ticket:101", "ticket_id": 101, "status": "Open", "account": "Acme", "user_name": "Alice User", "technician": "Tech One", "updated_at": "2026-03-19T03:00:00Z", "text": "Printer issue A for Acme", "metadata": {}, "content_hash": "h1"}],
+        [{
+            "doc_id": "ticket:101",
+            "ticket_id": 101,
+            "status": "Open",
+            "account": "Acme",
+            "user_name": "Alice User",
+            "technician": "Tech One",
+            "updated_at": "2026-03-19T03:00:00Z",
+            "text": "Printer issue A for Acme",
+            "metadata": {
+                "priority": "High",
+                "category": "Hardware / Printer",
+                "class_name": "Technical Incident",
+                "submission_category": "Portal",
+                "resolution_category": "In Progress",
+                "department_label": "Managed Services",
+            },
+            "content_hash": "h1",
+        }],
         synced_at="2026-03-19T01:00:00Z",
     )
     replace_ticket_document_chunks(
@@ -112,8 +130,34 @@ def test_analysis_reports(tmp_path: Path) -> None:
     coverage = get_enrichment_coverage(db)
     summary = get_dataset_summary(db)
     snapshot = get_insight_snapshot(db)
-    search = search_ticket_documents(db, 'printer', limit=5)
-    search_chunks = search_ticket_document_chunks(db, 'printer', limit=5, account='Acme', status='Open', technician='Tech')
+    search = search_ticket_documents(
+        db,
+        'printer',
+        limit=5,
+        account='Acme',
+        status='Open',
+        technician='Tech',
+        priority='High',
+        category='Printer',
+        class_name='Incident',
+        submission_category='Port',
+        resolution_category='Progress',
+        department='Managed',
+    )
+    search_chunks = search_ticket_document_chunks(
+        db,
+        'printer',
+        limit=5,
+        account='Acme',
+        status='Open',
+        technician='Tech',
+        priority='High',
+        category='Printer',
+        class_name='Incident',
+        submission_category='Port',
+        resolution_category='Progress',
+        department='Managed',
+    )
 
     assert by_account[0]["account"] == "Acme"
     assert by_account[0]["ticket_count"] == 2
@@ -131,7 +175,7 @@ def test_analysis_reports(tmp_path: Path) -> None:
     assert coverage["open_detail_coverage"] == 1
     assert coverage["retrieval"]["ticket_documents"] == 1
     assert coverage["retrieval"]["ticket_document_chunks"] == 1
-    assert coverage["metadata"]["priority_docs"] == 0
+    assert coverage["metadata"]["priority_docs"] == 1
     assert coverage["metadata"]["cleaned_subject_docs"] == 0
     assert coverage["metadata"]["next_step_docs"] == 0
     assert coverage["metadata"]["action_cue_docs"] == 0
@@ -143,4 +187,9 @@ def test_analysis_reports(tmp_path: Path) -> None:
     assert summary["counts"]["api_request_events"] == 1
     assert snapshot["dataset_summary"]["counts"]["tickets"] == 3
     assert search[0]["doc_id"] == "ticket:101"
+    assert search[0]["priority"] == "High"
+    assert search[0]["submission_category"] == "Portal"
+    assert search[0]["department_label"] == "Managed Services"
     assert search_chunks[0]["chunk_id"] == "ticket:101:chunk:0"
+    assert search_chunks[0]["class_name"] == "Technical Incident"
+    assert search_chunks[0]["resolution_category"] == "In Progress"

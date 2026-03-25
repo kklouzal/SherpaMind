@@ -200,21 +200,69 @@ def list_ticket_attachment_summary(db_path: Path, limit: int = 20) -> list[dict]
     return [dict(row) for row in rows]
 
 
-def search_ticket_documents(db_path: Path, query: str, limit: int = 20) -> list[dict]:
+def search_ticket_documents(
+    db_path: Path,
+    query: str,
+    limit: int = 20,
+    account: str | None = None,
+    status: str | None = None,
+    technician: str | None = None,
+    priority: str | None = None,
+    category: str | None = None,
+    class_name: str | None = None,
+    submission_category: str | None = None,
+    resolution_category: str | None = None,
+    department: str | None = None,
+) -> list[dict]:
     needle = f"%{query}%"
+    clauses = [
+        "(d.text LIKE ? COLLATE NOCASE OR d.account LIKE ? COLLATE NOCASE OR d.user_name LIKE ? COLLATE NOCASE OR d.technician LIKE ? COLLATE NOCASE)"
+    ]
+    params: list = [needle, needle, needle, needle]
+    if account:
+        clauses.append("d.account LIKE ? COLLATE NOCASE")
+        params.append(f"%{account}%")
+    if status:
+        clauses.append("d.status = ?")
+        params.append(status)
+    if technician:
+        clauses.append("d.technician LIKE ? COLLATE NOCASE")
+        params.append(f"%{technician}%")
+    if priority:
+        clauses.append("json_extract(d.raw_json, '$.metadata.priority') = ?")
+        params.append(priority)
+    if category:
+        clauses.append("json_extract(d.raw_json, '$.metadata.category') LIKE ? COLLATE NOCASE")
+        params.append(f"%{category}%")
+    if class_name:
+        clauses.append("json_extract(d.raw_json, '$.metadata.class_name') LIKE ? COLLATE NOCASE")
+        params.append(f"%{class_name}%")
+    if submission_category:
+        clauses.append("json_extract(d.raw_json, '$.metadata.submission_category') LIKE ? COLLATE NOCASE")
+        params.append(f"%{submission_category}%")
+    if resolution_category:
+        clauses.append("json_extract(d.raw_json, '$.metadata.resolution_category') LIKE ? COLLATE NOCASE")
+        params.append(f"%{resolution_category}%")
+    if department:
+        clauses.append("json_extract(d.raw_json, '$.metadata.department_label') LIKE ? COLLATE NOCASE")
+        params.append(f"%{department}%")
+    where = " AND ".join(clauses)
     with connect(db_path) as conn:
         rows = conn.execute(
-            """
-            SELECT doc_id, ticket_id, status, account, user_name, technician, updated_at, text
-            FROM ticket_documents
-            WHERE text LIKE ? COLLATE NOCASE
-               OR account LIKE ? COLLATE NOCASE
-               OR user_name LIKE ? COLLATE NOCASE
-               OR technician LIKE ? COLLATE NOCASE
-            ORDER BY updated_at DESC, ticket_id DESC
+            f"""
+            SELECT d.doc_id, d.ticket_id, d.status, d.account, d.user_name, d.technician, d.updated_at, d.text,
+                   json_extract(d.raw_json, '$.metadata.priority') AS priority,
+                   json_extract(d.raw_json, '$.metadata.category') AS category,
+                   json_extract(d.raw_json, '$.metadata.class_name') AS class_name,
+                   json_extract(d.raw_json, '$.metadata.submission_category') AS submission_category,
+                   json_extract(d.raw_json, '$.metadata.resolution_category') AS resolution_category,
+                   json_extract(d.raw_json, '$.metadata.department_label') AS department_label
+            FROM ticket_documents d
+            WHERE {where}
+            ORDER BY d.updated_at DESC, d.ticket_id DESC
             LIMIT ?
             """,
-            (needle, needle, needle, needle, limit),
+            (*params, limit),
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -226,6 +274,12 @@ def search_ticket_document_chunks(
     account: str | None = None,
     status: str | None = None,
     technician: str | None = None,
+    priority: str | None = None,
+    category: str | None = None,
+    class_name: str | None = None,
+    submission_category: str | None = None,
+    resolution_category: str | None = None,
+    department: str | None = None,
 ) -> list[dict]:
     needle = f"%{query}%"
     clauses = ["c.text LIKE ? COLLATE NOCASE"]
@@ -239,12 +293,36 @@ def search_ticket_document_chunks(
     if technician:
         clauses.append("d.technician LIKE ? COLLATE NOCASE")
         params.append(f"%{technician}%")
+    if priority:
+        clauses.append("json_extract(d.raw_json, '$.metadata.priority') = ?")
+        params.append(priority)
+    if category:
+        clauses.append("json_extract(d.raw_json, '$.metadata.category') LIKE ? COLLATE NOCASE")
+        params.append(f"%{category}%")
+    if class_name:
+        clauses.append("json_extract(d.raw_json, '$.metadata.class_name') LIKE ? COLLATE NOCASE")
+        params.append(f"%{class_name}%")
+    if submission_category:
+        clauses.append("json_extract(d.raw_json, '$.metadata.submission_category') LIKE ? COLLATE NOCASE")
+        params.append(f"%{submission_category}%")
+    if resolution_category:
+        clauses.append("json_extract(d.raw_json, '$.metadata.resolution_category') LIKE ? COLLATE NOCASE")
+        params.append(f"%{resolution_category}%")
+    if department:
+        clauses.append("json_extract(d.raw_json, '$.metadata.department_label') LIKE ? COLLATE NOCASE")
+        params.append(f"%{department}%")
     where = " AND ".join(clauses)
     with connect(db_path) as conn:
         rows = conn.execute(
             f"""
             SELECT c.chunk_id, c.doc_id, c.ticket_id, c.chunk_index, c.text,
-                   d.status, d.account, d.technician, d.updated_at
+                   d.status, d.account, d.technician, d.updated_at,
+                   json_extract(d.raw_json, '$.metadata.priority') AS priority,
+                   json_extract(d.raw_json, '$.metadata.category') AS category,
+                   json_extract(d.raw_json, '$.metadata.class_name') AS class_name,
+                   json_extract(d.raw_json, '$.metadata.submission_category') AS submission_category,
+                   json_extract(d.raw_json, '$.metadata.resolution_category') AS resolution_category,
+                   json_extract(d.raw_json, '$.metadata.department_label') AS department_label
             FROM ticket_document_chunks c
             JOIN ticket_documents d ON d.doc_id = c.doc_id
             WHERE {where}
