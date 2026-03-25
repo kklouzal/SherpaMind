@@ -683,6 +683,7 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["source_backed_metadata"]["status_counts"]["materialized"] >= 1
     assert summary["source_backed_metadata"]["status_counts"]["upstream_absent"] >= 1
     assert any(field["field"] == "support_group_name" for field in summary["source_backed_metadata"]["upstream_absent_fields"])
+    assert summary["source_backed_metadata"]["fields_with_invalid_source"] == []
     assert summary["label_source_summary"]["account_label_source"]["id"]["chunks"] == 1
     assert summary["label_source_summary"]["account_label_source"]["raw"]["chunks"] == 1
     assert summary["label_source_summary"]["user_label_source"]["email"]["chunks"] == 1
@@ -710,6 +711,87 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["materialization"]["chunk_rows_at_current_version"] == 2
     assert summary["vector_index"]["total_chunk_rows"] == 2
     assert summary["content_hash_summary"]["present_count"] == 2
+
+
+def test_source_metadata_coverage_treats_invalid_email_domains_as_upstream_quality_not_promotion_gap(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+    upsert_tickets(
+        db,
+        [{
+            "id": 201,
+            "account_id": 1,
+            "user_id": 2,
+            "tech_id": 3,
+            "subject": "invalid technician email",
+            "status": "Open",
+            "priority_name": "Normal",
+            "created_time": "2026-03-19T01:00:00Z",
+            "updated_time": "2026-03-19T03:00:00Z",
+            "technician_email": "Dec 18 2017  9:01:07:433PMNew Tickets",
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+    replace_ticket_documents(
+        db,
+        [{
+            "doc_id": "ticket:201",
+            "ticket_id": 201,
+            "status": "Open",
+            "account": "Acme",
+            "user_name": "Alice",
+            "technician": "Queue",
+            "updated_at": "2026-03-19T03:00:00Z",
+            "text": "invalid technician email",
+            "metadata": {
+                "priority": "Normal",
+                "category": None,
+                "ticket_number": None,
+                "ticket_key": None,
+                "technician_email": "Dec 18 2017  9:01:07:433PMNew Tickets",
+                "technician_email_domain": None,
+                "account_label_source": "raw",
+                "user_label_source": "raw",
+                "technician_label_source": "raw",
+                "materialization_version": DOCUMENT_MATERIALIZATION_VERSION,
+            },
+            "content_hash": "bad-email-doc",
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+    replace_ticket_document_chunks(
+        db,
+        [{
+            "chunk_id": "ticket:201:chunk:0",
+            "doc_id": "ticket:201",
+            "ticket_id": 201,
+            "chunk_index": 0,
+            "text": "invalid technician email",
+            "content_hash": "bad-email-chunk",
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+
+    summary = get_retrieval_readiness_summary(db)
+    field = summary["source_metadata_coverage"]["technician_email_domain"]
+
+    assert field["raw_ticket_rows"] == 1
+    assert field["ticket_rows"] == 0
+    assert field["invalid_ticket_rows"] == 1
+    assert field["source_documents"] == 0
+    assert field["promotion_gap_documents"] == 0
+    assert field["status"] == "upstream_absent"
+    assert summary["source_backed_metadata"]["fields_with_promotion_gap"] == []
+    assert summary["source_backed_metadata"]["fields_with_invalid_source"] == [
+        {
+            "field": "technician_email_domain",
+            "raw_ticket_rows": 1,
+            "raw_detail_rows": 0,
+            "invalid_ticket_rows": 1,
+            "invalid_detail_rows": 0,
+            "source_documents": 0,
+        }
+    ]
 
 
 def test_export_embedding_manifest(tmp_path: Path) -> None:

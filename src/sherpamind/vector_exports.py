@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .db import connect, initialize_db
-from .documents import DOCUMENT_MATERIALIZATION_VERSION, get_ticket_document_materialization_status
+from .documents import DOCUMENT_MATERIALIZATION_VERSION, _extract_email_domain, get_ticket_document_materialization_status
 from .time_utils import parse_sherpadesk_timestamp
 from .vector_index import get_vector_index_status
 
@@ -616,6 +616,81 @@ def _json_presence_clause(paths: list[str], *, kind: str = "text") -> str:
     return " OR ".join(clauses) or "0"
 
 
+def _extract_json_values(raw_json: str | None, paths: list[str]) -> list[Any]:
+    if not raw_json:
+        return []
+    try:
+        payload = json.loads(raw_json)
+    except json.JSONDecodeError:
+        return []
+    values: list[Any] = []
+    for path in paths:
+        if not path.startswith('$.'):
+            continue
+        cursor: Any = payload
+        ok = True
+        for part in path[2:].split('.'):
+            if not isinstance(cursor, dict) or part not in cursor:
+                ok = False
+                break
+            cursor = cursor[part]
+        if ok:
+            values.append(cursor)
+    return values
+
+
+def _normalize_source_value(value: Any, *, transform: str | None) -> Any:
+    if transform == "email_domain":
+        return _extract_email_domain(value)
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    return value
+
+
+def _count_transformed_source_rows(
+    conn: Any,
+    *,
+    table: str,
+    id_field: str,
+    paths: list[str],
+    kind: str,
+    transform: str | None,
+) -> dict[str, Any]:
+    rows = conn.execute(f"SELECT {id_field} AS entity_id, raw_json FROM {table}").fetchall()
+    present_ids: set[str] = set()
+    normalized_ids: set[str] = set()
+    invalid_ids: set[str] = set()
+    for row in rows:
+        entity_id = str(row["entity_id"])
+        raw_values = _extract_json_values(row["raw_json"], paths)
+        present = False
+        normalized_present = False
+        for raw_value in raw_values:
+            if kind == "value":
+                has_value = raw_value is not None
+            else:
+                has_value = raw_value is not None and str(raw_value).strip() != ""
+            if not has_value:
+                continue
+            present = True
+            normalized_value = _normalize_source_value(raw_value, transform=transform)
+            if normalized_value is not None and normalized_value != "":
+                normalized_present = True
+                break
+        if present:
+            present_ids.add(entity_id)
+            if normalized_present:
+                normalized_ids.add(entity_id)
+            elif transform is not None:
+                invalid_ids.add(entity_id)
+    return {
+        "present_ids": present_ids,
+        "normalized_ids": normalized_ids,
+        "invalid_ids": invalid_ids,
+    }
+
+
 SOURCE_METADATA_FIELDS: dict[str, dict[str, Any]] = {
     "support_group_name": {
         "tickets": {"paths": ["$.support_group_name"], "kind": "text"},
@@ -655,14 +730,14 @@ SOURCE_METADATA_FIELDS: dict[str, dict[str, Any]] = {
         "ticket_details": {"paths": ["$.user_created_email"], "kind": "text"},
     },
     "user_email_domain": {
-        "tickets": {"paths": ["$.user_email"], "kind": "text"},
+        "tickets": {"paths": ["$.user_email"], "kind": "text", "transform": "email_domain"},
     },
     "user_created_email_domain": {
-        "tickets": {"paths": ["$.user_created_email"], "kind": "text"},
-        "ticket_details": {"paths": ["$.user_created_email"], "kind": "text"},
+        "tickets": {"paths": ["$.user_created_email"], "kind": "text", "transform": "email_domain"},
+        "ticket_details": {"paths": ["$.user_created_email"], "kind": "text", "transform": "email_domain"},
     },
     "technician_email_domain": {
-        "tickets": {"paths": ["$.technician_email", "$.tech_email"], "kind": "text"},
+        "tickets": {"paths": ["$.technician_email", "$.tech_email"], "kind": "text", "transform": "email_domain"},
     },
     "technician_type": {
         "tickets": {"paths": ["$.tech_type"], "kind": "text"},
@@ -754,30 +829,67 @@ def _get_source_metadata_coverage(
     summary: dict[str, Any] = {}
     with connect(db_path) as conn:
         for field, config in SOURCE_METADATA_FIELDS.items():
-            ticket_clause = _json_presence_clause(
-                config.get("tickets", {}).get("paths", []),
-                kind=config.get("tickets", {}).get("kind", "text"),
-            ) if config.get("tickets") else "0"
-            detail_clause = _json_presence_clause(
-                config.get("ticket_details", {}).get("paths", []),
-                kind=config.get("ticket_details", {}).get("kind", "text"),
-            ) if config.get("ticket_details") else "0"
-            counts = conn.execute(
-                f"""
-                SELECT
-                    (SELECT COUNT(DISTINCT id) FROM tickets WHERE {ticket_clause}) AS ticket_rows,
-                    (SELECT COUNT(DISTINCT ticket_id) FROM ticket_details WHERE {detail_clause}) AS detail_rows,
-                    (
-                        SELECT COUNT(*)
-                        FROM (
-                            SELECT id AS ticket_id FROM tickets WHERE {ticket_clause}
-                            UNION
-                            SELECT ticket_id FROM ticket_details WHERE {detail_clause}
-                        )
-                    ) AS source_documents
-                """
-            ).fetchone()
-            source_documents = int(counts["source_documents"] or 0)
+            ticket_config = config.get("tickets")
+            detail_config = config.get("ticket_details")
+            if ticket_config and ticket_config.get("transform"):
+                ticket_counts = _count_transformed_source_rows(
+                    conn,
+                    table="tickets",
+                    id_field="id",
+                    paths=ticket_config.get("paths", []),
+                    kind=ticket_config.get("kind", "text"),
+                    transform=ticket_config.get("transform"),
+                )
+                ticket_rows = len(ticket_counts["normalized_ids"])
+                raw_ticket_rows = len(ticket_counts["present_ids"])
+                invalid_ticket_rows = len(ticket_counts["invalid_ids"])
+                ticket_source_ids = set(ticket_counts["normalized_ids"])
+            else:
+                ticket_clause = _json_presence_clause(
+                    ticket_config.get("paths", []),
+                    kind=ticket_config.get("kind", "text"),
+                ) if ticket_config else "0"
+                counts = conn.execute(
+                    f"SELECT COUNT(DISTINCT id) AS row_count FROM tickets WHERE {ticket_clause}"
+                ).fetchone()
+                ticket_rows = int(counts["row_count"] or 0)
+                raw_ticket_rows = ticket_rows
+                invalid_ticket_rows = 0
+                ticket_source_ids = {
+                    str(row["id"])
+                    for row in conn.execute(f"SELECT DISTINCT id FROM tickets WHERE {ticket_clause}").fetchall()
+                } if ticket_config else set()
+
+            if detail_config and detail_config.get("transform"):
+                detail_counts = _count_transformed_source_rows(
+                    conn,
+                    table="ticket_details",
+                    id_field="ticket_id",
+                    paths=detail_config.get("paths", []),
+                    kind=detail_config.get("kind", "text"),
+                    transform=detail_config.get("transform"),
+                )
+                detail_rows = len(detail_counts["normalized_ids"])
+                raw_detail_rows = len(detail_counts["present_ids"])
+                invalid_detail_rows = len(detail_counts["invalid_ids"])
+                detail_source_ids = set(detail_counts["normalized_ids"])
+            else:
+                detail_clause = _json_presence_clause(
+                    detail_config.get("paths", []),
+                    kind=detail_config.get("kind", "text"),
+                ) if detail_config else "0"
+                counts = conn.execute(
+                    f"SELECT COUNT(DISTINCT ticket_id) AS row_count FROM ticket_details WHERE {detail_clause}"
+                ).fetchone()
+                detail_rows = int(counts["row_count"] or 0)
+                raw_detail_rows = detail_rows
+                invalid_detail_rows = 0
+                detail_source_ids = {
+                    str(row["ticket_id"])
+                    for row in conn.execute(f"SELECT DISTINCT ticket_id FROM ticket_details WHERE {detail_clause}").fetchall()
+                } if detail_config else set()
+
+            source_documents = len(ticket_source_ids | detail_source_ids)
             materialized_documents = int(document_metadata_coverage.get(field, {}).get("documents", 0) or 0)
             materialized_chunks = int(metadata_coverage.get(field, {}).get("chunks", 0) or 0)
             if source_documents == 0:
@@ -789,8 +901,12 @@ def _get_source_metadata_coverage(
             else:
                 status = "materialized"
             summary[field] = {
-                "ticket_rows": int(counts["ticket_rows"] or 0),
-                "detail_rows": int(counts["detail_rows"] or 0),
+                "ticket_rows": ticket_rows,
+                "detail_rows": detail_rows,
+                "raw_ticket_rows": raw_ticket_rows,
+                "raw_detail_rows": raw_detail_rows,
+                "invalid_ticket_rows": invalid_ticket_rows,
+                "invalid_detail_rows": invalid_detail_rows,
                 "source_documents": source_documents,
                 "source_document_ratio": round((source_documents / total_documents), 4) if total_documents else 0.0,
                 "materialized_documents": materialized_documents,
@@ -935,11 +1051,13 @@ def _build_freshness_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def _build_source_backed_metadata_summary(source_metadata_coverage: dict[str, Any]) -> dict[str, Any]:
     status_counts: dict[str, int] = {}
     fields_with_promotion_gap: list[dict[str, Any]] = []
+    fields_with_invalid_source: list[dict[str, Any]] = []
     upstream_absent_fields: list[dict[str, Any]] = []
     for field, stats in source_metadata_coverage.items():
         status = str(stats.get("status") or "unknown")
         status_counts[status] = status_counts.get(status, 0) + 1
         promotion_gap = int(stats.get("promotion_gap_documents") or 0)
+        invalid_source_rows = int(stats.get("invalid_ticket_rows") or 0) + int(stats.get("invalid_detail_rows") or 0)
         if promotion_gap > 0:
             fields_with_promotion_gap.append(
                 {
@@ -949,6 +1067,17 @@ def _build_source_backed_metadata_summary(source_metadata_coverage: dict[str, An
                     "materialized_documents": int(stats.get("materialized_documents") or 0),
                     "promotion_gap_documents": promotion_gap,
                     "materialized_document_ratio": float(stats.get("materialized_document_ratio") or 0.0),
+                }
+            )
+        if invalid_source_rows > 0:
+            fields_with_invalid_source.append(
+                {
+                    "field": field,
+                    "raw_ticket_rows": int(stats.get("raw_ticket_rows") or 0),
+                    "raw_detail_rows": int(stats.get("raw_detail_rows") or 0),
+                    "invalid_ticket_rows": int(stats.get("invalid_ticket_rows") or 0),
+                    "invalid_detail_rows": int(stats.get("invalid_detail_rows") or 0),
+                    "source_documents": int(stats.get("source_documents") or 0),
                 }
             )
         if status == "upstream_absent":
@@ -963,11 +1092,13 @@ def _build_source_backed_metadata_summary(source_metadata_coverage: dict[str, An
             )
 
     fields_with_promotion_gap.sort(key=lambda item: (-item["promotion_gap_documents"], item["field"]))
+    fields_with_invalid_source.sort(key=lambda item: (-(item["invalid_ticket_rows"] + item["invalid_detail_rows"]), item["field"]))
     upstream_absent_fields.sort(key=lambda item: item["field"])
     return {
         "fields": source_metadata_coverage,
         "status_counts": status_counts,
         "fields_with_promotion_gap": fields_with_promotion_gap,
+        "fields_with_invalid_source": fields_with_invalid_source,
         "upstream_absent_fields": upstream_absent_fields,
     }
 

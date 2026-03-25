@@ -116,7 +116,7 @@ SherpaMind currently covers five major areas:
    - reports dataset counts and freshness
    - reports enrichment coverage and retrieval coverage
    - reports retrieval-metadata readiness across the materialized document layer
-   - reports source-vs-materialized coverage for source-backed metadata so thin fields can be distinguished as upstream absence vs backend promotion drift
+   - reports source-vs-materialized coverage for source-backed metadata so thin fields can be distinguished as upstream absence vs backend promotion drift, with transformed-field hygiene that treats malformed upstream email strings as source-quality issues instead of false promotion gaps
 - reports action-cue provenance so operators can see whether ticket guidance came from literal next-step text, explicit follow-up notes, request-completion notes, or waiting-log fallback
    - reports API usage and hourly budget pressure
    - reports vector index readiness and drift
