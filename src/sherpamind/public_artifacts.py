@@ -210,6 +210,35 @@ def _top_lagging_document_rows(freshness: dict[str, Any]) -> list[dict[str, Any]
     return rows
 
 
+def _vector_drift_chunk_rows(rows: list[dict[str, Any]], *, count_key: str | None = None) -> list[dict[str, Any]]:
+    formatted: list[dict[str, Any]] = []
+    for item in rows:
+        row = {
+            "ticket_id": item.get("ticket_id", ""),
+            "chunk_id": item.get("chunk_id", ""),
+            "chunk_index": item.get("chunk_index", ""),
+            "status": item.get("status", ""),
+            "account": item.get("account", ""),
+            "technician": item.get("technician", ""),
+        }
+        if count_key:
+            row[count_key] = item.get(count_key, 0)
+        formatted.append(row)
+    return formatted
+
+
+def _vector_drift_dangling_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "ticket_id": item.get("ticket_id", ""),
+            "chunk_id": item.get("chunk_id", ""),
+            "dims": item.get("dims", ""),
+            "index_synced_at": item.get("index_synced_at", ""),
+        }
+        for item in rows
+    ]
+
+
 def generate_public_snapshot(db_path: Path) -> dict:
     paths = ensure_path_layout()
     generated_at = datetime.now(timezone.utc).isoformat()
@@ -529,6 +558,41 @@ def generate_public_snapshot(db_path: Path) -> dict:
             ("dangling_index_rows", "Dangling Index Rows"),
             ("outdated_content_rows", "Outdated Index Rows"),
         ]),
+        "",
+        "## Missing vector chunk samples",
+        "",
+        _markdown_table(
+            _vector_drift_chunk_rows((vector_index_status.get("drift_samples") or {}).get("missing_chunks", [])),
+            [("ticket_id", "Ticket ID"), ("chunk_id", "Chunk ID"), ("chunk_index", "Chunk #"), ("status", "Status"), ("account", "Account"), ("technician", "Technician")],
+        ),
+        "",
+        "## Documents with missing vector chunks",
+        "",
+        _markdown_table(
+            _vector_drift_chunk_rows((vector_index_status.get("drift_samples") or {}).get("missing_documents", []), count_key="missing_chunks"),
+            [("ticket_id", "Ticket ID"), ("missing_chunks", "Missing Chunks"), ("status", "Status"), ("account", "Account"), ("technician", "Technician")],
+        ),
+        "",
+        "## Outdated vector chunk samples",
+        "",
+        _markdown_table(
+            _vector_drift_chunk_rows((vector_index_status.get("drift_samples") or {}).get("outdated_chunks", [])),
+            [("ticket_id", "Ticket ID"), ("chunk_id", "Chunk ID"), ("chunk_index", "Chunk #"), ("status", "Status"), ("account", "Account"), ("technician", "Technician")],
+        ),
+        "",
+        "## Documents with outdated vector chunks",
+        "",
+        _markdown_table(
+            _vector_drift_chunk_rows((vector_index_status.get("drift_samples") or {}).get("outdated_documents", []), count_key="outdated_chunks"),
+            [("ticket_id", "Ticket ID"), ("outdated_chunks", "Outdated Chunks"), ("status", "Status"), ("account", "Account"), ("technician", "Technician")],
+        ),
+        "",
+        "## Dangling vector index samples",
+        "",
+        _markdown_table(
+            _vector_drift_dangling_rows((vector_index_status.get("drift_samples") or {}).get("dangling_index_rows", [])),
+            [("ticket_id", "Ticket ID"), ("chunk_id", "Chunk ID"), ("dims", "Dims"), ("index_synced_at", "Indexed At")],
+        ),
         "",
         "## Lowest chunk-level metadata coverage",
         "",

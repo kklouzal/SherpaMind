@@ -138,6 +138,11 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Materialization lag by ticket status" in retrieval_text
     assert "Materialization lag buckets" in retrieval_text
     assert "Top lagging documents" in retrieval_text
+    assert "Missing vector chunk samples" in retrieval_text
+    assert "Documents with missing vector chunks" in retrieval_text
+    assert "Outdated vector chunk samples" in retrieval_text
+    assert "Documents with outdated vector chunks" in retrieval_text
+    assert "Dangling vector index samples" in retrieval_text
     assert "Lowest chunk-level metadata coverage" in retrieval_text
     assert "Follow-up cue source coverage" in retrieval_text
     assert "Action cue source coverage" in retrieval_text

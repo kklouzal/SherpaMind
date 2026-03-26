@@ -561,6 +561,7 @@ Vector and retrieval readiness reporting includes:
 - missing index rows
 - dangling index rows
 - outdated content rows
+- bounded drift samples showing which chunks/documents are currently missing, outdated, or dangling so operators can inspect concrete vector-index repair targets instead of only totals
 - chunk-size quality metrics (avg/min/max, tiny, over-target)
 - filter-facet inventories for accounts, technicians, statuses, priorities, categories, normalized user/creator/technician/participant email domains, normalized attachment extensions, and attachment kinds
 - chunk-level and document-level metadata coverage for cleaned subject/issue summary/next-step/action-cue/log-type/resolution/attachment readiness plus log-interaction counts/date summaries, participant-count/name visibility metadata, attachment extension/kind/size summaries, size-known coverage, broader attachment kind-family counts, explicit-followup-vs-waiting-log cue splits, class/submission/resolution taxonomy, human-readable department labels, account-location, confirmation, and intake-channel metadata

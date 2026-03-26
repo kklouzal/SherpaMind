@@ -11,6 +11,7 @@ from .db import connect, initialize_db, now_iso
 
 TOKEN_RE = re.compile(r"[a-zA-Z0-9_]+")
 DEFAULT_DIMS = 256
+DRIFT_SAMPLE_LIMIT = 10
 
 
 def _tokenize(text: str) -> list[str]:
@@ -110,6 +111,133 @@ def build_vector_index(db_path: Path, dims: int = DEFAULT_DIMS, limit: int | Non
     }
 
 
+def _vector_drift_samples(conn: Any, *, limit: int = DRIFT_SAMPLE_LIMIT) -> dict[str, list[dict[str, Any]]]:
+    missing_chunks = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT
+                c.chunk_id,
+                c.doc_id,
+                c.ticket_id,
+                c.chunk_index,
+                c.synced_at AS chunk_synced_at,
+                d.status,
+                d.account,
+                d.technician,
+                d.updated_at
+            FROM ticket_document_chunks c
+            LEFT JOIN vector_chunk_index v ON v.chunk_id = c.chunk_id
+            LEFT JOIN ticket_documents d ON d.doc_id = c.doc_id
+            WHERE v.chunk_id IS NULL
+            ORDER BY d.updated_at DESC, c.ticket_id DESC, c.chunk_index ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    ]
+    outdated_chunks = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT
+                c.chunk_id,
+                c.doc_id,
+                c.ticket_id,
+                c.chunk_index,
+                c.synced_at AS chunk_synced_at,
+                v.synced_at AS index_synced_at,
+                c.content_hash AS chunk_content_hash,
+                v.content_hash AS index_content_hash,
+                d.status,
+                d.account,
+                d.technician,
+                d.updated_at
+            FROM ticket_document_chunks c
+            JOIN vector_chunk_index v ON v.chunk_id = c.chunk_id
+            LEFT JOIN ticket_documents d ON d.doc_id = c.doc_id
+            WHERE COALESCE(v.content_hash, '') != COALESCE(c.content_hash, '')
+            ORDER BY d.updated_at DESC, c.ticket_id DESC, c.chunk_index ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    ]
+    dangling_index_rows = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT
+                v.chunk_id,
+                v.doc_id,
+                v.ticket_id,
+                v.synced_at AS index_synced_at,
+                v.content_hash AS index_content_hash,
+                v.dims
+            FROM vector_chunk_index v
+            LEFT JOIN ticket_document_chunks c ON c.chunk_id = v.chunk_id
+            WHERE c.chunk_id IS NULL
+            ORDER BY v.synced_at DESC, v.ticket_id DESC, v.chunk_id ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    ]
+    missing_documents = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT
+                c.doc_id,
+                c.ticket_id,
+                COUNT(*) AS missing_chunks,
+                d.status,
+                d.account,
+                d.technician,
+                d.updated_at
+            FROM ticket_document_chunks c
+            LEFT JOIN vector_chunk_index v ON v.chunk_id = c.chunk_id
+            LEFT JOIN ticket_documents d ON d.doc_id = c.doc_id
+            WHERE v.chunk_id IS NULL
+            GROUP BY c.doc_id, c.ticket_id, d.status, d.account, d.technician, d.updated_at
+            ORDER BY missing_chunks DESC, d.updated_at DESC, c.ticket_id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    ]
+    outdated_documents = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT
+                c.doc_id,
+                c.ticket_id,
+                COUNT(*) AS outdated_chunks,
+                d.status,
+                d.account,
+                d.technician,
+                d.updated_at
+            FROM ticket_document_chunks c
+            JOIN vector_chunk_index v ON v.chunk_id = c.chunk_id
+            LEFT JOIN ticket_documents d ON d.doc_id = c.doc_id
+            WHERE COALESCE(v.content_hash, '') != COALESCE(c.content_hash, '')
+            GROUP BY c.doc_id, c.ticket_id, d.status, d.account, d.technician, d.updated_at
+            ORDER BY outdated_chunks DESC, d.updated_at DESC, c.ticket_id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    ]
+    return {
+        "missing_chunks": missing_chunks,
+        "outdated_chunks": outdated_chunks,
+        "dangling_index_rows": dangling_index_rows,
+        "missing_documents": missing_documents,
+        "outdated_documents": outdated_documents,
+    }
+
+
 def get_vector_index_status(db_path: Path) -> dict[str, Any]:
     initialize_db(db_path)
     with connect(db_path) as conn:
@@ -143,6 +271,7 @@ def get_vector_index_status(db_path: Path) -> dict[str, Any]:
                 ) AS outdated_content_rows
             """
         ).fetchone()
+        drift_samples = _vector_drift_samples(conn)
     indexed_chunks = int(totals["indexed_chunks"] or 0)
     total_chunk_rows = int(totals["total_chunk_rows"] or 0)
     ready_ratio = round(indexed_chunks / total_chunk_rows, 6) if total_chunk_rows else 0.0
@@ -158,6 +287,8 @@ def get_vector_index_status(db_path: Path) -> dict[str, Any]:
         "dangling_index_rows": int(totals["dangling_index_rows"] or 0),
         "missing_index_rows": int(totals["missing_index_rows"] or 0),
         "outdated_content_rows": int(totals["outdated_content_rows"] or 0),
+        "drift_sample_limit": DRIFT_SAMPLE_LIMIT,
+        "drift_samples": drift_samples,
     }
 
 
