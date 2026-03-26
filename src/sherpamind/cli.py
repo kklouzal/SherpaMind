@@ -56,7 +56,7 @@ from .summaries import get_account_summary, get_technician_summary, get_ticket_s
 from .vector_exports import export_embedding_manifest, export_embedding_ready_chunks, get_retrieval_readiness_summary
 from .vector_index import build_vector_index, get_vector_index_status, search_vector_index
 from .watch import watch_new_tickets
-from .db import backfill_ticket_technician_stubs, initialize_db
+from .db import backfill_ticket_entity_stubs, backfill_ticket_technician_stubs, initialize_db
 
 app = typer.Typer(help="SherpaMind CLI")
 
@@ -99,6 +99,13 @@ def backfill_technician_stubs() -> None:
     settings = load_settings()
     initialize_db(settings.db_path)
     print(json.dumps(backfill_ticket_technician_stubs(settings.db_path), indent=2))
+
+
+@app.command("backfill-ticket-entity-stubs")
+def backfill_ticket_entity_stubs_command() -> None:
+    settings = load_settings()
+    initialize_db(settings.db_path)
+    print(json.dumps(backfill_ticket_entity_stubs(settings.db_path), indent=2))
 
 
 @app.command("workspace-layout")

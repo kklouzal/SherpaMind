@@ -95,7 +95,7 @@ SherpaMind currently covers five major areas:
    - tracks whether the historical cold corpus has completed at least one full pass
    - uses spare hourly API headroom opportunistically to accelerate cold audit/detail deepening before that first full pass completes
    - slows cold re-audit/re-enrichment back down after the first full pass so most budget remains available for hot/warm freshness while still preserving long-tail maintenance
-   - backfills technician stub rows from stable ticket payload names when the standalone technicians endpoint is thinner than real ticket assignee history
+   - backfills account, user, and technician stub rows from stable ticket payload labels when standalone entity endpoints are thinner than real ticket history
    - enriches a bounded priority ticket set through single-ticket detail fetches
    - biases cold-detail enrichment toward under-covered categories/accounts/technicians so historical retrieval depth broadens instead of clustering only around the newest cold tickets
    - stores ticket logs and attachment metadata from detail responses
@@ -105,7 +105,7 @@ SherpaMind currently covers five major areas:
    - normalizes ticket text into cleaner retrieval-ready summaries
 - keeps action-oriented ticket cues honest by separating explicit follow-up notes from waiting-log fallback notes while still publishing a unified action-cue field for retrieval consumers
    - normalizes account/user/technician labels so retrieval/vector facets prefer human-readable names over raw numeric IDs when ticket payloads provide them
-   - promotes ticket-observed technician labels into canonical stub rows when that is the cleanest stable source available, so technician-facing summaries/filter facets stay readable even when endpoint coverage is thin
+   - promotes ticket-observed account/user/technician labels into canonical stub rows when that is the cleanest stable source available, so entity-facing summaries/filter facets stay readable even when endpoint coverage is thin
    - carries workflow/state metadata such as subject, user email plus normalized user/creator/technician email domains, stable ticket identifiers (ticket number/key), technician and creator contact context, participant email-domain rollups, waiting/age timing signals, recent log types, log-interaction counts/date summaries (public/internal/waiting/response/resolution), distinct public/internal participant counts, latest/recent participant labels, mixed-visibility activity flags, derived waiting/follow-up cues, derived latest-response and closure cues from ticket logs, next-step hints, derived action-cue text/source (from explicit next steps, follow-up notes, request-completion notes, or waiting-log fallback), class/submission/resolution taxonomy, human-readable department labels plus label-source provenance, contract/confirmation context, account-location and department context, intake-channel/handling flags, request-completion cues, project/scheduled-ticket linkage, effort-tracking signals (estimated/remaining/total hours, total minutes, labor cost, percent complete), attachment presence plus normalized attachment extension/kind/size summaries (including size-known counts and broader kind-family counts), and resolution highlights into derived artifacts
    - chunks long documents deterministically
    - supports keyword/text search over docs and chunks
@@ -350,6 +350,7 @@ python3 scripts/run.py <command> [args...]
 - `python3 scripts/run.py workspace-layout`
 - `python3 scripts/run.py init-db`
 - `python3 scripts/run.py backfill-technician-stubs`
+- `python3 scripts/run.py backfill-ticket-entity-stubs`
 - `python3 scripts/run.py setup`
 - `python3 scripts/run.py configure`
 - `python3 scripts/run.py doctor`

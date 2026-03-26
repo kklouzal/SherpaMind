@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from sherpamind.db import (
+    backfill_ticket_entity_stubs,
     backfill_ticket_technician_stubs,
     connect,
     finish_ingest_run,
@@ -99,7 +100,7 @@ def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:
     assert chunk["text"] == "hello"
 
 
-def test_upsert_tickets_backfills_technician_stub_rows(tmp_path: Path) -> None:
+def test_upsert_tickets_backfills_entity_stub_rows(tmp_path: Path) -> None:
     db = tmp_path / "sherpamind.sqlite3"
     initialize_db(db)
     upsert_tickets(
@@ -107,7 +108,11 @@ def test_upsert_tickets_backfills_technician_stub_rows(tmp_path: Path) -> None:
         [{
             "id": 41,
             "account_id": 1,
+            "account_name": "Acme Field Ops",
             "user_id": 2,
+            "user_firstname": "Pat",
+            "user_lastname": "Operator",
+            "user_email": "pat@example.com",
             "tech_id": 333,
             "technician_firstname": "Queue",
             "technician_lastname": "Owner",
@@ -119,19 +124,32 @@ def test_upsert_tickets_backfills_technician_stub_rows(tmp_path: Path) -> None:
         synced_at="2026-03-19T01:00:00Z",
     )
     with connect(db) as conn:
+        account = conn.execute("SELECT name, raw_json FROM accounts WHERE id = '1'").fetchone()
+        user = conn.execute("SELECT account_id, display_name, email, raw_json FROM users WHERE id = '2'").fetchone()
         tech = conn.execute("SELECT display_name, email, raw_json FROM technicians WHERE id = '333'").fetchone()
+    assert account["name"] == "Acme Field Ops"
+    assert 'ticket_stub' in account["raw_json"]
+    assert user["account_id"] == '1'
+    assert user["display_name"] == "Pat Operator"
+    assert user["email"] == "pat@example.com"
+    assert 'ticket_stub' in user["raw_json"]
     assert tech["display_name"] == "Queue Owner"
     assert tech["email"] is None
     assert 'ticket_stub' in tech["raw_json"]
 
 
-def test_upsert_seed_technician_beats_stub_row(tmp_path: Path) -> None:
+def test_upsert_seed_entities_beat_stub_rows(tmp_path: Path) -> None:
     db = tmp_path / "sherpamind.sqlite3"
     initialize_db(db)
     upsert_tickets(
         db,
         [{
             "id": 41,
+            "account_id": 1,
+            "account_name": "Acme Field Ops",
+            "user_id": 2,
+            "user_firstname": "Pat",
+            "user_lastname": "Operator",
             "tech_id": 333,
             "technician_firstname": "Queue",
             "technician_lastname": "Owner",
@@ -141,19 +159,75 @@ def test_upsert_seed_technician_beats_stub_row(tmp_path: Path) -> None:
         }],
         synced_at="2026-03-19T01:00:00Z",
     )
+    upsert_accounts(
+        db,
+        [{"id": 1, "name": "Acme", "updated": "2026-03-19T02:00:00Z"}],
+        synced_at="2026-03-19T02:00:00Z",
+    )
+    upsert_users(
+        db,
+        [{"id": 2, "account_id": 1, "FullName": "Pat Operator", "email": "pat@example.com"}],
+        synced_at="2026-03-19T02:00:00Z",
+    )
     upsert_technicians(
         db,
         [{"id": 333, "FullName": "Queue Owner", "email": "queue@example.com", "type": "tech"}],
         synced_at="2026-03-19T02:00:00Z",
     )
     with connect(db) as conn:
+        account = conn.execute("SELECT name, raw_json FROM accounts WHERE id = '1'").fetchone()
+        user = conn.execute("SELECT display_name, email, raw_json FROM users WHERE id = '2'").fetchone()
         tech = conn.execute("SELECT display_name, email, raw_json FROM technicians WHERE id = '333'").fetchone()
+    assert account["name"] == "Acme"
+    assert 'ticket_stub' not in account["raw_json"]
+    assert user["display_name"] == "Pat Operator"
+    assert user["email"] == "pat@example.com"
+    assert 'ticket_stub' not in user["raw_json"]
     assert tech["display_name"] == "Queue Owner"
     assert tech["email"] == "queue@example.com"
     assert 'ticket_stub' not in tech["raw_json"]
 
 
-def test_backfill_ticket_technician_stubs_repairs_existing_ticket_rows(tmp_path: Path) -> None:
+def test_backfill_ticket_entity_stubs_repairs_existing_ticket_rows(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+    upsert_tickets(
+        db,
+        [{
+            "id": 41,
+            "account_id": 1,
+            "account_name": "Acme Field Ops",
+            "user_id": 2,
+            "user_firstname": "Pat",
+            "user_lastname": "Operator",
+            "tech_id": 333,
+            "technician_firstname": "Queue",
+            "technician_lastname": "Owner",
+            "status": "Open",
+            "created_time": "2026-03-18T01:00:00Z",
+            "updated_time": "2026-03-19T01:00:00Z",
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+    with connect(db) as conn:
+        conn.execute("DELETE FROM accounts")
+        conn.execute("DELETE FROM users")
+        conn.execute("DELETE FROM technicians")
+        conn.commit()
+    result = backfill_ticket_entity_stubs(db, synced_at="2026-03-19T03:00:00Z")
+    with connect(db) as conn:
+        account = conn.execute("SELECT name FROM accounts WHERE id = '1'").fetchone()
+        user = conn.execute("SELECT display_name FROM users WHERE id = '2'").fetchone()
+        tech = conn.execute("SELECT display_name FROM technicians WHERE id = '333'").fetchone()
+    assert result["account_rows_added"] == 1
+    assert result["user_rows_added"] == 1
+    assert result["technician_rows_added"] == 1
+    assert account["name"] == "Acme Field Ops"
+    assert user["display_name"] == "Pat Operator"
+    assert tech["display_name"] == "Queue Owner"
+
+
+def test_backfill_ticket_technician_stubs_reports_technician_slice(tmp_path: Path) -> None:
     db = tmp_path / "sherpamind.sqlite3"
     initialize_db(db)
     upsert_tickets(

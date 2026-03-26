@@ -367,8 +367,8 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert fallback["metadata"]["cleaned_action_cue"] == "Waiting for branch manager approval"
     assert fallback["metadata"]["action_cue_source"] == "followup_note"
     assert fallback["metadata"]["has_next_step"] is True
-    assert fallback["metadata"]["account_label_source"] == "raw"
-    assert fallback["metadata"]["user_label_source"] == "raw"
+    assert fallback["metadata"]["account_label_source"] == "joined"
+    assert fallback["metadata"]["user_label_source"] == "joined"
     assert fallback["metadata"]["technician_label_source"] == "joined"
 
     chunks = build_ticket_document_chunks(docs)

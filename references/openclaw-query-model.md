@@ -31,7 +31,7 @@ Use for exact facts, counts, filters, state, and time-based analysis:
 - `sync_state`
 - `ingest_runs`
 
-The `technicians` table may include stable ticket-observed stub rows when the standalone technicians endpoint does not cover all assignee IDs seen in tickets. That is intentional backend cleanup so technician filters and summaries stay human-readable instead of falling back to raw numeric IDs.
+The `accounts`, `users`, and `technicians` tables may include stable ticket-observed stub rows when the standalone entity endpoints do not cover everything exposed in ticket history. That is intentional backend cleanup so account/user/technician filters and summaries stay human-readable instead of falling back to raw numeric IDs.
 
 ### 2. Materialized retrieval documents
 Use for natural-language recall and fuzzy investigation:

@@ -181,6 +181,7 @@ Use these for setup/maintenance, not routine user queries:
 - `python3 scripts/run.py workspace-layout`
 - `python3 scripts/run.py doctor`
 - `python3 scripts/run.py backfill-technician-stubs`
+- `python3 scripts/run.py backfill-ticket-entity-stubs`
 - `python3 scripts/run.py bootstrap-audit`
 - `python3 scripts/run.py setup`
 - `python3 scripts/run.py migrate-legacy-state`

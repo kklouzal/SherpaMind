@@ -248,16 +248,25 @@ def upsert_accounts(db_path: Path, accounts: list[dict[str, Any]], synced_at: st
                 INSERT INTO accounts(id, name, raw_json, updated_at, synced_at)
                 VALUES(?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
-                    name = excluded.name,
-                    raw_json = excluded.raw_json,
-                    updated_at = excluded.updated_at,
+                    name = CASE
+                        WHEN excluded.name IS NOT NULL AND trim(excluded.name) <> ''
+                        THEN excluded.name
+                        ELSE accounts.name
+                    END,
+                    raw_json = CASE
+                        WHEN json_extract(excluded.raw_json, '$.source') = 'ticket_stub'
+                             AND COALESCE(json_extract(accounts.raw_json, '$.source'), '') <> 'ticket_stub'
+                        THEN accounts.raw_json
+                        ELSE excluded.raw_json
+                    END,
+                    updated_at = COALESCE(excluded.updated_at, accounts.updated_at),
                     synced_at = excluded.synced_at
                 """,
                 (
                     str(account["id"]),
                     account.get("name"),
                     _json(account),
-                    account.get("updated"),
+                    account.get("updated") or account.get("updated_time"),
                     synced_at,
                 ),
             )
@@ -269,6 +278,44 @@ def _display_name(record: dict[str, Any]) -> str | None:
     return record.get("FullName") or record.get("full_name2") or " ".join(
         part for part in [record.get("firstname"), record.get("lastname")] if part
     ) or None
+
+
+def _ticket_account_stub(ticket: dict[str, Any]) -> dict[str, Any] | None:
+    account_id = ticket.get("account_id")
+    if account_id is None:
+        return None
+    name = ticket.get("account_name") or ticket.get("company") or ticket.get("account") or None
+    return {
+        "id": account_id,
+        "name": name,
+        "updated": ticket.get("updated_time"),
+        "source": "ticket_stub",
+    }
+
+
+def _ticket_user_stub(ticket: dict[str, Any]) -> dict[str, Any] | None:
+    user_id = ticket.get("user_id")
+    if user_id is None:
+        return None
+    display_name = (
+        ticket.get("user_name")
+        or ticket.get("contact_name")
+        or ticket.get("requester_name")
+        or " ".join(
+            part
+            for part in [ticket.get("user_firstname"), ticket.get("user_lastname")]
+            if part
+        )
+        or None
+    )
+    return {
+        "id": user_id,
+        "account_id": ticket.get("account_id"),
+        "FullName": display_name,
+        "email": ticket.get("user_email"),
+        "updated_time": ticket.get("updated_time"),
+        "source": "ticket_stub",
+    }
 
 
 def _ticket_technician_stub(ticket: dict[str, Any]) -> dict[str, Any] | None:
@@ -304,11 +351,20 @@ def upsert_users(db_path: Path, users: list[dict[str, Any]], synced_at: str | No
                 INSERT INTO users(id, account_id, display_name, email, raw_json, updated_at, synced_at)
                 VALUES(?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
-                    account_id = excluded.account_id,
-                    display_name = excluded.display_name,
-                    email = excluded.email,
-                    raw_json = excluded.raw_json,
-                    updated_at = excluded.updated_at,
+                    account_id = COALESCE(excluded.account_id, users.account_id),
+                    display_name = CASE
+                        WHEN excluded.display_name IS NOT NULL AND trim(excluded.display_name) <> ''
+                        THEN excluded.display_name
+                        ELSE users.display_name
+                    END,
+                    email = COALESCE(excluded.email, users.email),
+                    raw_json = CASE
+                        WHEN json_extract(excluded.raw_json, '$.source') = 'ticket_stub'
+                             AND COALESCE(json_extract(users.raw_json, '$.source'), '') <> 'ticket_stub'
+                        THEN users.raw_json
+                        ELSE excluded.raw_json
+                    END,
+                    updated_at = COALESCE(excluded.updated_at, users.updated_at),
                     synced_at = excluded.synced_at
                 """,
                 (
@@ -367,6 +423,12 @@ def upsert_technicians(db_path: Path, technicians: list[dict[str, Any]], synced_
 
 def upsert_tickets(db_path: Path, tickets: list[dict[str, Any]], synced_at: str | None = None) -> int:
     synced_at = synced_at or now_iso()
+    account_stubs = [stub for ticket in tickets if (stub := _ticket_account_stub(ticket)) is not None]
+    if account_stubs:
+        upsert_accounts(db_path, account_stubs, synced_at=synced_at)
+    user_stubs = [stub for ticket in tickets if (stub := _ticket_user_stub(ticket)) is not None]
+    if user_stubs:
+        upsert_users(db_path, user_stubs, synced_at=synced_at)
     technician_stubs = [stub for ticket in tickets if (stub := _ticket_technician_stub(ticket)) is not None]
     if technician_stubs:
         upsert_technicians(db_path, technician_stubs, synced_at=synced_at)
@@ -413,39 +475,74 @@ def upsert_tickets(db_path: Path, tickets: list[dict[str, Any]], synced_at: str 
     return len(tickets)
 
 
-def backfill_ticket_technician_stubs(db_path: Path, synced_at: str | None = None) -> dict[str, int | str]:
+def backfill_ticket_entity_stubs(db_path: Path, synced_at: str | None = None) -> dict[str, Any]:
     synced_at = synced_at or now_iso()
     with connect(db_path) as conn:
-        ticket_rows = conn.execute(
-            """
-            SELECT raw_json
-            FROM tickets
-            WHERE assigned_technician_id IS NOT NULL AND trim(assigned_technician_id) <> ''
-            """
-        ).fetchall()
-        before_count = int(conn.execute("SELECT COUNT(*) AS c FROM technicians").fetchone()["c"])
-    stubs = []
-    seen_ids: set[str] = set()
-    for row in ticket_rows:
-        ticket = json.loads(row["raw_json"])
-        stub = _ticket_technician_stub(ticket)
-        if not stub:
-            continue
-        stub_id = str(stub["id"])
-        if stub_id in seen_ids:
-            continue
-        seen_ids.add(stub_id)
-        stubs.append(stub)
-    if stubs:
-        upsert_technicians(db_path, stubs, synced_at=synced_at)
+        ticket_rows = conn.execute("SELECT raw_json FROM tickets").fetchall()
+        before_counts = {
+            "accounts": int(conn.execute("SELECT COUNT(*) AS c FROM accounts").fetchone()["c"]),
+            "users": int(conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]),
+            "technicians": int(conn.execute("SELECT COUNT(*) AS c FROM technicians").fetchone()["c"]),
+        }
+
+    def _collect_stubs(factory):
+        stubs = []
+        seen_ids: set[str] = set()
+        for row in ticket_rows:
+            ticket = json.loads(row["raw_json"])
+            stub = factory(ticket)
+            if not stub:
+                continue
+            stub_id = str(stub["id"])
+            if stub_id in seen_ids:
+                continue
+            seen_ids.add(stub_id)
+            stubs.append(stub)
+        return stubs
+
+    account_stubs = _collect_stubs(_ticket_account_stub)
+    user_stubs = _collect_stubs(_ticket_user_stub)
+    technician_stubs = _collect_stubs(_ticket_technician_stub)
+
+    if account_stubs:
+        upsert_accounts(db_path, account_stubs, synced_at=synced_at)
+    if user_stubs:
+        upsert_users(db_path, user_stubs, synced_at=synced_at)
+    if technician_stubs:
+        upsert_technicians(db_path, technician_stubs, synced_at=synced_at)
+
     with connect(db_path) as conn:
-        after_count = int(conn.execute("SELECT COUNT(*) AS c FROM technicians").fetchone()["c"])
+        after_counts = {
+            "accounts": int(conn.execute("SELECT COUNT(*) AS c FROM accounts").fetchone()["c"]),
+            "users": int(conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]),
+            "technicians": int(conn.execute("SELECT COUNT(*) AS c FROM technicians").fetchone()["c"]),
+        }
+
     return {
         "status": "ok",
-        "observed_ticket_technician_ids": len(stubs),
-        "technician_count_before": before_count,
-        "technician_count_after": after_count,
-        "technician_rows_added": max(after_count - before_count, 0),
+        "observed_ticket_account_ids": len(account_stubs),
+        "observed_ticket_user_ids": len(user_stubs),
+        "observed_ticket_technician_ids": len(technician_stubs),
+        "account_count_before": before_counts["accounts"],
+        "account_count_after": after_counts["accounts"],
+        "account_rows_added": max(after_counts["accounts"] - before_counts["accounts"], 0),
+        "user_count_before": before_counts["users"],
+        "user_count_after": after_counts["users"],
+        "user_rows_added": max(after_counts["users"] - before_counts["users"], 0),
+        "technician_count_before": before_counts["technicians"],
+        "technician_count_after": after_counts["technicians"],
+        "technician_rows_added": max(after_counts["technicians"] - before_counts["technicians"], 0),
+    }
+
+
+def backfill_ticket_technician_stubs(db_path: Path, synced_at: str | None = None) -> dict[str, int | str]:
+    result = backfill_ticket_entity_stubs(db_path, synced_at=synced_at)
+    return {
+        "status": result["status"],
+        "observed_ticket_technician_ids": result["observed_ticket_technician_ids"],
+        "technician_count_before": result["technician_count_before"],
+        "technician_count_after": result["technician_count_after"],
+        "technician_rows_added": result["technician_rows_added"],
     }
 
 
