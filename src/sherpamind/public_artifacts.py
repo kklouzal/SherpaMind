@@ -225,6 +225,57 @@ def _top_lagging_document_rows(freshness: dict[str, Any]) -> list[dict[str, Any]
     return rows
 
 
+def _entity_retrieval_health_rows(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{
+        "detail_coverage": _format_ratio(summary.get("detail_coverage_ratio")),
+        "document_coverage": _format_ratio(summary.get("document_coverage_ratio")),
+        "action_cue_coverage": _format_ratio(summary.get("action_cue_ratio")),
+        "resolution_summary_coverage": _format_ratio(summary.get("resolution_summary_ratio")),
+        "multi_chunk_ratio": _format_ratio(summary.get("multi_chunk_ratio")),
+        "lagging_ratio": _format_ratio(summary.get("lagging_ratio")),
+        "avg_lag_minutes": _format_number(summary.get("avg_lag_minutes")),
+        "max_lag_minutes": _format_number(summary.get("max_lag_minutes")),
+        "latest_chunk_synced_at": summary.get("latest_chunk_synced_at") or "",
+    }]
+
+
+def _entity_lag_bucket_rows(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    labels = {
+        "current_or_ahead": "Current/Ahead",
+        "lag_le_15m": "<=15m",
+        "lag_le_1h": "<=1h",
+        "lag_le_6h": "<=6h",
+        "lag_le_24h": "<=24h",
+        "lag_gt_24h": ">24h",
+        "missing_chunk_synced_at": "Missing Chunk Sync",
+        "missing_updated_at": "Missing Updated At",
+    }
+    order = list(labels.keys())
+    rows: list[dict[str, Any]] = []
+    buckets = summary.get("lag_buckets") or {}
+    total = sum(int(value or 0) for value in buckets.values())
+    for key in order:
+        count = int(buckets.get(key) or 0)
+        rows.append({
+            "bucket": labels[key],
+            "tickets": count,
+            "ratio": _format_ratio((count / total) if total else 0.0),
+        })
+    return rows
+
+
+def _entity_metadata_coverage_rows(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for field, stats in (summary.get("metadata_coverage") or {}).items():
+        rows.append({
+            "field": field,
+            "tickets": stats.get("tickets", 0),
+            "ratio": _format_ratio(stats.get("ratio")),
+        })
+    rows.sort(key=lambda row: (-float(str(row["ratio"]).rstrip('%') or 0), row["field"]))
+    return rows
+
+
 def _vector_drift_chunk_rows(rows: list[dict[str, Any]], *, count_key: str | None = None) -> list[dict[str, Any]]:
     formatted: list[dict[str, Any]] = []
     for item in rows:
@@ -772,6 +823,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
             ("detail_tickets", "Detail Tickets"),
             ("document_tickets", "Document Tickets"),
             ("chunk_count", "Chunks"),
+            ("detail_coverage_ratio", "Detail Coverage"),
             ("latest_activity_at", "Latest Activity"),
         ]),
         "",
@@ -795,6 +847,7 @@ def generate_public_snapshot(db_path: Path) -> dict:
             ("detail_tickets", "Detail Tickets"),
             ("document_tickets", "Document Tickets"),
             ("chunk_count", "Chunks"),
+            ("detail_coverage_ratio", "Detail Coverage"),
             ("latest_activity_at", "Latest Activity"),
         ]),
         "",
@@ -874,6 +927,35 @@ def generate_public_snapshot(db_path: Path) -> dict:
             "",
             _markdown_table(summary["category_breakdown"], [("category", "Category"), ("ticket_count", "Ticket Count")]),
             "",
+            "## Retrieval health",
+            "",
+            _markdown_table(_entity_retrieval_health_rows(summary["retrieval_health"]), [
+                ("detail_coverage", "Detail Coverage"),
+                ("document_coverage", "Document Coverage"),
+                ("action_cue_coverage", "Action Cue Coverage"),
+                ("resolution_summary_coverage", "Resolution Coverage"),
+                ("multi_chunk_ratio", "Multi-Chunk Ratio"),
+                ("lagging_ratio", "Lagging Ratio"),
+                ("avg_lag_minutes", "Avg Lag Minutes"),
+                ("max_lag_minutes", "Max Lag Minutes"),
+            ]),
+            "",
+            "## Retrieval lag buckets",
+            "",
+            _markdown_table(_entity_lag_bucket_rows(summary["retrieval_health"]), [
+                ("bucket", "Bucket"),
+                ("tickets", "Tickets"),
+                ("ratio", "Coverage"),
+            ]),
+            "",
+            "## Retrieval metadata coverage",
+            "",
+            _markdown_table(_entity_metadata_coverage_rows(summary["retrieval_health"]), [
+                ("field", "Field"),
+                ("tickets", "Tickets"),
+                ("ratio", "Coverage"),
+            ]),
+            "",
             "## Open tickets",
             "",
             _markdown_table(summary["open_tickets"], [
@@ -932,6 +1014,35 @@ def generate_public_snapshot(db_path: Path) -> dict:
             "## Category breakdown",
             "",
             _markdown_table(summary["category_breakdown"], [("category", "Category"), ("ticket_count", "Ticket Count")]),
+            "",
+            "## Retrieval health",
+            "",
+            _markdown_table(_entity_retrieval_health_rows(summary["retrieval_health"]), [
+                ("detail_coverage", "Detail Coverage"),
+                ("document_coverage", "Document Coverage"),
+                ("action_cue_coverage", "Action Cue Coverage"),
+                ("resolution_summary_coverage", "Resolution Coverage"),
+                ("multi_chunk_ratio", "Multi-Chunk Ratio"),
+                ("lagging_ratio", "Lagging Ratio"),
+                ("avg_lag_minutes", "Avg Lag Minutes"),
+                ("max_lag_minutes", "Max Lag Minutes"),
+            ]),
+            "",
+            "## Retrieval lag buckets",
+            "",
+            _markdown_table(_entity_lag_bucket_rows(summary["retrieval_health"]), [
+                ("bucket", "Bucket"),
+                ("tickets", "Tickets"),
+                ("ratio", "Coverage"),
+            ]),
+            "",
+            "## Retrieval metadata coverage",
+            "",
+            _markdown_table(_entity_metadata_coverage_rows(summary["retrieval_health"]), [
+                ("field", "Field"),
+                ("tickets", "Tickets"),
+                ("ratio", "Coverage"),
+            ]),
             "",
             "## Open tickets",
             "",

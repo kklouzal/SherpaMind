@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from sherpamind.db import initialize_db, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
+from sherpamind.documents import materialize_ticket_documents
 from sherpamind.public_artifacts import _invalid_source_rows, _source_materialization_gap_rows, generate_public_snapshot
 
 
@@ -85,6 +86,7 @@ def seed_fixture(db: Path) -> None:
         ],
         synced_at="2026-03-19T01:00:00Z",
     )
+    materialize_ticket_documents(db)
 
 
 def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
@@ -153,8 +155,11 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Total account docs: `2`" in account_index.read_text()
     assert "Total technician docs: `2`" in technician_index.read_text()
     assert "Total ticket docs: `1`" in ticket_index.read_text()
-    assert "Status breakdown" in acme_doc.read_text()
+    assert "Retrieval health" in acme_doc.read_text()
+    assert "Retrieval lag buckets" in acme_doc.read_text()
+    assert "Retrieval metadata coverage" in acme_doc.read_text()
     assert "Category breakdown" in tech_one_doc.read_text()
+    assert "Retrieval health" in tech_one_doc.read_text()
     assert "Artifact stats" in ticket_101_doc.read_text()
     assert "Recent logs" in ticket_101_doc.read_text()
 

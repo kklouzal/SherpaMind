@@ -13,6 +13,154 @@ def _ratio(numerator: int, denominator: int) -> float:
     return round((numerator / denominator), 4) if denominator else 0.0
 
 
+_ENTITY_METADATA_FIELDS: list[tuple[str, str]] = [
+    ("cleaned_subject", "cleaned_subject"),
+    ("issue_summary", "issue_summary"),
+    ("cleaned_action_cue", "action_cue"),
+    ("resolution_summary", "resolution_summary"),
+    ("recent_log_types_csv", "recent_log_types"),
+    ("attachment_kinds_csv", "attachment_metadata"),
+    ("department_label", "department_label"),
+]
+
+
+def _entity_metadata_coverage(row: dict, total_tickets: int) -> dict[str, dict[str, float | int]]:
+    coverage: dict[str, dict[str, float | int]] = {}
+    for column_name, field_name in _ENTITY_METADATA_FIELDS:
+        count = int(row.get(f"{field_name}_tickets") or 0)
+        coverage[field_name] = {
+            "tickets": count,
+            "ratio": _ratio(count, total_tickets),
+        }
+    return coverage
+
+
+def _entity_retrieval_health(conn, where_clause: str, params: tuple[object, ...]) -> dict:
+    row = conn.execute(
+        f"""
+        WITH log_tickets AS (
+            SELECT DISTINCT ticket_id FROM ticket_logs
+        ),
+        attachment_tickets AS (
+            SELECT DISTINCT ticket_id FROM ticket_attachments
+        ),
+        chunk_counts AS (
+            SELECT ticket_id, COUNT(*) AS chunk_count
+            FROM ticket_document_chunks
+            GROUP BY ticket_id
+        ),
+        ticket_core AS (
+            SELECT t.id,
+                   COALESCE(t.updated_at, t.created_at) AS updated_at,
+                   doc.synced_at AS chunk_synced_at,
+                   doc.raw_json AS document_raw_json,
+                   CASE WHEN td.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS detail_available,
+                   CASE WHEN lt.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS log_available,
+                   CASE WHEN at.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS attachment_available,
+                   COALESCE(cc.chunk_count, 0) AS chunk_count
+            FROM tickets t
+            LEFT JOIN ticket_details td ON td.ticket_id = t.id
+            LEFT JOIN ticket_documents doc ON doc.ticket_id = t.id
+            LEFT JOIN log_tickets lt ON lt.ticket_id = t.id
+            LEFT JOIN attachment_tickets at ON at.ticket_id = t.id
+            LEFT JOIN chunk_counts cc ON cc.ticket_id = t.id
+            WHERE {where_clause}
+        )
+        SELECT COUNT(*) AS total_tickets,
+               SUM(detail_available) AS detail_tickets,
+               SUM(log_available) AS log_tickets,
+               SUM(attachment_available) AS attachment_tickets,
+               SUM(CASE WHEN document_raw_json IS NOT NULL THEN 1 ELSE 0 END) AS document_tickets,
+               SUM(CASE WHEN document_raw_json IS NULL THEN 1 ELSE 0 END) AS missing_document_tickets,
+               SUM(CASE WHEN chunk_count > 1 THEN 1 ELSE 0 END) AS multi_chunk_tickets,
+               SUM(CASE WHEN document_raw_json IS NOT NULL AND chunk_count = 0 THEN 1 ELSE 0 END) AS chunkless_document_tickets,
+               SUM(CASE WHEN updated_at IS NULL THEN 1 ELSE 0 END) AS missing_updated_at_tickets,
+               SUM(CASE WHEN chunk_synced_at IS NULL THEN 1 ELSE 0 END) AS missing_chunk_synced_at_tickets,
+               SUM(CASE WHEN updated_at IS NOT NULL AND chunk_synced_at IS NOT NULL AND chunk_synced_at < updated_at THEN 1 ELSE 0 END) AS lagging_tickets,
+               ROUND(AVG(CASE WHEN updated_at IS NOT NULL AND chunk_synced_at IS NOT NULL AND chunk_synced_at < updated_at
+                              THEN (julianday(updated_at) - julianday(chunk_synced_at)) * 1440.0 END), 2) AS avg_lag_minutes,
+               ROUND(MAX(CASE WHEN updated_at IS NOT NULL AND chunk_synced_at IS NOT NULL AND chunk_synced_at < updated_at
+                              THEN (julianday(updated_at) - julianday(chunk_synced_at)) * 1440.0 END), 2) AS max_lag_minutes,
+               MAX(chunk_synced_at) AS latest_chunk_synced_at,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.cleaned_subject') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.cleaned_subject') != '' THEN 1 ELSE 0 END) AS cleaned_subject_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.issue_summary') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.issue_summary') != '' THEN 1 ELSE 0 END) AS issue_summary_tickets,
+               SUM(CASE WHEN COALESCE(json_extract(document_raw_json, '$.metadata.cleaned_action_cue'), json_extract(document_raw_json, '$.metadata.cleaned_followup_note')) IS NOT NULL
+                         AND COALESCE(json_extract(document_raw_json, '$.metadata.cleaned_action_cue'), json_extract(document_raw_json, '$.metadata.cleaned_followup_note')) != '' THEN 1 ELSE 0 END) AS action_cue_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.resolution_summary') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.resolution_summary') != '' THEN 1 ELSE 0 END) AS resolution_summary_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.recent_log_types_csv') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.recent_log_types_csv') != '' THEN 1 ELSE 0 END) AS recent_log_types_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.attachment_kinds_csv') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.attachment_kinds_csv') != '' THEN 1 ELSE 0 END) AS attachment_metadata_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.department_label') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.department_label') != '' THEN 1 ELSE 0 END) AS department_label_tickets
+        FROM ticket_core
+        """,
+        params,
+    ).fetchone()
+    stats = dict(row)
+    total_tickets = int(stats.get("total_tickets") or 0)
+    lagging_tickets = int(stats.get("lagging_tickets") or 0)
+    lag_bucket_row = conn.execute(
+        f"""
+        WITH ticket_core AS (
+            SELECT COALESCE(t.updated_at, t.created_at) AS updated_at,
+                   doc.synced_at AS chunk_synced_at
+            FROM tickets t
+            LEFT JOIN ticket_documents doc ON doc.ticket_id = t.id
+            WHERE {where_clause}
+        )
+        SELECT SUM(CASE WHEN updated_at IS NULL THEN 1 ELSE 0 END) AS missing_updated_at,
+               SUM(CASE WHEN updated_at IS NOT NULL AND chunk_synced_at IS NULL THEN 1 ELSE 0 END) AS missing_chunk_synced_at,
+               SUM(CASE WHEN updated_at IS NOT NULL AND chunk_synced_at IS NOT NULL AND chunk_synced_at >= updated_at THEN 1 ELSE 0 END) AS current_or_ahead,
+               SUM(CASE WHEN updated_at IS NOT NULL AND chunk_synced_at IS NOT NULL AND chunk_synced_at < updated_at
+                         AND (julianday(updated_at) - julianday(chunk_synced_at)) * 1440.0 <= 15 THEN 1 ELSE 0 END) AS lag_le_15m,
+               SUM(CASE WHEN updated_at IS NOT NULL AND chunk_synced_at IS NOT NULL AND chunk_synced_at < updated_at
+                         AND (julianday(updated_at) - julianday(chunk_synced_at)) * 1440.0 > 15
+                         AND (julianday(updated_at) - julianday(chunk_synced_at)) * 1440.0 <= 60 THEN 1 ELSE 0 END) AS lag_le_1h,
+               SUM(CASE WHEN updated_at IS NOT NULL AND chunk_synced_at IS NOT NULL AND chunk_synced_at < updated_at
+                         AND (julianday(updated_at) - julianday(chunk_synced_at)) * 1440.0 > 60
+                         AND (julianday(updated_at) - julianday(chunk_synced_at)) * 1440.0 <= 360 THEN 1 ELSE 0 END) AS lag_le_6h,
+               SUM(CASE WHEN updated_at IS NOT NULL AND chunk_synced_at IS NOT NULL AND chunk_synced_at < updated_at
+                         AND (julianday(updated_at) - julianday(chunk_synced_at)) * 1440.0 > 360
+                         AND (julianday(updated_at) - julianday(chunk_synced_at)) * 1440.0 <= 1440 THEN 1 ELSE 0 END) AS lag_le_24h,
+               SUM(CASE WHEN updated_at IS NOT NULL AND chunk_synced_at IS NOT NULL AND chunk_synced_at < updated_at
+                         AND (julianday(updated_at) - julianday(chunk_synced_at)) * 1440.0 > 1440 THEN 1 ELSE 0 END) AS lag_gt_24h
+        FROM ticket_core
+        """,
+        params,
+    ).fetchone()
+    lag_buckets = {key: int((lag_bucket_row[key] or 0)) for key in lag_bucket_row.keys()}
+    metadata_coverage = _entity_metadata_coverage(stats, total_tickets)
+    return {
+        "detail_tickets": int(stats.get("detail_tickets") or 0),
+        "detail_coverage_ratio": _ratio(int(stats.get("detail_tickets") or 0), total_tickets),
+        "log_tickets": int(stats.get("log_tickets") or 0),
+        "log_coverage_ratio": _ratio(int(stats.get("log_tickets") or 0), total_tickets),
+        "attachment_tickets": int(stats.get("attachment_tickets") or 0),
+        "attachment_coverage_ratio": _ratio(int(stats.get("attachment_tickets") or 0), total_tickets),
+        "document_tickets": int(stats.get("document_tickets") or 0),
+        "document_coverage_ratio": _ratio(int(stats.get("document_tickets") or 0), total_tickets),
+        "missing_document_tickets": int(stats.get("missing_document_tickets") or 0),
+        "missing_document_ratio": _ratio(int(stats.get("missing_document_tickets") or 0), total_tickets),
+        "multi_chunk_tickets": int(stats.get("multi_chunk_tickets") or 0),
+        "multi_chunk_ratio": _ratio(int(stats.get("multi_chunk_tickets") or 0), total_tickets),
+        "chunkless_document_tickets": int(stats.get("chunkless_document_tickets") or 0),
+        "chunkless_document_ratio": _ratio(int(stats.get("chunkless_document_tickets") or 0), total_tickets),
+        "action_cue_tickets": int(stats.get("action_cue_tickets") or 0),
+        "action_cue_ratio": _ratio(int(stats.get("action_cue_tickets") or 0), total_tickets),
+        "resolution_summary_tickets": int(stats.get("resolution_summary_tickets") or 0),
+        "resolution_summary_ratio": _ratio(int(stats.get("resolution_summary_tickets") or 0), total_tickets),
+        "attachment_metadata_tickets": int(stats.get("attachment_metadata_tickets") or 0),
+        "attachment_metadata_ratio": _ratio(int(stats.get("attachment_metadata_tickets") or 0), total_tickets),
+        "lagging_tickets": lagging_tickets,
+        "lagging_ratio": _ratio(lagging_tickets, total_tickets),
+        "avg_lag_minutes": float(stats.get("avg_lag_minutes") or 0.0),
+        "max_lag_minutes": float(stats.get("max_lag_minutes") or 0.0),
+        "latest_chunk_synced_at": stats.get("latest_chunk_synced_at"),
+        "missing_updated_at_tickets": int(stats.get("missing_updated_at_tickets") or 0),
+        "missing_chunk_synced_at_tickets": int(stats.get("missing_chunk_synced_at_tickets") or 0),
+        "lag_buckets": lag_buckets,
+        "metadata_coverage": metadata_coverage,
+    }
+
+
 def list_account_artifact_summaries(db_path: Path) -> list[dict]:
     with connect(db_path) as conn:
         rows = conn.execute(
@@ -555,10 +703,13 @@ def get_account_summary(db_path: Path, account_query: str, limit_open: int = 10,
         "attachment_coverage_ratio": _ratio(attachment_tickets, total_tickets),
         "document_coverage_ratio": _ratio(document_tickets, total_tickets),
     })
+    with connect(db_path) as conn:
+        retrieval_health = _entity_retrieval_health(conn, "t.account_id = ?", (account["id"],))
     return {
         "status": "ok",
         "account": {"id": account["id"], "name": account["name"]},
         "stats": stats_dict,
+        "retrieval_health": retrieval_health,
         "open_tickets": [dict(row) for row in open_tickets],
         "recent_tickets": [dict(row) for row in recent_tickets],
         "recent_log_types": [dict(row) for row in recent_log_types],
@@ -701,10 +852,13 @@ def get_technician_summary(db_path: Path, technician_query: str, limit_open: int
         "attachment_coverage_ratio": _ratio(attachment_tickets, total_tickets),
         "document_coverage_ratio": _ratio(document_tickets, total_tickets),
     })
+    with connect(db_path) as conn:
+        retrieval_health = _entity_retrieval_health(conn, "t.assigned_technician_id = ?", (technician["id"],))
     return {
         "status": "ok",
         "technician": {"id": technician["id"], "display_name": technician["display_name"], "email": technician["email"]},
         "stats": stats_dict,
+        "retrieval_health": retrieval_health,
         "open_tickets": [dict(row) for row in open_tickets],
         "recent_tickets": [dict(row) for row in recent_tickets],
         "recent_log_types": [dict(row) for row in recent_log_types],
