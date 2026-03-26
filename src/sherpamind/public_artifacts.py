@@ -100,10 +100,25 @@ def _source_materialization_gap_rows(coverage: dict[str, dict[str, Any]]) -> lis
             "status": status,
             "source_documents": stats.get("source_documents", 0),
             "materialized_documents": stats.get("materialized_documents", 0),
-            "promotion_gap": stats.get("promotion_gap", 0),
-            "materialized_ratio": _format_ratio(stats.get("materialized_ratio")),
+            "promotion_gap": stats.get("promotion_gap_documents", 0),
+            "materialized_ratio": _format_ratio(stats.get("materialized_document_ratio")),
         })
     rows.sort(key=lambda row: (-int(row["promotion_gap"] or 0), row["field"]))
+    return rows
+
+
+def _invalid_source_rows(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in summary.get("fields_with_invalid_source") or []:
+        rows.append({
+            "field": item.get("field", "unknown"),
+            "raw_ticket_rows": item.get("raw_ticket_rows", 0),
+            "raw_detail_rows": item.get("raw_detail_rows", 0),
+            "invalid_ticket_rows": item.get("invalid_ticket_rows", 0),
+            "invalid_detail_rows": item.get("invalid_detail_rows", 0),
+            "source_documents": item.get("source_documents", 0),
+        })
+    rows.sort(key=lambda row: (-(int(row["invalid_ticket_rows"] or 0) + int(row["invalid_detail_rows"] or 0)), row["field"]))
     return rows
 
 
@@ -633,6 +648,20 @@ def generate_public_snapshot(db_path: Path) -> dict:
                 ("materialized_documents", "Materialized Docs"),
                 ("promotion_gap", "Gap"),
                 ("materialized_ratio", "Materialized Ratio"),
+            ],
+        ),
+        "",
+        "## Source-backed metadata invalid-source hygiene",
+        "",
+        _markdown_table(
+            _invalid_source_rows(retrieval_readiness.get("source_backed_metadata", {})),
+            [
+                ("field", "Field"),
+                ("raw_ticket_rows", "Raw Ticket Rows"),
+                ("raw_detail_rows", "Raw Detail Rows"),
+                ("invalid_ticket_rows", "Invalid Ticket Rows"),
+                ("invalid_detail_rows", "Invalid Detail Rows"),
+                ("source_documents", "Source Docs"),
             ],
         ),
         "",

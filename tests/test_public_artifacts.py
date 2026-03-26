@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from sherpamind.db import initialize_db, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
-from sherpamind.public_artifacts import generate_public_snapshot
+from sherpamind.public_artifacts import _invalid_source_rows, _source_materialization_gap_rows, generate_public_snapshot
 
 
 def seed_fixture(db: Path) -> None:
@@ -147,6 +147,7 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Follow-up cue source coverage" in retrieval_text
     assert "Action cue source coverage" in retrieval_text
     assert "Source-backed metadata promotion gaps" in retrieval_text
+    assert "Source-backed metadata invalid-source hygiene" in retrieval_text
     assert "Entity label quality" in retrieval_text
 
     assert "Total account docs: `2`" in account_index.read_text()
@@ -165,6 +166,97 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert len(result["generated_files"]) >= 10
     for generated in result["generated_files"]:
         assert Path(generated).exists()
+
+
+def test_source_materialization_gap_rows_use_document_gap_fields() -> None:
+    rows = _source_materialization_gap_rows(
+        {
+            "support_group_name": {
+                "status": "partial_materialization",
+                "source_documents": 8,
+                "materialized_documents": 5,
+                "promotion_gap_documents": 3,
+                "materialized_document_ratio": 0.625,
+            },
+            "default_contract_name": {
+                "status": "missing_materialization",
+                "source_documents": 4,
+                "materialized_documents": 0,
+                "promotion_gap_documents": 4,
+                "materialized_document_ratio": 0.0,
+            },
+            "ticket_number": {
+                "status": "materialized",
+                "source_documents": 10,
+                "materialized_documents": 10,
+                "promotion_gap_documents": 0,
+                "materialized_document_ratio": 1.0,
+            },
+        }
+    )
+
+    assert rows == [
+        {
+            "field": "default_contract_name",
+            "status": "missing_materialization",
+            "source_documents": 4,
+            "materialized_documents": 0,
+            "promotion_gap": 4,
+            "materialized_ratio": "0.0%",
+        },
+        {
+            "field": "support_group_name",
+            "status": "partial_materialization",
+            "source_documents": 8,
+            "materialized_documents": 5,
+            "promotion_gap": 3,
+            "materialized_ratio": "62.5%",
+        },
+    ]
+
+
+def test_invalid_source_rows_surface_source_hygiene_summary() -> None:
+    rows = _invalid_source_rows(
+        {
+            "fields_with_invalid_source": [
+                {
+                    "field": "user_email_domain",
+                    "raw_ticket_rows": 5,
+                    "raw_detail_rows": 2,
+                    "invalid_ticket_rows": 3,
+                    "invalid_detail_rows": 1,
+                    "source_documents": 4,
+                },
+                {
+                    "field": "technician_email_domain",
+                    "raw_ticket_rows": 2,
+                    "raw_detail_rows": 0,
+                    "invalid_ticket_rows": 1,
+                    "invalid_detail_rows": 0,
+                    "source_documents": 1,
+                },
+            ]
+        }
+    )
+
+    assert rows == [
+        {
+            "field": "user_email_domain",
+            "raw_ticket_rows": 5,
+            "raw_detail_rows": 2,
+            "invalid_ticket_rows": 3,
+            "invalid_detail_rows": 1,
+            "source_documents": 4,
+        },
+        {
+            "field": "technician_email_domain",
+            "raw_ticket_rows": 2,
+            "raw_detail_rows": 0,
+            "invalid_ticket_rows": 1,
+            "invalid_detail_rows": 0,
+            "source_documents": 1,
+        },
+    ]
 
 
 def test_generate_public_snapshot_removes_stale_entity_docs(monkeypatch, tmp_path: Path) -> None:
