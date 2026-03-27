@@ -1128,6 +1128,145 @@ def _build_materialization_freshness_lag_summary(freshness_summary: dict[str, An
     }
 
 
+def _build_retrieval_signal_pressure(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    document_rows: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        document_rows.setdefault(str(row.get("doc_id")), row)
+
+    documents = list(document_rows.values())
+    group_specs = {
+        "accounts": {"field": "account", "fallback_prefix": "Account", "min_documents": 10},
+        "categories": {"field": "category", "fallback_prefix": "Category", "min_documents": 10},
+        "technicians": {"field": "technician", "fallback_prefix": "Technician", "min_documents": 3},
+    }
+
+    def _has_issue_context(doc: dict[str, Any]) -> bool:
+        return any(_present(doc.get(field)) for field in ("cleaned_initial_post", "cleaned_detail_note", "cleaned_workpad"))
+
+    def _has_action_context(doc: dict[str, Any]) -> bool:
+        return any(_present(doc.get(field)) for field in ("cleaned_next_step", "cleaned_action_cue", "cleaned_followup_note", "cleaned_request_completion_note"))
+
+    def _has_positive_number(value: Any) -> bool:
+        try:
+            return float(value) > 0
+        except (TypeError, ValueError):
+            return False
+
+    def _has_activity_context(doc: dict[str, Any]) -> bool:
+        return any(
+            (
+                _has_positive_number(doc.get("ticketlogs_count"))
+                if field == "ticketlogs_count"
+                else _present(doc.get(field))
+            )
+            for field in (
+                "ticketlogs_count",
+                "recent_log_types",
+                "latest_response_date",
+                "latest_public_log_date",
+                "latest_internal_log_date",
+                "participant_email_domains_csv",
+                "recent_public_actor_labels_csv",
+                "recent_internal_actor_labels_csv",
+            )
+        )
+
+    def _has_resolution_context(doc: dict[str, Any]) -> bool:
+        return any(_present(doc.get(field)) for field in ("resolution_summary", "cleaned_resolution_log_note", "resolution_category"))
+
+    def _has_attachment_context(doc: dict[str, Any]) -> bool:
+        return any(
+            (
+                _has_positive_number(doc.get(field))
+                if field in {"attachments_count", "attachment_total_size_bytes"}
+                else _present(doc.get(field))
+            )
+            for field in ("attachments_count", "attachment_extensions_csv", "attachment_kinds_csv", "attachment_total_size_bytes")
+        )
+
+    signal_checks = {
+        "detail_documents": lambda doc: bool(doc.get("detail_available")),
+        "issue_documents": _has_issue_context,
+        "action_documents": _has_action_context,
+        "activity_documents": _has_activity_context,
+        "resolution_documents": _has_resolution_context,
+        "attachment_documents": _has_attachment_context,
+        "lagging_documents": lambda doc: bool(parse_sherpadesk_timestamp(doc.get("updated_at")) and parse_sherpadesk_timestamp(doc.get("chunk_synced_at")) and parse_sherpadesk_timestamp(doc.get("updated_at")) > parse_sherpadesk_timestamp(doc.get("chunk_synced_at"))),
+    }
+
+    grouped_summary: dict[str, Any] = {}
+    for group_name, spec in group_specs.items():
+        field = str(spec["field"])
+        min_documents = int(spec["min_documents"])
+        fallback_prefix = str(spec["fallback_prefix"])
+        grouped_docs: dict[str, list[dict[str, Any]]] = {}
+        for doc in documents:
+            raw_label = doc.get(field)
+            label = str(raw_label).strip() if _present(raw_label) else f"Unknown {fallback_prefix}"
+            grouped_docs.setdefault(label, []).append(doc)
+
+        rows_out: list[dict[str, Any]] = []
+        zero_richness_groups = 0
+        low_richness_groups = 0
+        backlog_documents = 0
+        for label, group_docs in grouped_docs.items():
+            total_documents = len(group_docs)
+            if total_documents < min_documents:
+                continue
+            counts = {name: sum(1 for doc in group_docs if check(doc)) for name, check in signal_checks.items()}
+            signal_fields = [
+                "detail_documents",
+                "issue_documents",
+                "action_documents",
+                "activity_documents",
+                "resolution_documents",
+                "attachment_documents",
+            ]
+            signal_hits = sum(counts[name] for name in signal_fields)
+            signal_opportunities = total_documents * len(signal_fields)
+            richness_ratio = round((signal_hits / signal_opportunities), 4) if signal_opportunities else 0.0
+            low_richness_backlog = total_documents - counts["detail_documents"]
+            backlog_documents += low_richness_backlog
+            if richness_ratio == 0.0:
+                zero_richness_groups += 1
+            if richness_ratio < 0.35:
+                low_richness_groups += 1
+            latest_activity_at = max((doc.get("updated_at") for doc in group_docs if _present(doc.get("updated_at"))), default=None)
+            rows_out.append({
+                "label": label,
+                "total_documents": total_documents,
+                "detail_documents": counts["detail_documents"],
+                "issue_documents": counts["issue_documents"],
+                "action_documents": counts["action_documents"],
+                "activity_documents": counts["activity_documents"],
+                "resolution_documents": counts["resolution_documents"],
+                "attachment_documents": counts["attachment_documents"],
+                "lagging_documents": counts["lagging_documents"],
+                "detail_ratio": round((counts["detail_documents"] / total_documents), 4) if total_documents else 0.0,
+                "action_ratio": round((counts["action_documents"] / total_documents), 4) if total_documents else 0.0,
+                "activity_ratio": round((counts["activity_documents"] / total_documents), 4) if total_documents else 0.0,
+                "resolution_ratio": round((counts["resolution_documents"] / total_documents), 4) if total_documents else 0.0,
+                "attachment_ratio": round((counts["attachment_documents"] / total_documents), 4) if total_documents else 0.0,
+                "lagging_ratio": round((counts["lagging_documents"] / total_documents), 4) if total_documents else 0.0,
+                "richness_ratio": richness_ratio,
+                "low_richness_backlog": low_richness_backlog,
+                "latest_activity_at": latest_activity_at,
+            })
+        rows_out.sort(key=lambda item: (item["richness_ratio"], -item["low_richness_backlog"], -item["total_documents"], item["label"]))
+        grouped_summary[group_name] = {
+            "summary": {
+                "min_documents": min_documents,
+                "group_count": len(rows_out),
+                "zero_richness_groups": zero_richness_groups,
+                "low_richness_groups": low_richness_groups,
+                "backlog_documents": backlog_documents,
+            },
+            "rows": rows_out[:10],
+        }
+
+    return grouped_summary
+
+
 def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> dict[str, Any]:
     initialize_db(db_path)
     rows = _load_rows(db_path, limit=limit)
@@ -1328,6 +1467,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
     source_backed_metadata = _build_source_backed_metadata_summary(source_metadata_coverage)
     freshness_summary = _build_freshness_summary(rows)
     materialization_freshness_lag = _build_materialization_freshness_lag_summary(freshness_summary)
+    retrieval_signal_pressure = _build_retrieval_signal_pressure(rows)
 
     entity_label_quality = {
         "account": _entity_label_quality_summary(
@@ -1431,6 +1571,7 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "label_source_summary": label_source_summary,
         "entity_label_quality": entity_label_quality,
         "materialization_freshness_lag": materialization_freshness_lag,
+        "retrieval_signal_pressure": retrieval_signal_pressure,
         "vector_index": vector,
         "materialization": {
             **materialization,

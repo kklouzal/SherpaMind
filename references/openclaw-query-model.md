@@ -158,6 +158,7 @@ SherpaMind should also expose enough observability that OpenClaw can trust the r
 - whether account/user/technician labels are arriving as human-readable names versus raw-ID fallbacks so metadata filters stay clean
 - explicit entity-label quality summaries showing readable-vs-identifier-like label ratios and fallback-source pressure for account/user/technician/department facets
 - whether participant metadata is materially populated enough to reason later about who is speaking publicly vs internally on a ticket without the backend inventing narrative
+- which accounts/categories/technicians are still metadata-poor across key retrieval signals (detail, issue/action/activity/resolution/attachment context) so enrichment work can target the thinnest high-value slices first
 - whether chunk sizes and chunk fanout per document look sane for vector/semantic use
 - whether embedding-ready exports preserve chunk order/position metadata cleanly enough for vector-sidecar consumers to reconstruct nearby context without guessing, while also surfacing chunk-semantic section cues so downstream retrieval can tell identity/setup chunks from issue/action/resolution/attachment evidence
 - whether materialized chunks are actually keeping up with ticket-update freshness at the per-document level, including lagging-document counts, open-vs-closed splits, lag buckets, and top stale samples

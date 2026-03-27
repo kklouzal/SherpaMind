@@ -151,6 +151,25 @@ def _entity_label_quality_rows(entity_quality: dict[str, dict[str, Any]]) -> lis
     return rows
 
 
+def _retrieval_signal_pressure_rows(summary: dict[str, Any], dimension: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for row in ((summary.get("retrieval_signal_pressure") or {}).get(dimension) or {}).get("rows", []):
+        rows.append({
+            "label": row.get("label", "unknown"),
+            "documents": row.get("total_documents", 0),
+            "richness_ratio": _format_ratio(row.get("richness_ratio")),
+            "detail_ratio": _format_ratio(row.get("detail_ratio")),
+            "action_ratio": _format_ratio(row.get("action_ratio")),
+            "activity_ratio": _format_ratio(row.get("activity_ratio")),
+            "resolution_ratio": _format_ratio(row.get("resolution_ratio")),
+            "attachment_ratio": _format_ratio(row.get("attachment_ratio")),
+            "lagging_ratio": _format_ratio(row.get("lagging_ratio")),
+            "low_richness_backlog": row.get("low_richness_backlog", 0),
+            "latest_activity_at": row.get("latest_activity_at", ""),
+        })
+    return rows
+
+
 def _detail_gap_rows(coverage: dict[str, Any], dimension: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for row in ((coverage.get("detail_gap_pressure") or {}).get(dimension) or {}).get("rows", []):
@@ -739,6 +758,63 @@ def generate_public_snapshot(db_path: Path) -> dict:
                 ("identifier_like_ratio", "Identifier-Like"),
                 ("fallback_source_ratio", "Fallback Source"),
                 ("sample_identifier_values", "Identifier Samples"),
+            ],
+        ),
+        "",
+        "## Retrieval signal pressure — under-covered accounts",
+        "",
+        _markdown_table(
+            _retrieval_signal_pressure_rows(retrieval_readiness, "accounts"),
+            [
+                ("label", "Account"),
+                ("documents", "Docs"),
+                ("richness_ratio", "Richness"),
+                ("detail_ratio", "Detail"),
+                ("action_ratio", "Action"),
+                ("activity_ratio", "Activity"),
+                ("resolution_ratio", "Resolution"),
+                ("attachment_ratio", "Attachment"),
+                ("lagging_ratio", "Lagging"),
+                ("low_richness_backlog", "Backlog"),
+                ("latest_activity_at", "Latest Activity"),
+            ],
+        ),
+        "",
+        "## Retrieval signal pressure — under-covered categories",
+        "",
+        _markdown_table(
+            _retrieval_signal_pressure_rows(retrieval_readiness, "categories"),
+            [
+                ("label", "Category"),
+                ("documents", "Docs"),
+                ("richness_ratio", "Richness"),
+                ("detail_ratio", "Detail"),
+                ("action_ratio", "Action"),
+                ("activity_ratio", "Activity"),
+                ("resolution_ratio", "Resolution"),
+                ("attachment_ratio", "Attachment"),
+                ("lagging_ratio", "Lagging"),
+                ("low_richness_backlog", "Backlog"),
+                ("latest_activity_at", "Latest Activity"),
+            ],
+        ),
+        "",
+        "## Retrieval signal pressure — under-covered technicians",
+        "",
+        _markdown_table(
+            _retrieval_signal_pressure_rows(retrieval_readiness, "technicians"),
+            [
+                ("label", "Technician"),
+                ("documents", "Docs"),
+                ("richness_ratio", "Richness"),
+                ("detail_ratio", "Detail"),
+                ("action_ratio", "Action"),
+                ("activity_ratio", "Activity"),
+                ("resolution_ratio", "Resolution"),
+                ("attachment_ratio", "Attachment"),
+                ("lagging_ratio", "Lagging"),
+                ("low_richness_backlog", "Backlog"),
+                ("latest_activity_at", "Latest Activity"),
             ],
         ),
         "",

@@ -704,6 +704,9 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["entity_label_quality"]["user"]["fallback_source_chunks"] == 1
     assert summary["entity_label_quality"]["technician"]["identifier_like_chunks"] == 1
     assert summary["entity_label_quality"]["department"]["readable_chunks"] == 2
+    assert summary["retrieval_signal_pressure"]["accounts"]["summary"]["group_count"] == 0
+    assert summary["retrieval_signal_pressure"]["categories"]["summary"]["group_count"] == 0
+    assert summary["retrieval_signal_pressure"]["technicians"]["summary"]["group_count"] == 0
     assert summary["metadata_coverage"]["has_attachments"]["ratio"] == 0.5
     assert summary["materialization"]["current_version"] >= 1
     assert summary["materialization"]["current_version_docs"] == 2
@@ -792,6 +795,67 @@ def test_source_metadata_coverage_treats_invalid_email_domains_as_upstream_quali
             "source_documents": 0,
         }
     ]
+
+
+def test_retrieval_signal_pressure_surfaces_low_coverage_groups(tmp_path: Path) -> None:
+    db = tmp_path / "pressure.sqlite3"
+    initialize_db(db)
+    documents = []
+    chunks = []
+    for idx in range(10):
+        ticket_id = 300 + idx
+        documents.append({
+            "doc_id": f"ticket:{ticket_id}",
+            "ticket_id": ticket_id,
+            "status": "Open" if idx < 7 else "Closed",
+            "account": "Acme",
+            "user_name": f"User {idx}",
+            "technician": "Tech One" if idx < 3 else "Tech Two",
+            "updated_at": f"2026-03-{10 + idx:02d}T03:00:00Z",
+            "text": f"ticket {ticket_id}",
+            "metadata": {
+                "priority": "Normal",
+                "category": "Hardware",
+                "detail_available": idx < 2,
+                "cleaned_initial_post": f"issue {ticket_id}" if idx == 0 else None,
+                "cleaned_action_cue": f"action {ticket_id}" if idx == 0 else None,
+                "recent_log_types_csv": "Response" if idx == 0 else None,
+                "resolution_summary": "resolved" if idx == 9 else None,
+                "attachments_count": 1 if idx == 0 else 0,
+                "materialization_version": DOCUMENT_MATERIALIZATION_VERSION,
+            },
+            "content_hash": f"doc-{ticket_id}",
+        })
+        chunks.append({
+            "chunk_id": f"ticket:{ticket_id}:chunk:0",
+            "doc_id": f"ticket:{ticket_id}",
+            "ticket_id": ticket_id,
+            "chunk_index": 0,
+            "text": f"ticket {ticket_id}",
+            "content_hash": f"chunk-{ticket_id}",
+            "synced_at": "2026-03-09T01:00:00Z" if idx == 0 else "2026-03-20T01:00:00Z",
+        })
+    replace_ticket_documents(db, documents, synced_at="2026-03-20T01:00:00Z")
+    replace_ticket_document_chunks(db, chunks, synced_at="2026-03-20T01:00:00Z")
+
+    summary = get_retrieval_readiness_summary(db)
+    account_row = summary["retrieval_signal_pressure"]["accounts"]["rows"][0]
+    category_row = summary["retrieval_signal_pressure"]["categories"]["rows"][0]
+    technician_row = summary["retrieval_signal_pressure"]["technicians"]["rows"][0]
+
+    assert summary["retrieval_signal_pressure"]["accounts"]["summary"]["group_count"] == 1
+    assert summary["retrieval_signal_pressure"]["categories"]["summary"]["group_count"] == 1
+    assert summary["retrieval_signal_pressure"]["technicians"]["summary"]["group_count"] == 2
+    assert summary["retrieval_signal_pressure"]["accounts"]["summary"]["low_richness_groups"] == 1
+    assert account_row["label"] == "Acme"
+    assert account_row["total_documents"] == 10
+    assert account_row["detail_documents"] == 2
+    assert account_row["low_richness_backlog"] == 8
+    assert account_row["lagging_documents"] == 0
+    assert account_row["richness_ratio"] == 0.1167
+    assert category_row["label"] == "Hardware"
+    assert technician_row["label"] == "Tech Two"
+    assert technician_row["low_richness_backlog"] == 8 - 1
 
 
 def test_export_embedding_manifest(tmp_path: Path) -> None:

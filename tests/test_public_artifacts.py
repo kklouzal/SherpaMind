@@ -151,6 +151,9 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Source-backed metadata promotion gaps" in retrieval_text
     assert "Source-backed metadata invalid-source hygiene" in retrieval_text
     assert "Entity label quality" in retrieval_text
+    assert "Retrieval signal pressure — under-covered accounts" in retrieval_text
+    assert "Retrieval signal pressure — under-covered categories" in retrieval_text
+    assert "Retrieval signal pressure — under-covered technicians" in retrieval_text
 
     assert "Total account docs: `2`" in account_index.read_text()
     assert "Total technician docs: `2`" in technician_index.read_text()
