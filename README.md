@@ -267,7 +267,7 @@ Current public artifact surface includes:
 - `runtime/status.md`
 - per-account docs under `accounts/`
 - per-technician docs under `technicians/`
-- per-ticket docs under `tickets/` for open and artifact-bearing/enriched tickets
+- per-ticket docs under `tickets/` for open and artifact-bearing/enriched tickets, including ticket-level retrieval health, chunk inventory, and vector-readiness cues
 
 Snapshot generation also prunes stale per-account/per-technician/per-ticket Markdown files that no longer match the current dataset-derived entity set, so old fallback-label artifacts do not linger beside newer readable-name docs.
 

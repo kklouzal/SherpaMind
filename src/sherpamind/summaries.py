@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 
 from .db import connect
+from .documents import DOCUMENT_MATERIALIZATION_VERSION
+from .vector_exports import _infer_chunk_sections
 
 # Summary helpers in this module are intentionally factual/structural.
 # They should organize and expose data for OpenClaw, not pre-interpret it too aggressively.
@@ -324,8 +326,22 @@ def list_ticket_artifact_summaries(db_path: Path) -> list[dict]:
         rows = conn.execute(
             """
             WITH chunk_counts AS (
-                SELECT ticket_id, COUNT(*) AS chunk_count
+                SELECT ticket_id,
+                       COUNT(*) AS chunk_count,
+                       MIN(synced_at) AS earliest_chunk_synced_at,
+                       MAX(synced_at) AS latest_chunk_synced_at,
+                       SUM(CASE WHEN content_hash IS NOT NULL AND content_hash != '' THEN 1 ELSE 0 END) AS chunk_content_hash_count
                 FROM ticket_document_chunks
+                GROUP BY ticket_id
+            ),
+            vector_counts AS (
+                SELECT ticket_id,
+                       COUNT(*) AS indexed_chunk_count,
+                       MIN(dims) AS min_dims,
+                       MAX(dims) AS max_dims,
+                       MIN(synced_at) AS earliest_vector_synced_at,
+                       MAX(synced_at) AS latest_vector_synced_at
+                FROM vector_chunk_index
                 GROUP BY ticket_id
             )
             SELECT t.id,
@@ -340,13 +356,27 @@ def list_ticket_artifact_summaries(db_path: Path) -> list[dict]:
                    COALESCE(t.updated_at, t.created_at) AS updated_at,
                    CASE WHEN td.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS detail_available,
                    CASE WHEN doc.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS document_available,
+                   doc.synced_at AS document_synced_at,
+                   doc.content_hash AS document_content_hash,
+                   COALESCE(json_extract(doc.raw_json, '$.metadata.materialization_version'), 0) AS materialization_version,
                    COALESCE(json_extract(doc.raw_json, '$.metadata.has_next_step'), 0) AS has_next_step,
                    COALESCE(json_extract(doc.raw_json, '$.metadata.has_attachments'), 0) AS has_attachments,
                    COALESCE(json_extract(doc.raw_json, '$.metadata.has_resolution_summary'), 0) AS has_resolution_summary,
                    COALESCE(json_extract(doc.raw_json, '$.metadata.cleaned_action_cue'), json_extract(doc.raw_json, '$.metadata.cleaned_followup_note')) AS action_cue,
                    COALESCE(log_counts.log_count, 0) AS log_count,
                    COALESCE(attachment_counts.attachment_count, 0) AS attachment_count,
-                   COALESCE(chunk_counts.chunk_count, 0) AS chunk_count
+                   COALESCE(chunk_counts.chunk_count, 0) AS chunk_count,
+                   chunk_counts.earliest_chunk_synced_at,
+                   chunk_counts.latest_chunk_synced_at,
+                   COALESCE(chunk_counts.chunk_content_hash_count, 0) AS chunk_content_hash_count,
+                   COALESCE(vector_counts.indexed_chunk_count, 0) AS indexed_chunk_count,
+                   vector_counts.min_dims,
+                   vector_counts.max_dims,
+                   vector_counts.earliest_vector_synced_at,
+                   vector_counts.latest_vector_synced_at,
+                   CASE WHEN doc.synced_at IS NOT NULL AND COALESCE(t.updated_at, t.created_at) IS NOT NULL AND doc.synced_at < COALESCE(t.updated_at, t.created_at)
+                        THEN ROUND((julianday(COALESCE(t.updated_at, t.created_at)) - julianday(doc.synced_at)) * 1440.0, 2)
+                        ELSE 0 END AS lag_minutes
             FROM tickets t
             LEFT JOIN accounts a ON a.id = t.account_id
             LEFT JOIN technicians te ON te.id = t.assigned_technician_id
@@ -363,6 +393,7 @@ def list_ticket_artifact_summaries(db_path: Path) -> list[dict]:
                 GROUP BY ticket_id
             ) attachment_counts ON attachment_counts.ticket_id = t.id
             LEFT JOIN chunk_counts ON chunk_counts.ticket_id = t.id
+            LEFT JOIN vector_counts ON vector_counts.ticket_id = t.id
             WHERE t.status = 'Open'
                OR td.ticket_id IS NOT NULL
                OR COALESCE(log_counts.log_count, 0) > 0
@@ -386,6 +417,9 @@ def list_ticket_artifact_summaries(db_path: Path) -> list[dict]:
             "updated_at": row["updated_at"],
             "detail_available": bool(row["detail_available"]),
             "document_available": bool(row["document_available"]),
+            "document_synced_at": row["document_synced_at"],
+            "materialization_version": int(row["materialization_version"] or 0),
+            "is_current_materialization_version": int(row["materialization_version"] or 0) == DOCUMENT_MATERIALIZATION_VERSION,
             "has_next_step": bool(row["has_next_step"]),
             "has_attachments": bool(row["has_attachments"]),
             "has_resolution_summary": bool(row["has_resolution_summary"]),
@@ -393,6 +427,16 @@ def list_ticket_artifact_summaries(db_path: Path) -> list[dict]:
             "log_count": int(row["log_count"] or 0),
             "attachment_count": int(row["attachment_count"] or 0),
             "chunk_count": int(row["chunk_count"] or 0),
+            "indexed_chunk_count": int(row["indexed_chunk_count"] or 0),
+            "missing_index_chunks": max(int(row["chunk_count"] or 0) - int(row["indexed_chunk_count"] or 0), 0),
+            "vector_ready": bool(row["chunk_count"] or 0) and int(row["indexed_chunk_count"] or 0) == int(row["chunk_count"] or 0),
+            "vector_dims": int(row["min_dims"] or 0) if row["min_dims"] is not None and row["min_dims"] == row["max_dims"] else None,
+            "latest_vector_synced_at": row["latest_vector_synced_at"],
+            "earliest_chunk_synced_at": row["earliest_chunk_synced_at"],
+            "latest_chunk_synced_at": row["latest_chunk_synced_at"],
+            "chunk_content_hash_count": int(row["chunk_content_hash_count"] or 0),
+            "all_chunk_hashes_present": bool(row["chunk_count"] or 0) and int(row["chunk_content_hash_count"] or 0) == int(row["chunk_count"] or 0),
+            "lag_minutes": float(row["lag_minutes"] or 0.0),
         }
         for row in rows
     ]
@@ -420,13 +464,27 @@ def get_ticket_summary(db_path: Path, ticket_query: str, limit_logs: int = 10, l
                    COALESCE(u.email, json_extract(t.raw_json, '$.user_email')) AS user_email,
                    COALESCE(te.display_name, t.assigned_technician_id) AS technician,
                    COALESCE(te.email, json_extract(t.raw_json, '$.technician_email'), json_extract(t.raw_json, '$.tech_email')) AS technician_email,
+                   doc.doc_id,
+                   doc.synced_at AS document_synced_at,
+                   doc.content_hash AS document_content_hash,
                    doc.raw_json AS document_raw_json,
                    CASE WHEN td.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS detail_row_present,
                    COALESCE(log_counts.log_count, 0) AS log_count,
                    COALESCE(log_counts.public_log_count, 0) AS public_log_count,
                    COALESCE(log_counts.internal_log_count, 0) AS internal_log_count,
                    COALESCE(attachment_counts.attachment_count, 0) AS attachment_count,
-                   COALESCE(chunk_counts.chunk_count, 0) AS chunk_count
+                   COALESCE(chunk_counts.chunk_count, 0) AS chunk_count,
+                   chunk_counts.earliest_chunk_synced_at,
+                   chunk_counts.latest_chunk_synced_at,
+                   COALESCE(chunk_counts.chunk_content_hash_count, 0) AS chunk_content_hash_count,
+                   COALESCE(vector_counts.indexed_chunk_count, 0) AS indexed_chunk_count,
+                   vector_counts.min_dims,
+                   vector_counts.max_dims,
+                   vector_counts.earliest_vector_synced_at,
+                   vector_counts.latest_vector_synced_at,
+                   CASE WHEN doc.synced_at IS NOT NULL AND COALESCE(t.updated_at, t.created_at) IS NOT NULL AND doc.synced_at < COALESCE(t.updated_at, t.created_at)
+                        THEN ROUND((julianday(COALESCE(t.updated_at, t.created_at)) - julianday(doc.synced_at)) * 1440.0, 2)
+                        ELSE 0 END AS lag_minutes
             FROM tickets t
             LEFT JOIN accounts a ON a.id = t.account_id
             LEFT JOIN users u ON u.id = t.user_id
@@ -447,10 +505,24 @@ def get_ticket_summary(db_path: Path, ticket_query: str, limit_logs: int = 10, l
                 GROUP BY ticket_id
             ) attachment_counts ON attachment_counts.ticket_id = t.id
             LEFT JOIN (
-                SELECT ticket_id, COUNT(*) AS chunk_count
+                SELECT ticket_id,
+                       COUNT(*) AS chunk_count,
+                       MIN(synced_at) AS earliest_chunk_synced_at,
+                       MAX(synced_at) AS latest_chunk_synced_at,
+                       SUM(CASE WHEN content_hash IS NOT NULL AND content_hash != '' THEN 1 ELSE 0 END) AS chunk_content_hash_count
                 FROM ticket_document_chunks
                 GROUP BY ticket_id
             ) chunk_counts ON chunk_counts.ticket_id = t.id
+            LEFT JOIN (
+                SELECT ticket_id,
+                       COUNT(*) AS indexed_chunk_count,
+                       MIN(dims) AS min_dims,
+                       MAX(dims) AS max_dims,
+                       MIN(synced_at) AS earliest_vector_synced_at,
+                       MAX(synced_at) AS latest_vector_synced_at
+                FROM vector_chunk_index
+                GROUP BY ticket_id
+            ) vector_counts ON vector_counts.ticket_id = t.id
             WHERE CAST(t.id AS TEXT) = ?
                OR json_extract(t.raw_json, '$.number') = ?
                OR json_extract(t.raw_json, '$.key') = ?
@@ -496,6 +568,24 @@ def get_ticket_summary(db_path: Path, ticket_query: str, limit_logs: int = 10, l
             """,
             (ticket["id"], limit_attachments),
         ).fetchall()
+        chunk_rows = conn.execute(
+            """
+            SELECT c.chunk_id,
+                   c.doc_id,
+                   c.chunk_index,
+                   c.text,
+                   c.content_hash,
+                   c.synced_at,
+                   v.dims,
+                   v.synced_at AS vector_synced_at,
+                   CASE WHEN v.chunk_id IS NOT NULL THEN 1 ELSE 0 END AS vector_indexed
+            FROM ticket_document_chunks c
+            LEFT JOIN vector_chunk_index v ON v.chunk_id = c.chunk_id
+            WHERE c.ticket_id = ?
+            ORDER BY c.chunk_index ASC, c.chunk_id ASC
+            """,
+            (ticket["id"],),
+        ).fetchall()
 
     document_metadata = {}
     if ticket["document_raw_json"]:
@@ -503,6 +593,68 @@ def get_ticket_summary(db_path: Path, ticket_query: str, limit_logs: int = 10, l
             document_metadata = (json.loads(ticket["document_raw_json"]) or {}).get("metadata", {})
         except Exception:
             document_metadata = {}
+
+    chunk_inventory = []
+    section_counts: dict[str, int] = {}
+    label_counts: dict[str, int] = {}
+    indexed_chunk_count = 0
+    vector_dims: set[int] = set()
+    for row in chunk_rows:
+        section_info = _infer_chunk_sections(row["text"])
+        for label in section_info["chunk_section_labels"]:
+            label_counts[label] = label_counts.get(label, 0) + 1
+        primary = str(section_info["chunk_primary_section"])
+        section_counts[primary] = section_counts.get(primary, 0) + 1
+        if row["vector_indexed"]:
+            indexed_chunk_count += 1
+        if row["dims"] is not None:
+            vector_dims.add(int(row["dims"]))
+        chunk_inventory.append({
+            "chunk_id": row["chunk_id"],
+            "doc_id": row["doc_id"],
+            "chunk_index": int(row["chunk_index"] or 0),
+            "chunk_chars": len(str(row["text"] or "")),
+            "content_hash_present": bool(row["content_hash"]),
+            "chunk_synced_at": row["synced_at"],
+            "vector_indexed": bool(row["vector_indexed"]),
+            "vector_synced_at": row["vector_synced_at"],
+            "vector_dims": int(row["dims"]) if row["dims"] is not None else None,
+            "chunk_primary_section": section_info["chunk_primary_section"],
+            "chunk_section_labels": section_info["chunk_section_labels"],
+            "chunk_has_identity_context": section_info["chunk_has_identity_context"],
+            "chunk_has_workflow_context": section_info["chunk_has_workflow_context"],
+            "chunk_has_project_context": section_info["chunk_has_project_context"],
+            "chunk_has_action_context": section_info["chunk_has_action_context"],
+            "chunk_has_issue_context": section_info["chunk_has_issue_context"],
+            "chunk_has_activity_context": section_info["chunk_has_activity_context"],
+            "chunk_has_resolution_context": section_info["chunk_has_resolution_context"],
+            "chunk_has_attachment_context": section_info["chunk_has_attachment_context"],
+        })
+
+    chunk_count = int(ticket["chunk_count"] or 0)
+    materialization_version = int(document_metadata.get("materialization_version") or 0)
+    retrieval_health = {
+        "document_synced_at": ticket["document_synced_at"],
+        "document_content_hash_present": bool(ticket["document_content_hash"]),
+        "materialization_version": materialization_version,
+        "current_materialization_version": DOCUMENT_MATERIALIZATION_VERSION,
+        "is_current_materialization_version": materialization_version == DOCUMENT_MATERIALIZATION_VERSION,
+        "lag_minutes": float(ticket["lag_minutes"] or 0.0),
+        "is_materialization_lagging": float(ticket["lag_minutes"] or 0.0) > 0.0,
+        "chunk_count": chunk_count,
+        "indexed_chunk_count": int(ticket["indexed_chunk_count"] or 0),
+        "missing_index_chunks": max(chunk_count - int(ticket["indexed_chunk_count"] or 0), 0),
+        "vector_ready": bool(chunk_count) and int(ticket["indexed_chunk_count"] or 0) == chunk_count,
+        "vector_dims": sorted(vector_dims),
+        "earliest_chunk_synced_at": ticket["earliest_chunk_synced_at"],
+        "latest_chunk_synced_at": ticket["latest_chunk_synced_at"],
+        "earliest_vector_synced_at": ticket["earliest_vector_synced_at"],
+        "latest_vector_synced_at": ticket["latest_vector_synced_at"],
+        "chunk_content_hash_count": int(ticket["chunk_content_hash_count"] or 0),
+        "all_chunk_hashes_present": bool(chunk_count) and int(ticket["chunk_content_hash_count"] or 0) == chunk_count,
+        "primary_section_counts": section_counts,
+        "section_label_counts": label_counts,
+    }
 
     return {
         "status": "ok",
@@ -533,11 +685,12 @@ def get_ticket_summary(db_path: Path, ticket_query: str, limit_logs: int = 10, l
             "public_log_count": int(ticket["public_log_count"] or 0),
             "internal_log_count": int(ticket["internal_log_count"] or 0),
             "attachment_count": int(ticket["attachment_count"] or 0),
-            "chunk_count": int(ticket["chunk_count"] or 0),
+            "chunk_count": chunk_count,
             "has_next_step": bool(document_metadata.get("has_next_step")),
             "has_attachments": bool(document_metadata.get("has_attachments")),
             "has_resolution_summary": bool(document_metadata.get("has_resolution_summary")),
         },
+        "retrieval_health": retrieval_health,
         "retrieval_metadata": {
             "cleaned_subject": document_metadata.get("cleaned_subject"),
             "cleaned_initial_post": document_metadata.get("cleaned_initial_post"),
@@ -565,6 +718,7 @@ def get_ticket_summary(db_path: Path, ticket_query: str, limit_logs: int = 10, l
             "attachment_total_size_bytes": document_metadata.get("attachment_total_size_bytes"),
             "materialization_version": document_metadata.get("materialization_version"),
         },
+        "chunk_inventory": chunk_inventory,
         "recent_logs": [dict(row) for row in recent_logs],
         "attachments": [dict(row) for row in attachments],
     }

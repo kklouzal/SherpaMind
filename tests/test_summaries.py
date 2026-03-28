@@ -51,6 +51,11 @@ def test_ticket_summary_and_artifact_listing(tmp_path: Path) -> None:
     assert artifacts[0]["ticket_id"] == "101"
     assert artifacts[0]["detail_available"] is True
     assert artifacts[0]["log_count"] == 1
+    assert artifacts[0]["document_available"] is True
+    assert artifacts[0]["is_current_materialization_version"] is True
+    assert artifacts[0]["chunk_count"] >= 1
+    assert artifacts[0]["indexed_chunk_count"] == 0
+    assert artifacts[0]["vector_ready"] is False
 
     summary = get_ticket_summary(db, "101")
     assert summary["status"] == "ok"
@@ -58,4 +63,10 @@ def test_ticket_summary_and_artifact_listing(tmp_path: Path) -> None:
     assert summary["artifact_stats"]["detail_available"] is True
     assert summary["artifact_stats"]["log_count"] == 1
     assert summary["artifact_stats"]["attachment_count"] == 0
+    assert summary["retrieval_health"]["is_current_materialization_version"] is True
+    assert summary["retrieval_health"]["chunk_count"] >= 1
+    assert summary["retrieval_health"]["indexed_chunk_count"] == 0
+    assert summary["retrieval_health"]["vector_ready"] is False
+    assert summary["chunk_inventory"]
+    assert summary["chunk_inventory"][0]["chunk_primary_section"]
     assert len(summary["recent_logs"]) == 1

@@ -163,8 +163,11 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Retrieval metadata coverage" in acme_doc.read_text()
     assert "Category breakdown" in tech_one_doc.read_text()
     assert "Retrieval health" in tech_one_doc.read_text()
-    assert "Artifact stats" in ticket_101_doc.read_text()
-    assert "Recent logs" in ticket_101_doc.read_text()
+    ticket_text = ticket_101_doc.read_text()
+    assert "Artifact stats" in ticket_text
+    assert "Retrieval health" in ticket_text
+    assert "Chunk section inventory" in ticket_text
+    assert "Recent logs" in ticket_text
 
     assert result["stale_account_docs_removed"] == 0
     assert result["stale_technician_docs_removed"] == 0
