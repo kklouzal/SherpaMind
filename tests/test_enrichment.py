@@ -2,7 +2,7 @@ from pathlib import Path
 
 from sherpamind.enrichment import _candidate_ticket_rows, enrich_priority_ticket_details
 from sherpamind.settings import Settings
-from sherpamind.db import initialize_db, upsert_ticket_details, upsert_tickets, connect
+from sherpamind.db import connect, initialize_db, replace_ticket_documents, upsert_ticket_details, upsert_tickets
 
 
 class FakeClient:
@@ -125,3 +125,133 @@ def test_candidate_selection_spreads_cold_coverage_to_undercovered_categories(tm
 
     candidates = _candidate_ticket_rows(db, limit=1)
     assert [row['id'] for row in candidates] == ['203']
+
+
+def test_candidate_selection_prefers_retrieval_poor_cold_groups_when_detail_coverage_ties(tmp_path: Path) -> None:
+    db = tmp_path / 'sherpamind.sqlite3'
+    initialize_db(db)
+    upsert_tickets(db, [
+        {
+            'id': 301,
+            'subject': 'Hardware ticket one',
+            'status': 'Closed',
+            'priority_name': 'Normal',
+            'class_name': 'Hardware / Printer',
+            'account_id': 1,
+            'tech_id': 11,
+            'created_time': '2025-01-01T01:00:00Z',
+            'updated_time': '2025-01-01T02:00:00Z',
+            'closed_time': '2025-01-01T03:00:00Z',
+        },
+        {
+            'id': 302,
+            'subject': 'Hardware ticket two',
+            'status': 'Closed',
+            'priority_name': 'Normal',
+            'class_name': 'Hardware / Printer',
+            'account_id': 1,
+            'tech_id': 11,
+            'created_time': '2025-01-02T01:00:00Z',
+            'updated_time': '2025-01-02T02:00:00Z',
+            'closed_time': '2025-01-02T03:00:00Z',
+        },
+        {
+            'id': 303,
+            'subject': 'Software ticket one',
+            'status': 'Closed',
+            'priority_name': 'Normal',
+            'class_name': 'Software / LOB',
+            'account_id': 2,
+            'tech_id': 12,
+            'created_time': '2025-01-03T01:00:00Z',
+            'updated_time': '2025-01-03T02:00:00Z',
+            'closed_time': '2025-01-03T03:00:00Z',
+        },
+        {
+            'id': 304,
+            'subject': 'Software ticket two',
+            'status': 'Closed',
+            'priority_name': 'Normal',
+            'class_name': 'Software / LOB',
+            'account_id': 2,
+            'tech_id': 12,
+            'created_time': '2025-01-04T01:00:00Z',
+            'updated_time': '2025-01-04T02:00:00Z',
+            'closed_time': '2025-01-04T03:00:00Z',
+        },
+    ])
+    replace_ticket_documents(
+        db,
+        [
+            {
+                'doc_id': 'ticket:301',
+                'ticket_id': 301,
+                'status': 'Closed',
+                'account': 'Acme Hardware',
+                'user_name': 'User One',
+                'technician': 'Tech One',
+                'updated_at': '2025-01-01T02:00:00Z',
+                'text': 'hardware ticket 301',
+                'metadata': {
+                    'category': 'Hardware / Printer',
+                    'cleaned_initial_post': 'printer offline',
+                    'cleaned_action_cue': 'reboot spooler',
+                    'recent_log_types_csv': 'Initial Post, Response',
+                    'resolution_summary': 'resolved after restart',
+                    'attachments_count': 1,
+                },
+                'content_hash': 'doc-301',
+            },
+            {
+                'doc_id': 'ticket:302',
+                'ticket_id': 302,
+                'status': 'Closed',
+                'account': 'Acme Hardware',
+                'user_name': 'User Two',
+                'technician': 'Tech One',
+                'updated_at': '2025-01-02T02:00:00Z',
+                'text': 'hardware ticket 302',
+                'metadata': {
+                    'category': 'Hardware / Printer',
+                    'cleaned_initial_post': 'printer queue jammed',
+                    'cleaned_action_cue': 'clear queue',
+                    'recent_log_types_csv': 'Initial Post, Response',
+                    'resolution_summary': 'resolved after queue clear',
+                    'attachments_count': 2,
+                },
+                'content_hash': 'doc-302',
+            },
+            {
+                'doc_id': 'ticket:303',
+                'ticket_id': 303,
+                'status': 'Closed',
+                'account': 'Beta Software',
+                'user_name': 'User Three',
+                'technician': 'Tech Two',
+                'updated_at': '2025-01-03T02:00:00Z',
+                'text': 'software ticket 303',
+                'metadata': {
+                    'category': 'Software / LOB',
+                },
+                'content_hash': 'doc-303',
+            },
+            {
+                'doc_id': 'ticket:304',
+                'ticket_id': 304,
+                'status': 'Closed',
+                'account': 'Beta Software',
+                'user_name': 'User Four',
+                'technician': 'Tech Two',
+                'updated_at': '2025-01-04T02:00:00Z',
+                'text': 'software ticket 304',
+                'metadata': {
+                    'category': 'Software / LOB',
+                },
+                'content_hash': 'doc-304',
+            },
+        ],
+        synced_at='2025-01-05T01:00:00Z',
+    )
+
+    candidates = _candidate_ticket_rows(db, limit=1)
+    assert [row['id'] for row in candidates] == ['304']

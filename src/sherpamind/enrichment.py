@@ -68,6 +68,32 @@ def _coverage_ratio(stats: dict[str, tuple[int, int]], value: Any) -> float:
     return covered / total
 
 
+def _retrieval_signal_stats(rows: list[dict[str, Any]], key: str) -> dict[str, tuple[int, int]]:
+    signal_fields = (
+        "has_detail",
+        "has_issue_context",
+        "has_action_context",
+        "has_activity_context",
+        "has_resolution_context",
+        "has_attachment_context",
+    )
+    stats: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    for row in rows:
+        value = str(row.get(key) or "").strip() or "unknown"
+        counts = stats[value]
+        counts[0] += len(signal_fields)
+        counts[1] += sum(1 for field in signal_fields if row.get(field))
+    return {value: (counts[0], counts[1]) for value, counts in stats.items()}
+
+
+def _retrieval_richness_ratio(stats: dict[str, tuple[int, int]], value: Any) -> float:
+    normalized = str(value or "").strip() or "unknown"
+    opportunities, hits = stats.get(normalized, (0, 0))
+    if opportunities <= 0:
+        return 0.0
+    return hits / opportunities
+
+
 def _hot_group_rows(rows: list[dict[str, Any]], bucket: int, has_detail: int) -> list[dict[str, Any]]:
     group = [row for row in rows if row["bucket"] == bucket and row["has_detail"] == has_detail]
     group.sort(key=lambda row: str(row.get("id") or ""), reverse=True)
@@ -81,10 +107,16 @@ def _cold_candidate_sort_key(
     category_stats: dict[str, tuple[int, int]],
     account_stats: dict[str, tuple[int, int]],
     technician_stats: dict[str, tuple[int, int]],
+    category_signal_stats: dict[str, tuple[int, int]],
+    account_signal_stats: dict[str, tuple[int, int]],
+    technician_signal_stats: dict[str, tuple[int, int]],
 ) -> tuple:
     return (
+        _retrieval_richness_ratio(category_signal_stats, row.get("category")),
         _coverage_ratio(category_stats, row.get("category")),
+        _retrieval_richness_ratio(account_signal_stats, row.get("account_key")),
         _coverage_ratio(account_stats, row.get("account_key")),
+        _retrieval_richness_ratio(technician_signal_stats, row.get("technician_key")),
         _coverage_ratio(technician_stats, row.get("technician_key")),
         _priority_rank(row.get("priority")),
         -len(str(row.get("category") or "")),
@@ -103,10 +135,23 @@ def _prioritize_cold_candidates(
     category_stats = _coverage_stats(coverage_rows, "category")
     account_stats = _coverage_stats(coverage_rows, "account_key")
     technician_stats = _coverage_stats(coverage_rows, "technician_key")
+    category_signal_stats = _retrieval_signal_stats(coverage_rows, "category")
+    account_signal_stats = _retrieval_signal_stats(coverage_rows, "account_key")
+    technician_signal_stats = _retrieval_signal_stats(coverage_rows, "technician_key")
     ordered = list(rows)
     ordered.sort(key=lambda row: str(row.get("id") or ""), reverse=True)
     ordered.sort(key=lambda row: str(row.get("activity_at") or ""), reverse=True)
-    ordered.sort(key=lambda row: _cold_candidate_sort_key(row, category_stats, account_stats, technician_stats))
+    ordered.sort(
+        key=lambda row: _cold_candidate_sort_key(
+            row,
+            category_stats,
+            account_stats,
+            technician_stats,
+            category_signal_stats,
+            account_signal_stats,
+            technician_signal_stats,
+        )
+    )
 
     selected: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
@@ -166,11 +211,66 @@ def _candidate_ticket_rows(db_path, limit: int) -> list[dict]:
                            'unknown'
                        ) AS category,
                        COALESCE(NULLIF(t.account_id, ''), 'unknown') AS account_key,
-                       COALESCE(NULLIF(t.assigned_technician_id, ''), 'unknown') AS technician_key
+                       COALESCE(NULLIF(t.assigned_technician_id, ''), 'unknown') AS technician_key,
+                       CASE
+                           WHEN COALESCE(
+                               json_extract(doc.raw_json, '$.metadata.cleaned_initial_post'),
+                               json_extract(doc.raw_json, '$.metadata.cleaned_detail_note'),
+                               json_extract(doc.raw_json, '$.metadata.cleaned_workpad')
+                           ) IS NOT NULL THEN 1 ELSE 0
+                       END AS has_issue_context,
+                       CASE
+                           WHEN COALESCE(
+                               json_extract(doc.raw_json, '$.metadata.cleaned_next_step'),
+                               json_extract(doc.raw_json, '$.metadata.cleaned_action_cue'),
+                               json_extract(doc.raw_json, '$.metadata.cleaned_followup_note'),
+                               json_extract(doc.raw_json, '$.metadata.cleaned_request_completion_note')
+                           ) IS NOT NULL THEN 1 ELSE 0
+                       END AS has_action_context,
+                       CASE
+                           WHEN COALESCE(CAST(json_extract(doc.raw_json, '$.metadata.ticketlogs_count') AS REAL), 0) > 0
+                                OR COALESCE(
+                                    json_extract(doc.raw_json, '$.metadata.recent_log_types_csv'),
+                                    json_extract(doc.raw_json, '$.metadata.latest_response_date'),
+                                    json_extract(doc.raw_json, '$.metadata.latest_public_log_date'),
+                                    json_extract(doc.raw_json, '$.metadata.latest_internal_log_date'),
+                                    json_extract(doc.raw_json, '$.metadata.participant_email_domains_csv'),
+                                    json_extract(doc.raw_json, '$.metadata.recent_public_actor_labels_csv'),
+                                    json_extract(doc.raw_json, '$.metadata.recent_internal_actor_labels_csv')
+                                ) IS NOT NULL THEN 1 ELSE 0
+                       END AS has_activity_context,
+                       CASE
+                           WHEN COALESCE(
+                               json_extract(doc.raw_json, '$.metadata.resolution_summary'),
+                               json_extract(doc.raw_json, '$.metadata.cleaned_resolution_log_note'),
+                               json_extract(doc.raw_json, '$.metadata.resolution_category')
+                           ) IS NOT NULL THEN 1 ELSE 0
+                       END AS has_resolution_context,
+                       CASE
+                           WHEN COALESCE(CAST(json_extract(doc.raw_json, '$.metadata.attachments_count') AS REAL), 0) > 0
+                                OR COALESCE(CAST(json_extract(doc.raw_json, '$.metadata.attachment_total_size_bytes') AS REAL), 0) > 0
+                                OR COALESCE(
+                                    json_extract(doc.raw_json, '$.metadata.attachment_extensions_csv'),
+                                    json_extract(doc.raw_json, '$.metadata.attachment_kinds_csv')
+                                ) IS NOT NULL THEN 1 ELSE 0
+                       END AS has_attachment_context
                 FROM tickets t
                 LEFT JOIN ticket_details td ON td.ticket_id = t.id
+                LEFT JOIN ticket_documents doc ON doc.ticket_id = t.id
             )
-            SELECT id, bucket, has_detail, activity_at, priority, category, account_key, technician_key
+            SELECT id,
+                   bucket,
+                   has_detail,
+                   activity_at,
+                   priority,
+                   category,
+                   account_key,
+                   technician_key,
+                   has_issue_context,
+                   has_action_context,
+                   has_activity_context,
+                   has_resolution_context,
+                   has_attachment_context
             FROM prioritized
             """
         ).fetchall()
