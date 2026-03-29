@@ -10,7 +10,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 14
+DOCUMENT_MATERIALIZATION_VERSION = 15
 
 
 def _content_hash(text: str) -> str:
@@ -385,6 +385,103 @@ def _split_text_segment(text: str, target_chars: int) -> list[str]:
     return chunks
 
 
+def _chunk_segment_length(segments: list[str]) -> int:
+    if not segments:
+        return 0
+    return sum(len(segment) for segment in segments) + (len(segments) - 1)
+
+
+
+def _rebalance_small_chunk_tail(
+    chunk_segments: list[list[str]],
+    *,
+    target_chars: int,
+    min_chunk_chars: int,
+) -> list[list[str]]:
+    if len(chunk_segments) < 2:
+        return chunk_segments
+
+    rebalanced = [list(segments) for segments in chunk_segments if segments]
+    for idx in range(len(rebalanced) - 1, 0, -1):
+        current = rebalanced[idx]
+        previous = rebalanced[idx - 1]
+        if not current or not previous:
+            continue
+        current_len = _chunk_segment_length(current)
+        if current_len >= min_chunk_chars:
+            continue
+
+        while len(previous) > 1 and current_len < min_chunk_chars:
+            candidate_segment = previous[-1]
+            candidate_current = [candidate_segment, *current]
+            candidate_previous = previous[:-1]
+            candidate_current_len = _chunk_segment_length(candidate_current)
+            candidate_previous_len = _chunk_segment_length(candidate_previous)
+            if candidate_current_len > target_chars:
+                break
+            if candidate_previous and candidate_previous_len < min_chunk_chars:
+                break
+            current = candidate_current
+            previous = candidate_previous
+            current_len = candidate_current_len
+
+        if current_len < min_chunk_chars and _chunk_segment_length(previous + current) <= target_chars:
+            rebalanced[idx - 1] = previous + current
+            rebalanced[idx] = []
+            continue
+
+        rebalanced[idx - 1] = previous
+        rebalanced[idx] = current
+
+    return [segments for segments in rebalanced if segments]
+
+
+
+def _rebalance_small_chunk_heads(
+    chunk_segments: list[list[str]],
+    *,
+    target_chars: int,
+    min_chunk_chars: int,
+) -> list[list[str]]:
+    if len(chunk_segments) < 2:
+        return chunk_segments
+
+    rebalanced = [list(segments) for segments in chunk_segments if segments]
+    for idx in range(len(rebalanced) - 1):
+        current = rebalanced[idx]
+        following = rebalanced[idx + 1]
+        if not current or not following:
+            continue
+        current_len = _chunk_segment_length(current)
+        if current_len >= min_chunk_chars:
+            continue
+
+        while len(following) > 1 and current_len < min_chunk_chars:
+            candidate_segment = following[0]
+            candidate_current = [*current, candidate_segment]
+            candidate_following = following[1:]
+            candidate_current_len = _chunk_segment_length(candidate_current)
+            candidate_following_len = _chunk_segment_length(candidate_following)
+            if candidate_current_len > target_chars:
+                break
+            if candidate_following and candidate_following_len < min_chunk_chars:
+                break
+            current = candidate_current
+            following = candidate_following
+            current_len = candidate_current_len
+
+        if current_len < min_chunk_chars and _chunk_segment_length(current + following) <= target_chars:
+            rebalanced[idx] = current + following
+            rebalanced[idx + 1] = []
+            continue
+
+        rebalanced[idx] = current
+        rebalanced[idx + 1] = following
+
+    return [segments for segments in rebalanced if segments]
+
+
+
 def _chunk_text(text: str, target_chars: int = 1800, min_chunk_chars: int = 250) -> list[str]:
     if len(text) <= target_chars:
         return [text]
@@ -396,29 +493,43 @@ def _chunk_text(text: str, target_chars: int = 1800, min_chunk_chars: int = 250)
             continue
         segments.extend(_split_text_segment(cleaned, target_chars))
 
-    chunks: list[str] = []
+    chunk_segments: list[list[str]] = []
     current: list[str] = []
     current_len = 0
     for segment in segments:
         candidate_len = len(segment) if not current else current_len + 1 + len(segment)
         if current and candidate_len > target_chars:
-            chunks.append("\n".join(current).strip())
+            chunk_segments.append(current)
             current = [segment]
             current_len = len(segment)
             continue
         current.append(segment)
         current_len = candidate_len
     if current:
-        chunks.append("\n".join(current).strip())
+        chunk_segments.append(current)
 
-    merged_chunks: list[str] = []
-    for chunk in chunks:
-        if merged_chunks and len(chunk) < min_chunk_chars and len(merged_chunks[-1]) + 1 + len(chunk) <= target_chars:
-            merged_chunks[-1] = f"{merged_chunks[-1]}\n{chunk}".strip()
+    chunk_segments = _rebalance_small_chunk_heads(
+        chunk_segments,
+        target_chars=target_chars,
+        min_chunk_chars=min_chunk_chars,
+    )
+    chunk_segments = _rebalance_small_chunk_tail(
+        chunk_segments,
+        target_chars=target_chars,
+        min_chunk_chars=min_chunk_chars,
+    )
+
+    chunks: list[str] = []
+    for segments_for_chunk in chunk_segments:
+        chunk = "\n".join(segments_for_chunk).strip()
+        if not chunk:
             continue
-        merged_chunks.append(chunk)
+        if chunks and len(chunk) < min_chunk_chars and len(chunks[-1]) + 1 + len(chunk) <= target_chars:
+            chunks[-1] = f"{chunks[-1]}\n{chunk}".strip()
+            continue
+        chunks.append(chunk)
 
-    return [chunk for chunk in merged_chunks if chunk]
+    return chunks
 
 
 def _parse_recent_logs(value: str | None) -> list[dict[str, Any]]:

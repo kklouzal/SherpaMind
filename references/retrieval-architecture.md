@@ -53,7 +53,7 @@ Best source:
 3. build retrieval documents from tickets, comments, accounts, users, and derived summaries
 4. carry stable workflow/state metadata forward with those documents (subject cleanup, user/account/technician linkage, human-readable entity labels, label-source provenance, user/creator/technician email domains, participant email-domain rollups, recent log types, log-interaction counts/date summaries, distinct public/internal participant counts, latest/recent participant labels, mixed-visibility activity flags, next-step hints, derived action-cue text/source, explicit-followup-vs-waiting-log cue provenance, request-completion/follow-up cues, log-derived latest-response and closure cues, class/submission/resolution taxonomy, human-readable department labels, contract/confirmation context, account-location and department context, intake-channel/handling flags, project/scheduled-ticket linkage, effort-tracking signals, attachment presence plus normalized attachment extension/kind/size summaries (including size-known counts and broader kind-family counts), resolution highlights)
 5. widen bounded detail enrichment in a retrieval-aware way so historical detail coverage spreads across under-covered categories/accounts/technicians instead of overfitting only to the most recent cold tickets
-6. chunk long text where needed
+6. chunk long text where needed, rebalancing tiny leading/trailing leftovers when possible so vector rows stay retrieval-meaningful instead of collapsing into metadata-only fragments
 7. index documents into:
    - FTS/keyword search
    - vector embeddings/index

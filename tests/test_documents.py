@@ -144,6 +144,28 @@ def test_chunk_text_splits_large_single_paragraphs_for_vector_readiness() -> Non
 
 
 
+def test_chunk_text_rebalances_tiny_tail_chunks_for_vector_readiness() -> None:
+    segments = [
+        "Account: Acme",
+        "Status: Closed",
+        "Issue summary: " + ("Alpha beta gamma delta " * 60).strip(),
+        "Recent log summary: " + ("Follow-up investigation note. " * 26).strip(),
+        "Resolution log note: Rebooted the print server and confirmed queue health.",
+        "Resolution/activity highlight: Service restored after queue cleanup.",
+        "Resolution category: Completed",
+    ]
+    text = "\n".join(segments)
+
+    chunks = _chunk_text(text, target_chars=360, min_chunk_chars=120)
+
+    assert len(chunks) >= 3
+    assert max(len(chunk) for chunk in chunks) <= 360
+    assert len(chunks[-1]) >= 120
+    assert "Resolution log note:" in chunks[-1]
+    assert chunks[-1].endswith("Resolution category: Completed")
+
+
+
 def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     db = tmp_path / "sherpamind.sqlite3"
     seed_fixture(db)
