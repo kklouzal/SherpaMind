@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .text_cleanup import normalize_metadata_label
+
 SCHEMA = """
 PRAGMA foreign_keys = ON;
 
@@ -462,8 +464,8 @@ def upsert_tickets(db_path: Path, tickets: list[dict[str, Any]], synced_at: str 
                     str(ticket["tech_id"]) if ticket.get("tech_id") is not None else None,
                     ticket.get("subject"),
                     ticket.get("status"),
-                    ticket.get("priority_name") or ticket.get("priority"),
-                    ticket.get("creation_category_name") or ticket.get("category"),
+                    normalize_metadata_label(ticket.get("priority_name") or ticket.get("priority")),
+                    normalize_metadata_label(ticket.get("creation_category_name") or ticket.get("category") or ticket.get("class_name") or ticket.get("submission_category")),
                     ticket.get("created_time"),
                     ticket.get("updated_time"),
                     ticket.get("closed_time"),

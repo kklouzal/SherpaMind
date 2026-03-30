@@ -51,8 +51,8 @@ def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:
             "tech_id": 3,
             "subject": "Printer is haunted",
             "status": "Open",
-            "priority_name": "High",
-            "creation_category_name": "Hardware",
+            "priority_name": "  High  ",
+            "creation_category_name": "Hardware  /\n Printer",
             "created_time": "2026-03-18T01:00:00Z",
             "updated_time": "2026-03-19T01:00:00Z",
         }],
@@ -89,7 +89,7 @@ def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:
         chunk = conn.execute("SELECT text FROM ticket_document_chunks WHERE chunk_id = 'ticket:4:chunk:0'").fetchone()
     assert ticket["subject"] == "Printer is haunted"
     assert ticket["priority"] == "High"
-    assert ticket["category"] == "Hardware"
+    assert ticket["category"] == "Hardware / Printer"
     assert user["display_name"] == "User One"
     assert tech["display_name"] == "Tech One"
     assert detail["workpad"] == "secret work"

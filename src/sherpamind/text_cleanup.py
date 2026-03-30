@@ -10,6 +10,8 @@ P_CLOSE_RE = re.compile(r"</p\s*>", re.IGNORECASE)
 TABLE_RE = re.compile(r"<table[\s\S]*?</table>", re.IGNORECASE)
 MULTISPACE_RE = re.compile(r"[ \t]+")
 MULTIBLANK_RE = re.compile(r"\n{3,}")
+MULTIWHITESPACE_RE = re.compile(r"\s+")
+SLASH_SPACING_RE = re.compile(r"\s*/\s*")
 UPLOADED_FILE_RE = re.compile(r"Following file(?:s)? (?:was|were) uploaded:.*", re.IGNORECASE)
 EMAIL_PARSER_RE = re.compile(r"This (?:ticket was created|response was entered) via the email parser\.?", re.IGNORECASE)
 NOTICE_RE = re.compile(r"NOTICE:.*", re.IGNORECASE)
@@ -77,6 +79,19 @@ def normalize_ticket_text(value: str | None) -> str:
     text = "\n".join(lines)
     text = MULTIBLANK_RE.sub("\n\n", text).strip()
     return text
+
+
+def normalize_metadata_label(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = html.unescape(str(value))
+    text = BR_RE.sub(" ", text)
+    text = P_CLOSE_RE.sub(" ", text)
+    text = HTML_TAG_RE.sub(" ", text)
+    text = text.replace("\xa0", " ")
+    text = SLASH_SPACING_RE.sub(" / ", text)
+    text = MULTIWHITESPACE_RE.sub(" ", text).strip(" \t\r\n-/|")
+    return text or None
 
 
 def summarize_resolution_from_logs(log_text: str | None) -> str | None:

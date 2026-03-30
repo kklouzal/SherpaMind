@@ -1,4 +1,4 @@
-from sherpamind.text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
+from sherpamind.text_cleanup import normalize_metadata_label, normalize_ticket_text, summarize_resolution_from_logs
 
 
 def test_normalize_ticket_text_strips_html_parser_noise_and_urls() -> None:
@@ -20,6 +20,11 @@ def test_normalize_ticket_text_strips_forwarded_message_tail() -> None:
     raw = "Current update\n-----Original Message-----\nFrom: someone@example.com"
     cleaned = normalize_ticket_text(raw)
     assert cleaned == "Current update"
+
+
+def test_normalize_metadata_label_collapses_multiline_taxonomy_noise() -> None:
+    raw = "  Technical Incident / Client Side / Other Software (installs\n and operation)  "
+    assert normalize_metadata_label(raw) == "Technical Incident / Client Side / Other Software (installs and operation)"
 
 
 def test_summarize_resolution_from_logs_returns_first_segment() -> None:

@@ -7,10 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket_documents
-from .text_cleanup import normalize_ticket_text, summarize_resolution_from_logs
+from .text_cleanup import normalize_metadata_label, normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 15
+DOCUMENT_MATERIALIZATION_VERSION = 16
 
 
 def _content_hash(text: str) -> str:
@@ -186,10 +186,10 @@ def _resolve_technician_label(record: dict) -> tuple[str | None, str]:
 
 
 def _resolve_department_label(record: dict) -> tuple[str | None, str]:
-    support_group_name = _first_present(record.get("support_group_name"))
-    class_name = _first_present(record.get("class_name"))
-    submission_category = _first_present(record.get("submission_category"))
-    department_key = _first_present(record.get("department_key"))
+    support_group_name = normalize_metadata_label(_first_present(record.get("support_group_name")))
+    class_name = normalize_metadata_label(_first_present(record.get("class_name")))
+    submission_category = normalize_metadata_label(_first_present(record.get("submission_category")))
+    department_key = normalize_metadata_label(_first_present(record.get("department_key")))
     if support_group_name:
         return support_group_name, "support_group_name"
     if class_name:
@@ -892,12 +892,16 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         cleaned_resolution_log_note = normalize_ticket_text(resolution_log["cleaned_note"] if resolution_log else None)
         resolution_log_date = resolution_log["record_date"] if resolution_log else None
         resolution_summary = cleaned_resolution_log_note[:600] if cleaned_resolution_log_note else summarize_resolution_from_logs(record.get("recent_log_text"))
-        normalized_category = (
+        normalized_category = normalize_metadata_label(
             record.get("category")
             or record.get("creation_category_name")
             or record.get("class_name")
             or record.get("submission_category")
         )
+        normalized_class_name = normalize_metadata_label(record.get("class_name"))
+        normalized_submission_category = normalize_metadata_label(record.get("submission_category"))
+        normalized_resolution_category = normalize_metadata_label(record.get("resolution_category_name"))
+        normalized_support_group_name = normalize_metadata_label(record.get("support_group_name"))
         cleaned_subject = normalize_ticket_text(record.get("subject"))
         cleaned_confirmed_note = normalize_ticket_text(record.get("confirmed_note"))
         created_by_name = _join_name_parts(record.get("user_created_firstname"), record.get("user_created_lastname"))
@@ -1068,8 +1072,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Time log count: {record['timelogs_count']}")
         if record.get("attachments_count") is not None:
             text_parts.append(f"Attachment count: {record['attachments_count']}")
-        if record.get("support_group_name"):
-            text_parts.append(f"Support group: {record['support_group_name']}")
+        if normalized_support_group_name:
+            text_parts.append(f"Support group: {normalized_support_group_name}")
         if record.get("default_contract_name"):
             text_parts.append(f"Contract: {record['default_contract_name']}")
         if record.get("confirmed_by_name"):
@@ -1142,8 +1146,8 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
             text_parts.append(f"Resolution log note: {cleaned_resolution_log_note[:1600]}")
         if resolution_summary:
             text_parts.append(f"Resolution/activity highlight: {resolution_summary}")
-        if record.get("resolution_category_name"):
-            text_parts.append(f"Resolution category: {record['resolution_category_name']}")
+        if normalized_resolution_category:
+            text_parts.append(f"Resolution category: {normalized_resolution_category}")
 
         attachment_metadata = []
         if record.get("attachment_metadata_json"):
@@ -1183,11 +1187,11 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                 "content_hash": _content_hash(text),
                 "materialization_version": DOCUMENT_MATERIALIZATION_VERSION,
                 "metadata": {
-                    "priority": record.get("priority"),
+                    "priority": normalize_metadata_label(record.get("priority")),
                     "category": normalized_category,
-                    "class_name": record.get("class_name"),
-                    "submission_category": record.get("submission_category"),
-                    "resolution_category": record.get("resolution_category_name"),
+                    "class_name": normalized_class_name,
+                    "submission_category": normalized_submission_category,
+                    "resolution_category": normalized_resolution_category,
                     "department_label": department_label,
                     "department_label_source": department_label_source,
                     "closed_at": record.get("closed_at"),
@@ -1293,7 +1297,7 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
                     "internal_participant_email_domains": internal_participant_email_domains,
                     "internal_participant_email_domains_csv": ", ".join(internal_participant_email_domains) if internal_participant_email_domains else None,
                     "internal_participant_email_domain_count": len(internal_participant_email_domains),
-                    "support_group_name": record.get("support_group_name"),
+                    "support_group_name": normalized_support_group_name,
                     "default_contract_name": record.get("default_contract_name"),
                     "location_name": record.get("location_name"),
                     "account_location_name": record.get("account_location_name"),

@@ -29,7 +29,9 @@ def seed_fixture(db: Path) -> None:
             "subject": "Issue A",
             "status": "Open",
             "priority_name": "High",
-            "class_name": "Hardware / Printer",
+            "class_name": "Hardware  /\n Printer",
+            "submission_category": "  Customer\n Portal  ",
+            "resolution_category_name": " Completed\n Successfully ",
             "number": "T-101",
             "key": "abc-101",
             "created_time": "2026-03-18T01:00:00Z",
@@ -214,6 +216,7 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "User phone: 520-555-0101" in primary["text"]
     assert "Location: HQ" in primary["text"]
     assert "Account location: HQ Campus" in primary["text"]
+    assert "Category: Hardware / Printer" in primary["text"]
     assert "Department: Managed Services" in primary["text"]
     assert "Department key: managed-services" in primary["text"]
     assert "Via email parser: True" in primary["text"]
@@ -238,6 +241,7 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Latest response note: printer broken" in primary["text"]
     assert "Resolution log date: 2026-03-19T06:30:00Z" in primary["text"]
     assert "Resolution log note: Closed after printer service restored" in primary["text"]
+    assert "Resolution category: Completed Successfully" in primary["text"]
     assert "Requested completion note: Finish after-hours maintenance window" in primary["text"]
     assert "Attachments (metadata only)" in primary["text"]
     assert "Attachment kinds: archive, image, log" in primary["text"]
@@ -256,6 +260,9 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["attachment_log_count"] == 1
     assert primary["metadata"]["has_attachments"] is True
     assert primary["metadata"]["category"] == "Hardware / Printer"
+    assert primary["metadata"]["class_name"] == "Hardware / Printer"
+    assert primary["metadata"]["submission_category"] == "Customer Portal"
+    assert primary["metadata"]["resolution_category"] == "Completed Successfully"
     assert primary["metadata"]["public_log_count"] == 3
     assert primary["metadata"]["internal_log_count"] == 1
     assert primary["metadata"]["public_actor_count"] == 2
