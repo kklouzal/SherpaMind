@@ -532,6 +532,12 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     summary = get_retrieval_readiness_summary(db)
     assert summary["chunk_count"] == 2
     assert summary["document_count"] == 2
+    assert summary["coverage_scope"] == {
+        "mode": "full",
+        "sampled_ticket_count": 2,
+        "sampled_document_count": 2,
+        "sampled_chunk_count": 2,
+    }
     assert summary["chunk_quality"]["max_chunk_chars"] == len("numeric fallback labels")
     assert summary["document_chunk_topology"]["avg_chunks_per_document"] == 1.0
     assert summary["document_chunk_topology"]["single_chunk_document_count"] == 2
@@ -714,6 +720,33 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["materialization"]["chunk_rows_at_current_version"] == 2
     assert summary["vector_index"]["total_chunk_rows"] == 2
     assert summary["content_hash_summary"]["present_count"] == 2
+
+
+def test_get_retrieval_readiness_summary_limit_scopes_source_coverage_to_sample(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    seed(db)
+
+    summary = get_retrieval_readiness_summary(db, limit=1)
+
+    assert summary["chunk_count"] == 1
+    assert summary["document_count"] == 1
+    assert summary["coverage_scope"] == {
+        "mode": "sampled",
+        "sampled_ticket_count": 1,
+        "sampled_document_count": 1,
+        "sampled_chunk_count": 1,
+    }
+    assert summary["source_metadata_coverage"]["ticket_number"]["scope_mode"] == "sampled"
+    assert summary["source_metadata_coverage"]["ticket_number"]["scope_ticket_count"] == 1
+    assert summary["source_metadata_coverage"]["ticket_number"]["source_documents"] == 1
+    assert summary["source_metadata_coverage"]["ticket_number"]["materialized_documents"] == 1
+    assert summary["source_metadata_coverage"]["ticket_number"]["promotion_gap_documents"] == 0
+    assert summary["source_metadata_coverage"]["ticket_number"]["status"] == "materialized"
+    assert not any(
+        field["field"] == "ticket_number"
+        for field in summary["source_backed_metadata"]["fields_with_promotion_gap"]
+    )
+
 
 
 def test_source_metadata_coverage_treats_invalid_email_domains_as_upstream_quality_not_promotion_gap(tmp_path: Path) -> None:

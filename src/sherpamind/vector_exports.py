@@ -819,14 +819,24 @@ SOURCE_METADATA_FIELDS: dict[str, dict[str, Any]] = {
 }
 
 
+def _restrict_ids_to_scope(ids: set[str], scope_ticket_ids: set[str] | None) -> set[str]:
+    if scope_ticket_ids is None:
+        return ids
+    return {ticket_id for ticket_id in ids if ticket_id in scope_ticket_ids}
+
+
+
 def _get_source_metadata_coverage(
     db_path: Path,
     document_metadata_coverage: dict[str, dict[str, float]],
     metadata_coverage: dict[str, dict[str, float]],
     total_documents: int,
     total_chunks: int,
+    scope_ticket_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     summary: dict[str, Any] = {}
+    scope_mode = "sampled" if scope_ticket_ids is not None else "full"
+    scope_ticket_count = len(scope_ticket_ids) if scope_ticket_ids is not None else None
     with connect(db_path) as conn:
         for field, config in SOURCE_METADATA_FIELDS.items():
             ticket_config = config.get("tickets")
@@ -840,25 +850,25 @@ def _get_source_metadata_coverage(
                     kind=ticket_config.get("kind", "text"),
                     transform=ticket_config.get("transform"),
                 )
-                ticket_rows = len(ticket_counts["normalized_ids"])
-                raw_ticket_rows = len(ticket_counts["present_ids"])
-                invalid_ticket_rows = len(ticket_counts["invalid_ids"])
-                ticket_source_ids = set(ticket_counts["normalized_ids"])
+                ticket_source_ids = _restrict_ids_to_scope(set(ticket_counts["normalized_ids"]), scope_ticket_ids)
+                raw_ticket_source_ids = _restrict_ids_to_scope(set(ticket_counts["present_ids"]), scope_ticket_ids)
+                invalid_ticket_source_ids = _restrict_ids_to_scope(set(ticket_counts["invalid_ids"]), scope_ticket_ids)
+                ticket_rows = len(ticket_source_ids)
+                raw_ticket_rows = len(raw_ticket_source_ids)
+                invalid_ticket_rows = len(invalid_ticket_source_ids)
             else:
                 ticket_clause = _json_presence_clause(
                     ticket_config.get("paths", []),
                     kind=ticket_config.get("kind", "text"),
                 ) if ticket_config else "0"
-                counts = conn.execute(
-                    f"SELECT COUNT(DISTINCT id) AS row_count FROM tickets WHERE {ticket_clause}"
-                ).fetchone()
-                ticket_rows = int(counts["row_count"] or 0)
-                raw_ticket_rows = ticket_rows
-                invalid_ticket_rows = 0
                 ticket_source_ids = {
                     str(row["id"])
                     for row in conn.execute(f"SELECT DISTINCT id FROM tickets WHERE {ticket_clause}").fetchall()
                 } if ticket_config else set()
+                ticket_source_ids = _restrict_ids_to_scope(ticket_source_ids, scope_ticket_ids)
+                ticket_rows = len(ticket_source_ids)
+                raw_ticket_rows = ticket_rows
+                invalid_ticket_rows = 0
 
             if detail_config and detail_config.get("transform"):
                 detail_counts = _count_transformed_source_rows(
@@ -869,25 +879,25 @@ def _get_source_metadata_coverage(
                     kind=detail_config.get("kind", "text"),
                     transform=detail_config.get("transform"),
                 )
-                detail_rows = len(detail_counts["normalized_ids"])
-                raw_detail_rows = len(detail_counts["present_ids"])
-                invalid_detail_rows = len(detail_counts["invalid_ids"])
-                detail_source_ids = set(detail_counts["normalized_ids"])
+                detail_source_ids = _restrict_ids_to_scope(set(detail_counts["normalized_ids"]), scope_ticket_ids)
+                raw_detail_source_ids = _restrict_ids_to_scope(set(detail_counts["present_ids"]), scope_ticket_ids)
+                invalid_detail_source_ids = _restrict_ids_to_scope(set(detail_counts["invalid_ids"]), scope_ticket_ids)
+                detail_rows = len(detail_source_ids)
+                raw_detail_rows = len(raw_detail_source_ids)
+                invalid_detail_rows = len(invalid_detail_source_ids)
             else:
                 detail_clause = _json_presence_clause(
                     detail_config.get("paths", []),
                     kind=detail_config.get("kind", "text"),
                 ) if detail_config else "0"
-                counts = conn.execute(
-                    f"SELECT COUNT(DISTINCT ticket_id) AS row_count FROM ticket_details WHERE {detail_clause}"
-                ).fetchone()
-                detail_rows = int(counts["row_count"] or 0)
-                raw_detail_rows = detail_rows
-                invalid_detail_rows = 0
                 detail_source_ids = {
                     str(row["ticket_id"])
                     for row in conn.execute(f"SELECT DISTINCT ticket_id FROM ticket_details WHERE {detail_clause}").fetchall()
                 } if detail_config else set()
+                detail_source_ids = _restrict_ids_to_scope(detail_source_ids, scope_ticket_ids)
+                detail_rows = len(detail_source_ids)
+                raw_detail_rows = detail_rows
+                invalid_detail_rows = 0
 
             source_documents = len(ticket_source_ids | detail_source_ids)
             materialized_documents = int(document_metadata_coverage.get(field, {}).get("documents", 0) or 0)
@@ -915,6 +925,8 @@ def _get_source_metadata_coverage(
                 "materialized_chunk_ratio": round((materialized_chunks / total_chunks), 4) if total_chunks else 0.0,
                 "promotion_gap_documents": max(source_documents - materialized_documents, 0),
                 "status": status,
+                "scope_mode": scope_mode,
+                "scope_ticket_count": scope_ticket_count,
             }
     return summary
 
@@ -1457,12 +1469,14 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
             for key, value in sorted(counts.items())
         }
 
+    scope_ticket_ids = {str(row["ticket_id"]) for row in rows if row.get("ticket_id") is not None}
     source_metadata_coverage = _get_source_metadata_coverage(
         db_path,
         document_metadata_coverage=document_metadata_coverage,
         metadata_coverage=metadata_coverage,
         total_documents=len(document_ids),
         total_chunks=chunk_count,
+        scope_ticket_ids=scope_ticket_ids if limit is not None else None,
     )
     source_backed_metadata = _build_source_backed_metadata_summary(source_metadata_coverage)
     freshness_summary = _build_freshness_summary(rows)
@@ -1504,6 +1518,12 @@ def get_retrieval_readiness_summary(db_path: Path, limit: int | None = None) -> 
         "chunk_count": chunk_count,
         "document_count": len(document_ids),
         "limit_applied": limit,
+        "coverage_scope": {
+            "mode": "sampled" if limit is not None else "full",
+            "sampled_ticket_count": len(scope_ticket_ids),
+            "sampled_document_count": len(document_ids),
+            "sampled_chunk_count": chunk_count,
+        },
         "freshness": freshness_summary,
         "chunk_quality": {
             "avg_chunk_chars": round(sum(chunk_lengths) / chunk_count, 1) if chunk_count else 0.0,
