@@ -114,7 +114,7 @@ SherpaMind currently covers five major areas:
    - builds and queries a local vector index
 
 4. **Operator and OpenClaw observability**
-   - reports dataset counts and freshness
+   - reports dataset counts and sync freshness health, including per-lane staleness/missing/error state
    - reports enrichment coverage and retrieval coverage
    - surfaces detail-gap pressure across under-covered accounts, categories, and technicians so enrichment breadth can be steered deliberately instead of guessed
    - reports retrieval-metadata readiness across the materialized document layer

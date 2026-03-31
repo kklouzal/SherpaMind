@@ -11,6 +11,39 @@ from .paths import ensure_path_layout
 from .sync_state import get_json_state
 
 
+def _markdown_table(rows: list[dict], columns: list[tuple[str, str]]) -> str:
+    if not rows:
+        return "_No data available._"
+    header = "| " + " | ".join(label for _, label in columns) + " |"
+    sep = "| " + " | ".join("---" for _ in columns) + " |"
+    body = [
+        "| " + " | ".join(str(row.get(key, "")) for key, _ in columns) + " |"
+        for row in rows
+    ]
+    return "\n".join([header, sep, *body])
+
+
+def _format_hours(value: float | None) -> str:
+    if value is None:
+        return ""
+    return f"{float(value):.1f}"
+
+
+def _sync_lane_rows(freshness: dict) -> list[dict]:
+    rows: list[dict] = []
+    for mode, lane in (freshness.get("lanes") or {}).items():
+        rows.append({
+            "mode": mode,
+            "freshness_status": lane.get("freshness_status", "unknown"),
+            "latest_status": ((lane.get("latest_run") or {}).get("status") or ""),
+            "latest_finished_age_hours": _format_hours(lane.get("latest_finished_age_hours")),
+            "last_success_age_hours": _format_hours(lane.get("last_success_age_hours")),
+            "expected_max_age_hours": _format_hours(lane.get("expected_max_age_hours")),
+            "consecutive_non_success_runs": lane.get("consecutive_non_success_runs", 0),
+        })
+    return rows
+
+
 def generate_runtime_status_artifacts(db_path: Path) -> dict:
     paths = ensure_path_layout()
     runtime_dir = paths.docs_root / "runtime"
@@ -36,6 +69,38 @@ def generate_runtime_status_artifacts(db_path: Path) -> dict:
         "```json",
         json.dumps(coverage, indent=2),
         "```",
+        "",
+        "## Sync freshness summary",
+        _markdown_table([
+            {
+                "overall_status": (freshness.get("summary") or {}).get("overall_status", "unknown"),
+                "healthy_lanes": (freshness.get("summary") or {}).get("healthy_lanes", 0),
+                "stale_lanes": (freshness.get("summary") or {}).get("stale_lanes", 0),
+                "critical_lanes": (freshness.get("summary") or {}).get("critical_lanes", 0),
+                "missing_lanes": (freshness.get("summary") or {}).get("missing_lanes", 0),
+                "running_lanes": (freshness.get("summary") or {}).get("running_lanes", 0),
+                "stalest_success_age_hours": _format_hours((freshness.get("summary") or {}).get("stalest_success_age_hours")),
+            }
+        ], [
+            ("overall_status", "Overall"),
+            ("healthy_lanes", "Healthy"),
+            ("stale_lanes", "Stale"),
+            ("critical_lanes", "Critical"),
+            ("missing_lanes", "Missing"),
+            ("running_lanes", "Running"),
+            ("stalest_success_age_hours", "Stalest Success Age (h)"),
+        ]),
+        "",
+        "## Sync freshness lanes",
+        _markdown_table(_sync_lane_rows(freshness), [
+            ("mode", "Lane"),
+            ("freshness_status", "Freshness"),
+            ("latest_status", "Latest Run"),
+            ("latest_finished_age_hours", "Latest Finish Age (h)"),
+            ("last_success_age_hours", "Last Success Age (h)"),
+            ("expected_max_age_hours", "Expected Max Age (h)"),
+            ("consecutive_non_success_runs", "Consecutive Non-Success"),
+        ]),
         "",
         "## Sync freshness",
         "```json",

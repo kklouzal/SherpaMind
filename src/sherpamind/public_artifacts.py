@@ -198,6 +198,22 @@ def _source_breakdown_rows(source_counts: dict[str, dict[str, Any]]) -> list[dic
     return rows
 
 
+def _sync_freshness_lane_rows(freshness: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for mode, lane in (freshness.get("lanes") or {}).items():
+        rows.append({
+            "lane": mode,
+            "freshness": lane.get("freshness_status", "unknown"),
+            "latest_status": ((lane.get("latest_run") or {}).get("status") or ""),
+            "latest_finish_age_h": _format_number(lane.get("latest_finished_age_hours")),
+            "last_success_age_h": _format_number(lane.get("last_success_age_hours")),
+            "expected_max_age_h": _format_number(lane.get("expected_max_age_hours")),
+            "consecutive_non_success": lane.get("consecutive_non_success_runs", 0),
+        })
+    rows.sort(key=lambda row: row["lane"])
+    return rows
+
+
 def _freshness_status_rows(freshness: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for status, stats in (freshness.get("status_breakdown") or {}).items():
@@ -403,6 +419,43 @@ def generate_public_snapshot(db_path: Path) -> dict:
             ("open_without_detail", "Open Missing Detail"),
             ("warm_closed_without_detail", "Warm Closed Missing Detail"),
         ]),
+        "",
+        "## Sync freshness summary",
+        "",
+        _markdown_table([
+            {
+                "overall_status": (sync_freshness.get("summary") or {}).get("overall_status", "unknown"),
+                "healthy_lanes": (sync_freshness.get("summary") or {}).get("healthy_lanes", 0),
+                "stale_lanes": (sync_freshness.get("summary") or {}).get("stale_lanes", 0),
+                "critical_lanes": (sync_freshness.get("summary") or {}).get("critical_lanes", 0),
+                "missing_lanes": (sync_freshness.get("summary") or {}).get("missing_lanes", 0),
+                "running_lanes": (sync_freshness.get("summary") or {}).get("running_lanes", 0),
+                "stalest_success_age_hours": _format_number((sync_freshness.get("summary") or {}).get("stalest_success_age_hours")),
+            }
+        ], [
+            ("overall_status", "Overall"),
+            ("healthy_lanes", "Healthy"),
+            ("stale_lanes", "Stale"),
+            ("critical_lanes", "Critical"),
+            ("missing_lanes", "Missing"),
+            ("running_lanes", "Running"),
+            ("stalest_success_age_hours", "Stalest Success Age (h)"),
+        ]),
+        "",
+        "## Sync freshness lanes",
+        "",
+        _markdown_table(
+            _sync_freshness_lane_rows(sync_freshness),
+            [
+                ("lane", "Lane"),
+                ("freshness", "Freshness"),
+                ("latest_status", "Latest Run"),
+                ("latest_finish_age_h", "Latest Finish Age (h)"),
+                ("last_success_age_h", "Last Success Age (h)"),
+                ("expected_max_age_h", "Expected Max Age (h)"),
+                ("consecutive_non_success", "Consecutive Non-Success"),
+            ],
+        ),
         "",
         "## Sync freshness",
         "",

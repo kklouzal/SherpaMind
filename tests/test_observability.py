@@ -14,5 +14,7 @@ def test_generate_runtime_status_artifacts(monkeypatch, tmp_path: Path) -> None:
     assert out.exists()
     text = out.read_text()
     assert 'SherpaMind Runtime Status' in text
+    assert 'Sync freshness summary' in text
+    assert 'Sync freshness lanes' in text
     assert 'Vector index status' in text
     assert 'Retrieval readiness' in text
