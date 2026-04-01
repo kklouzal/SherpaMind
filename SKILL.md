@@ -37,13 +37,13 @@ When installed and configured for live use, it can:
 - create a local SQLite database and generated public artifacts
 - create a Python runtime venv under `.SherpaMind/private/runtime/venv`
 - install Python dependencies from PyPI during bootstrap
-- store the SherpaDesk API key locally in `.SherpaMind/private/secrets/sherpadesk_api_key.txt`
+- require the SherpaDesk API key to be provided via the OpenClaw-managed `SHERPADESK_API_KEY` environment surface (the daemon mirrors this from the OpenClaw skill config into its own service env)
 - optionally store a SherpaDesk API user hint in `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
 - store non-secret connection/runtime settings in `.SherpaMind/private/config/settings.env`
 - optionally install and run a **user-level** `systemd` background service
 
 Required live staged credentials/config for real SherpaDesk use:
-- staged API key under `.SherpaMind/private/secrets/sherpadesk_api_key.txt`
+- OpenClaw-managed `SHERPADESK_API_KEY` configured for the `sherpamind` skill
 - staged org/instance settings in `.SherpaMind/private/config/settings.env`
 
 If the user only wants query guidance or offline inspection of an existing local dataset, do not imply that fresh credentials or service installation are unnecessary for live sync.
@@ -148,8 +148,7 @@ Then use this flow from the installed skill bundle root:
    - `python3 scripts/run.py setup`
 4. verify runtime state
    - `python3 scripts/run.py doctor`
-5. stage the SherpaDesk API key
-   - `python3 scripts/run.py stage-api-key --from-file <path-to-token-file>`
+5. ensure the SherpaDesk API key is configured for the OpenClaw `sherpamind` skill so runtime surfaces receive `SHERPADESK_API_KEY`
 6. discover organizations/instances
    - `python3 scripts/run.py discover-orgs`
 7. write the chosen org/instance into non-secret settings
@@ -187,7 +186,6 @@ Use these for setup/maintenance, not routine user queries:
 - `python3 scripts/run.py migrate-legacy-state`
 - `python3 scripts/run.py archive-legacy-state`
 - `python3 scripts/run.py cleanup-legacy-cron`
-- `python3 scripts/run.py stage-api-key --from-file <path-to-token-file>`
 - `python3 scripts/run.py discover-orgs`
 - `python3 scripts/run.py configure --org-key <org> --instance-key <instance>`
 - `python3 scripts/run.py install-service`

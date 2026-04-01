@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from sherpamind.settings import load_settings, stage_api_key, stage_connection_settings
+from sherpamind.settings import load_settings, stage_connection_settings
 
 
 def test_load_settings_reads_request_controls(monkeypatch, tmp_path: Path) -> None:
@@ -64,7 +64,7 @@ def test_load_settings_reads_service_controls(monkeypatch, tmp_path: Path) -> No
     assert settings.cold_closed_bootstrap_pages_per_run == 9
 
 
-def test_staged_settings_and_secrets_are_loaded(monkeypatch, tmp_path: Path) -> None:
+def test_staged_connection_settings_are_loaded_but_api_key_remains_env_only(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
     monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
     monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
@@ -72,16 +72,14 @@ def test_staged_settings_and_secrets_are_loaded(monkeypatch, tmp_path: Path) -> 
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     settings_file = stage_connection_settings(org_key="org1", instance_key="inst1")
-    api_key_file = stage_api_key(api_key="secret")
     assert settings_file.exists()
-    assert api_key_file.exists()
     settings = load_settings()
-    assert settings.api_key == "secret"
+    assert settings.api_key is None
     assert settings.org_key == "org1"
     assert settings.instance_key == "inst1"
 
 
-def test_load_settings_falls_back_to_openclaw_skill_entry(monkeypatch, tmp_path: Path) -> None:
+def test_load_settings_uses_openclaw_skill_entry_only_for_non_key_context(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
     monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
     monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
@@ -103,6 +101,6 @@ def test_load_settings_falls_back_to_openclaw_skill_entry(monkeypatch, tmp_path:
     }))
 
     settings = load_settings()
-    assert settings.api_key == "ui-secret-key"
+    assert settings.api_key is None
     assert settings.org_key == "org-ui"
     assert settings.instance_key == "inst-ui"

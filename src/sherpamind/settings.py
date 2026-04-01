@@ -57,13 +57,6 @@ def _read_key_value_file(path: Path) -> dict[str, str]:
     return values
 
 
-def _read_secret_file(path: Path) -> str | None:
-    if not path.exists():
-        return None
-    value = path.read_text(encoding="utf-8").strip()
-    return value or None
-
-
 def _write_key_value_file(path: Path, values: dict[str, str]) -> None:
     ordered_keys = [
         "SHERPADESK_API_BASE_URL",
@@ -141,36 +134,6 @@ def stage_connection_settings(
     return paths.settings_file
 
 
-def stage_api_key(*, api_key: str | None = None, from_file: Path | None = None) -> Path:
-    paths = ensure_path_layout()
-    value = api_key
-    if from_file is not None:
-        value = from_file.read_text(encoding="utf-8").strip()
-    if value is None:
-        raise ValueError("api_key or from_file is required")
-    paths.api_key_file.write_text(value.strip() + "\n", encoding="utf-8")
-    try:
-        paths.api_key_file.chmod(0o600)
-    except OSError:
-        pass
-    return paths.api_key_file
-
-
-def stage_api_user(*, api_user: str | None = None, from_file: Path | None = None) -> Path:
-    paths = ensure_path_layout()
-    value = api_user
-    if from_file is not None:
-        value = from_file.read_text(encoding="utf-8").strip()
-    if value is None:
-        raise ValueError("api_user or from_file is required")
-    paths.api_user_file.write_text(value.strip() + "\n", encoding="utf-8")
-    try:
-        paths.api_user_file.chmod(0o600)
-    except OSError:
-        pass
-    return paths.api_user_file
-
-
 def load_settings() -> Settings:
     paths = ensure_path_layout()
     file_values = _read_key_value_file(paths.settings_file)
@@ -178,8 +141,8 @@ def load_settings() -> Settings:
     seed_max_pages_raw = _env_or_file("SHERPAMIND_SEED_MAX_PAGES", file_values)
     return Settings(
         api_base_url=_env_or_file("SHERPADESK_API_BASE_URL", file_values, openclaw_skill_values.get("SHERPADESK_API_BASE_URL") or "https://api.sherpadesk.com") or "https://api.sherpadesk.com",
-        api_key=os.getenv("SHERPADESK_API_KEY") or _read_secret_file(paths.api_key_file) or openclaw_skill_values.get("SHERPADESK_API_KEY"),
-        api_user=os.getenv("SHERPADESK_API_USER") or _read_secret_file(paths.api_user_file) or openclaw_skill_values.get("SHERPADESK_API_USER"),
+        api_key=os.getenv("SHERPADESK_API_KEY"),
+        api_user=os.getenv("SHERPADESK_API_USER") or openclaw_skill_values.get("SHERPADESK_API_USER"),
         org_key=_env_or_file("SHERPADESK_ORG_KEY", file_values, openclaw_skill_values.get("SHERPADESK_ORG_KEY")),
         instance_key=_env_or_file("SHERPADESK_INSTANCE_KEY", file_values, openclaw_skill_values.get("SHERPADESK_INSTANCE_KEY")),
         db_path=paths.db_path,

@@ -12,6 +12,18 @@ from .paths import ensure_path_layout
 SERVICE_NAME = "sherpamind.service"
 
 
+def _read_openclaw_skill_entry() -> dict[str, str]:
+    config_path = Path.home() / ".openclaw" / "openclaw.json"
+    if not config_path.exists():
+        return {}
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    entry = (((data.get("skills") or {}).get("entries") or {}).get("sherpamind") or {})
+    return entry if isinstance(entry, dict) else {}
+
+
 @dataclass
 class ServiceCommandResult:
     status: str
@@ -35,6 +47,17 @@ def unit_contents() -> str:
     paths = ensure_path_layout()
     repo = _repo_root()
     python = paths.runtime_venv / "bin" / "python"
+    skill_entry = _read_openclaw_skill_entry()
+    env_lines = [
+        f"Environment=SHERPAMIND_WORKSPACE_ROOT={paths.workspace_root}",
+    ]
+    api_key = skill_entry.get("apiKey")
+    if isinstance(api_key, str) and api_key.strip():
+        env_lines.append(f"Environment=SHERPADESK_API_KEY={api_key.strip()}")
+    api_user = skill_entry.get("apiUser")
+    if isinstance(api_user, str) and api_user.strip():
+        env_lines.append(f"Environment=SHERPADESK_API_USER={api_user.strip()}")
+    env_block = "\n".join(env_lines)
     return f"""[Unit]
 Description=SherpaMind background sync service
 After=default.target
@@ -42,7 +65,7 @@ After=default.target
 [Service]
 Type=simple
 WorkingDirectory={repo}
-Environment=SHERPAMIND_WORKSPACE_ROOT={paths.workspace_root}
+{env_block}
 ExecStart={python} -m sherpamind.cli service-run
 Restart=always
 RestartSec=10

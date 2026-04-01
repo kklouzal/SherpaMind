@@ -51,7 +51,7 @@ from .ingest import (
     sync_hot_open_tickets,
     sync_warm_closed_tickets,
 )
-from .settings import load_settings, stage_api_key, stage_api_user, stage_connection_settings
+from .settings import load_settings, stage_connection_settings
 from .summaries import get_account_summary, get_technician_summary, get_ticket_summary
 from .vector_exports import export_embedding_manifest, export_embedding_ready_chunks, get_retrieval_readiness_summary
 from .vector_index import build_vector_index, get_vector_index_status, search_vector_index
@@ -74,7 +74,7 @@ def _json_ready(value):
 def _build_client() -> SherpaDeskClient:
     settings = load_settings()
     if not settings.api_key:
-        raise typer.BadParameter("SherpaDesk API key is required for live API commands. Stage it in .SherpaMind/private/secrets/sherpadesk_api_key.txt or use `stage-api-key`.")
+        raise typer.BadParameter("SherpaDesk API key is required for live API commands. Configure the OpenClaw `sherpamind` skill so runtime provides SHERPADESK_API_KEY.")
     return SherpaDeskClient(
         api_base_url=settings.api_base_url,
         api_key=settings.api_key,
@@ -165,26 +165,8 @@ def configure(
                 "SHERPADESK_INSTANCE_KEY": instance_key,
             }.items() if value is not None
         ],
-        "note": "Non-secret settings were updated. Stage secrets separately under .SherpaMind/private/secrets/.",
+        "note": "Non-secret settings were updated. Configure the OpenClaw `sherpamind` skill for the API key separately.",
     }, indent=2))
-
-
-@app.command("stage-api-key")
-def stage_api_key_cmd(
-    from_file: Path | None = None,
-    value: str | None = None,
-) -> None:
-    secret_path = stage_api_key(api_key=value, from_file=from_file)
-    print(json.dumps({"status": "ok", "api_key_file": str(secret_path)}, indent=2))
-
-
-@app.command("stage-api-user")
-def stage_api_user_cmd(
-    from_file: Path | None = None,
-    value: str | None = None,
-) -> None:
-    secret_path = stage_api_user(api_user=value, from_file=from_file)
-    print(json.dumps({"status": "ok", "api_user_file": str(secret_path)}, indent=2))
 
 
 @app.command("doctor")
