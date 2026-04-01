@@ -6,7 +6,17 @@ from pathlib import Path
 from typing import Any
 
 from .client import SherpaDeskClient
-from .db import enqueue_alert, initialize_db, now_iso, upsert_tickets
+from .db import (
+    enqueue_alert,
+    get_ticket_alert_state,
+    initialize_db,
+    mark_new_ticket_alert_sent,
+    mark_ticket_closed_confirmed,
+    mark_ticket_open_missing,
+    mark_ticket_open_seen,
+    now_iso,
+    upsert_tickets,
+)
 from .paths import ensure_path_layout
 from .settings import Settings
 from .sync_state import set_json_state
@@ -84,30 +94,40 @@ def _enqueue_detected_alerts(settings: Settings, new_tickets: list[dict[str, Any
             "new_ticket_alert_enqueues": new_results,
             "ticket_update_alert_enqueues": update_results,
         }
+
     if allow_new_ticket_alerts and settings.new_ticket_alerts_enabled:
         for ticket in new_tickets:
-            dedupe_key = f"new_ticket:{ticket.get('id')}"
-            new_results.append(
-                enqueue_alert(
-                    settings.db_path,
-                    alert_type="new_ticket",
-                    ticket_id=str(ticket.get("id")),
-                    dedupe_key=dedupe_key,
-                    payload=_ticket_event_snapshot(ticket),
-                    priority=10,
-                )
+            state = get_ticket_alert_state(settings.db_path, str(ticket.get("id"))) or {}
+            if state.get("open_alert_sent_at") and state.get("is_currently_monitored_open"):
+                continue
+            dedupe_key = f"new_ticket:{ticket.get('id')}:{int(state.get('open_cycle_id') or 1)}"
+            result = enqueue_alert(
+                settings.db_path,
+                alert_type="new_ticket",
+                ticket_id=str(ticket.get("id")),
+                dedupe_key=dedupe_key,
+                payload=_ticket_event_snapshot(ticket),
+                priority=10,
             )
+            new_results.append(result)
+            if result.get("status") == "enqueued":
+                mark_new_ticket_alert_sent(settings.db_path, str(ticket.get("id")))
+
     if settings.ticket_update_alerts_enabled:
         for ticket in changed_tickets:
             if ticket.get("is_new_user_post") and not ticket.get("is_new_tech_post"):
-                dedupe_key = f"ticket_update:{ticket.get('id')}:{ticket.get('updated_time') or 'unknown'}"
+                state = get_ticket_alert_state(settings.db_path, str(ticket.get("id"))) or {}
+                event_key = str(ticket.get("updated_time") or "unknown")
+                if state.get("last_non_tech_alerted_key") == event_key:
+                    continue
+                dedupe_key = f"ticket_update:{ticket.get('id')}:{event_key}"
                 update_results.append(
                     enqueue_alert(
                         settings.db_path,
                         alert_type="ticket_update",
                         ticket_id=str(ticket.get("id")),
                         dedupe_key=dedupe_key,
-                        payload=_ticket_event_snapshot(ticket),
+                        payload={**_ticket_event_snapshot(ticket), "event_key": event_key},
                         priority=20,
                     )
                 )
@@ -150,8 +170,15 @@ def _watch_ticket_set(settings: Settings, *, path: str, extra_params: dict[str, 
     synced_at = now_iso()
     upsert_tickets(settings.db_path, tickets, synced_at=synced_at)
 
+    if state_key == "watch.last_state":
+        for ticket in tickets:
+            mark_ticket_open_seen(settings.db_path, ticket)
+
     prior_state = _load_watch_state(state_path)
     new_tickets, changed_tickets, new_ids, removed_ids, current_snapshot = _detect_ticket_changes(tickets, prior_state)
+    if state_key == "watch.last_state":
+        for removed_id in removed_ids:
+            mark_ticket_open_missing(settings.db_path, str(removed_id))
     baseline_only = not bool(prior_state.get("known_open_ticket_ids"))
     enqueue_results = _enqueue_detected_alerts(
         settings,
@@ -160,6 +187,10 @@ def _watch_ticket_set(settings: Settings, *, path: str, extra_params: dict[str, 
         allow_new_ticket_alerts=(state_key == "watch.last_state"),
         baseline_only=baseline_only,
     )
+
+    if state_key == "watch.warm_state":
+        for ticket in tickets:
+            mark_ticket_closed_confirmed(settings.db_path, str(ticket.get("id")), status=ticket.get("status"), updated_time=ticket.get("updated_time"))
 
     next_state = {
         "known_open_ticket_ids": sorted(int(ticket["id"]) for ticket in tickets),

@@ -226,6 +226,21 @@ CREATE TABLE IF NOT EXISTS worker_leases (
     lease_expires_at TEXT NOT NULL,
     notes TEXT
 );
+
+CREATE TABLE IF NOT EXISTS ticket_alert_state (
+    ticket_id TEXT PRIMARY KEY,
+    is_currently_monitored_open INTEGER NOT NULL DEFAULT 0,
+    open_cycle_id INTEGER NOT NULL DEFAULT 0,
+    open_alert_sent_at TEXT,
+    last_seen_open_at TEXT,
+    missing_open_polls INTEGER NOT NULL DEFAULT 0,
+    close_confirmed_at TEXT,
+    last_non_tech_event_key TEXT,
+    last_non_tech_alerted_key TEXT,
+    last_status TEXT,
+    last_updated_time TEXT,
+    updated_at TEXT NOT NULL
+);
 """
 
 DB_LOCK_RETRY_DELAY_SECONDS = 90
@@ -1194,3 +1209,142 @@ def get_alert_queue_summary(db_path: Path) -> dict[str, Any]:
     summary = {row['status']: int(row['count'] or 0) for row in rows}
     summary['oldest_pending_created_at'] = oldest_pending['created_at'] if oldest_pending else None
     return summary
+
+
+def get_ticket_alert_state(db_path: Path, ticket_id: str) -> dict[str, Any] | None:
+    initialize_db(db_path)
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM ticket_alert_state WHERE ticket_id = ?", (str(ticket_id),)).fetchone()
+    return dict(row) if row is not None else None
+
+
+def upsert_ticket_alert_state(db_path: Path, ticket_id: str, **fields: Any) -> dict[str, Any]:
+    initialize_db(db_path)
+    ticket_id = str(ticket_id)
+    updated_at = now_iso()
+
+    def _operation() -> dict[str, Any]:
+        with connect(db_path) as conn:
+            current = conn.execute("SELECT * FROM ticket_alert_state WHERE ticket_id = ?", (ticket_id,)).fetchone()
+            values = dict(current) if current is not None else {
+                'ticket_id': ticket_id,
+                'is_currently_monitored_open': 0,
+                'open_cycle_id': 0,
+                'open_alert_sent_at': None,
+                'last_seen_open_at': None,
+                'missing_open_polls': 0,
+                'close_confirmed_at': None,
+                'last_non_tech_event_key': None,
+                'last_non_tech_alerted_key': None,
+                'last_status': None,
+                'last_updated_time': None,
+                'updated_at': updated_at,
+            }
+            values.update(fields)
+            values['ticket_id'] = ticket_id
+            values['updated_at'] = updated_at
+            conn.execute(
+                """
+                INSERT INTO ticket_alert_state(
+                    ticket_id, is_currently_monitored_open, open_cycle_id, open_alert_sent_at,
+                    last_seen_open_at, missing_open_polls, close_confirmed_at,
+                    last_non_tech_event_key, last_non_tech_alerted_key, last_status,
+                    last_updated_time, updated_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ticket_id) DO UPDATE SET
+                    is_currently_monitored_open=excluded.is_currently_monitored_open,
+                    open_cycle_id=excluded.open_cycle_id,
+                    open_alert_sent_at=excluded.open_alert_sent_at,
+                    last_seen_open_at=excluded.last_seen_open_at,
+                    missing_open_polls=excluded.missing_open_polls,
+                    close_confirmed_at=excluded.close_confirmed_at,
+                    last_non_tech_event_key=excluded.last_non_tech_event_key,
+                    last_non_tech_alerted_key=excluded.last_non_tech_alerted_key,
+                    last_status=excluded.last_status,
+                    last_updated_time=excluded.last_updated_time,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    values['ticket_id'],
+                    int(bool(values['is_currently_monitored_open'])),
+                    int(values['open_cycle_id'] or 0),
+                    values['open_alert_sent_at'],
+                    values['last_seen_open_at'],
+                    int(values['missing_open_polls'] or 0),
+                    values['close_confirmed_at'],
+                    values['last_non_tech_event_key'],
+                    values['last_non_tech_alerted_key'],
+                    values['last_status'],
+                    values['last_updated_time'],
+                    values['updated_at'],
+                ),
+            )
+            conn.commit()
+            row = conn.execute("SELECT * FROM ticket_alert_state WHERE ticket_id = ?", (ticket_id,)).fetchone()
+            return dict(row)
+
+    return run_with_db_lock_retries(_operation)
+
+
+def mark_ticket_open_seen(db_path: Path, ticket: dict[str, Any]) -> dict[str, Any]:
+    ticket_id = str(ticket.get('id'))
+    current = get_ticket_alert_state(db_path, ticket_id)
+    is_monitored = bool((current or {}).get('is_currently_monitored_open'))
+    open_cycle_id = int((current or {}).get('open_cycle_id') or 0)
+    if not is_monitored:
+        open_cycle_id += 1
+    return upsert_ticket_alert_state(
+        db_path,
+        ticket_id,
+        is_currently_monitored_open=1,
+        open_cycle_id=open_cycle_id,
+        last_seen_open_at=now_iso(),
+        missing_open_polls=0,
+        close_confirmed_at=None,
+        last_status=ticket.get('status'),
+        last_updated_time=ticket.get('updated_time'),
+    )
+
+
+def mark_ticket_open_missing(db_path: Path, ticket_id: str) -> dict[str, Any] | None:
+    current = get_ticket_alert_state(db_path, str(ticket_id))
+    if current is None:
+        return None
+    return upsert_ticket_alert_state(
+        db_path,
+        str(ticket_id),
+        missing_open_polls=int(current.get('missing_open_polls') or 0) + 1,
+    )
+
+
+def mark_ticket_closed_confirmed(db_path: Path, ticket_id: str, *, status: str | None = None, updated_time: str | None = None) -> dict[str, Any]:
+    current = get_ticket_alert_state(db_path, str(ticket_id)) or {}
+    return upsert_ticket_alert_state(
+        db_path,
+        str(ticket_id),
+        is_currently_monitored_open=0,
+        missing_open_polls=0,
+        close_confirmed_at=now_iso(),
+        last_status=status or current.get('last_status'),
+        last_updated_time=updated_time or current.get('last_updated_time'),
+    )
+
+
+def mark_new_ticket_alert_sent(db_path: Path, ticket_id: str) -> dict[str, Any]:
+    current = get_ticket_alert_state(db_path, str(ticket_id)) or {}
+    return upsert_ticket_alert_state(
+        db_path,
+        str(ticket_id),
+        open_alert_sent_at=now_iso(),
+        is_currently_monitored_open=1,
+        open_cycle_id=int(current.get('open_cycle_id') or 1),
+    )
+
+
+def mark_ticket_update_alert_sent(db_path: Path, ticket_id: str, event_key: str) -> dict[str, Any]:
+    return upsert_ticket_alert_state(
+        db_path,
+        str(ticket_id),
+        last_non_tech_alerted_key=event_key,
+        last_non_tech_event_key=event_key,
+    )

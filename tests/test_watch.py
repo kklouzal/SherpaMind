@@ -80,6 +80,10 @@ def test_watch_new_tickets_enqueues_openclaw_alert_for_new_ticket(tmp_path: Path
     assert len(enqueues) == 1
     assert enqueues[0]["status"] == "enqueued"
 
+    result2 = watch_new_tickets(settings)
+    assert result2.status == "ok"
+    assert result2.stats["new_ticket_alert_enqueues"] == []
+
 
 def test_watch_new_tickets_enqueues_user_update_alert_only_for_non_tech_updates(tmp_path: Path, monkeypatch) -> None:
     settings = make_settings(tmp_path)
@@ -99,3 +103,7 @@ def test_watch_new_tickets_enqueues_user_update_alert_only_for_non_tech_updates(
     enqueues = result.stats["ticket_update_alert_enqueues"]
     assert len(enqueues) == 1
     assert enqueues[0]["status"] == "enqueued"
+
+    result2 = watch_new_tickets(settings)
+    assert result2.status == "ok"
+    assert result2.stats["ticket_update_alert_enqueues"] == []

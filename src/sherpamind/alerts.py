@@ -6,7 +6,7 @@ from typing import Any
 from urllib import request, error
 
 from .client import SherpaDeskClient
-from .db import mark_alert_failed, mark_alert_sent, now_iso, upsert_ticket_details
+from .db import mark_alert_failed, mark_alert_sent, mark_ticket_update_alert_sent, now_iso, upsert_ticket_details
 from .settings import Settings
 from .summaries import get_ticket_summary
 
@@ -226,5 +226,9 @@ def finalize_queued_alert(settings: Settings, alert_row: dict[str, Any], result:
     alert_id = int(alert_row["id"])
     if result.status == "ok":
         mark_alert_sent(settings.db_path, alert_id)
+        if str(alert_row.get("alert_type") or "") == "ticket_update":
+            payload = json.loads(alert_row.get("payload_json") or "{}") if alert_row.get("payload_json") else {}
+            event_key = payload.get("event_key") or str(alert_row.get("ticket_id"))
+            mark_ticket_update_alert_sent(settings.db_path, str(alert_row.get("ticket_id")), str(event_key))
     else:
         mark_alert_failed(settings.db_path, alert_id, result.message or result.status, retry_after_seconds=retry_after_seconds)

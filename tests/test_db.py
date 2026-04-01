@@ -7,7 +7,12 @@ from sherpamind.db import (
     cleanup_stale_ingest_runs,
     connect,
     finish_ingest_run,
+    get_ticket_alert_state,
     initialize_db,
+    mark_new_ticket_alert_sent,
+    mark_ticket_closed_confirmed,
+    mark_ticket_open_seen,
+    mark_ticket_update_alert_sent,
     replace_ticket_document_chunks,
     replace_ticket_documents,
     start_ingest_run,
@@ -373,3 +378,23 @@ def test_start_ingest_run_abandons_older_same_mode_running_rows(tmp_path: Path) 
     assert rows[0]["finished_at"] is not None
     assert "superseded by newer enrich_priority_ticket_details run" in rows[0]["notes"]
     assert rows[1]["status"] == "running"
+
+
+def test_ticket_alert_state_tracks_open_cycle_and_alert_markers(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+    state1 = mark_ticket_open_seen(db, {"id": 101, "status": "Open", "updated_time": "2026-04-01T10:00:00Z"})
+    assert state1["is_currently_monitored_open"] == 1
+    assert state1["open_cycle_id"] == 1
+    state2 = mark_new_ticket_alert_sent(db, "101")
+    assert state2["open_alert_sent_at"] is not None
+    state3 = mark_ticket_update_alert_sent(db, "101", "evt-1")
+    assert state3["last_non_tech_alerted_key"] == "evt-1"
+    state4 = mark_ticket_closed_confirmed(db, "101", status="Closed", updated_time="2026-04-01T11:00:00Z")
+    assert state4["is_currently_monitored_open"] == 0
+    state5 = mark_ticket_open_seen(db, {"id": 101, "status": "Open", "updated_time": "2026-04-01T12:00:00Z"})
+    assert state5["open_cycle_id"] == 2
+    assert state5["is_currently_monitored_open"] == 1
+    loaded = get_ticket_alert_state(db, "101")
+    assert loaded is not None
+    assert loaded["open_cycle_id"] == 2
