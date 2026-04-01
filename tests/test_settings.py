@@ -1,10 +1,16 @@
+import json
 from pathlib import Path
 
 from sherpamind.settings import load_settings, stage_api_key, stage_connection_settings
 
 
 def test_load_settings_reads_request_controls(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
+    monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_INSTANCE_KEY", raising=False)
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS", "3.5")
     monkeypatch.setenv("SHERPAMIND_REQUEST_TIMEOUT_SECONDS", "45")
     settings = load_settings()
@@ -13,14 +19,24 @@ def test_load_settings_reads_request_controls(monkeypatch, tmp_path: Path) -> No
 
 
 def test_load_settings_defaults_paths(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
+    monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_INSTANCE_KEY", raising=False)
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     settings = load_settings()
     assert settings.db_path == tmp_path / ".SherpaMind" / "private" / "data" / "sherpamind.sqlite3"
     assert settings.watch_state_path == tmp_path / ".SherpaMind" / "private" / "state" / "watch_state.json"
 
 
 def test_load_settings_reads_seed_controls(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
+    monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_INSTANCE_KEY", raising=False)
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("SHERPAMIND_SEED_PAGE_SIZE", "50")
     monkeypatch.setenv("SHERPAMIND_SEED_MAX_PAGES", "3")
     settings = load_settings()
@@ -29,7 +45,12 @@ def test_load_settings_reads_seed_controls(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_load_settings_reads_service_controls(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
+    monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_INSTANCE_KEY", raising=False)
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("SHERPAMIND_SERVICE_HOT_OPEN_EVERY_SECONDS", "123")
     monkeypatch.setenv("SHERPAMIND_SERVICE_ENRICHMENT_LIMIT", "77")
     monkeypatch.setenv("SHERPAMIND_SERVICE_COLD_BOOTSTRAP_EVERY_SECONDS", "456")
@@ -44,7 +65,12 @@ def test_load_settings_reads_service_controls(monkeypatch, tmp_path: Path) -> No
 
 
 def test_staged_settings_and_secrets_are_loaded(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
+    monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_INSTANCE_KEY", raising=False)
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     settings_file = stage_connection_settings(org_key="org1", instance_key="inst1")
     api_key_file = stage_api_key(api_key="secret")
     assert settings_file.exists()
@@ -53,3 +79,30 @@ def test_staged_settings_and_secrets_are_loaded(monkeypatch, tmp_path: Path) -> 
     assert settings.api_key == "secret"
     assert settings.org_key == "org1"
     assert settings.instance_key == "inst1"
+
+
+def test_load_settings_falls_back_to_openclaw_skill_entry(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
+    monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_INSTANCE_KEY", raising=False)
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    (home / ".openclaw").mkdir(parents=True, exist_ok=True)
+    (home / ".openclaw" / "openclaw.json").write_text(json.dumps({
+        "skills": {
+            "entries": {
+                "sherpamind": {
+                    "apiKey": "ui-secret-key",
+                    "orgKey": "org-ui",
+                    "instanceKey": "inst-ui"
+                }
+            }
+        }
+    }))
+
+    settings = load_settings()
+    assert settings.api_key == "ui-secret-key"
+    assert settings.org_key == "org-ui"
+    assert settings.instance_key == "inst-ui"

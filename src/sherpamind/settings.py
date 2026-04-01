@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import json
 import os
 
 from .paths import ensure_path_layout
@@ -88,6 +89,36 @@ def _env_or_file(key: str, file_values: dict[str, str], default: str | None = No
     return os.getenv(key) or file_values.get(key) or default
 
 
+def _read_openclaw_skill_entry() -> dict[str, str]:
+    config_path = Path.home() / ".openclaw" / "openclaw.json"
+    if not config_path.exists():
+        return {}
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    entry = (((data.get("skills") or {}).get("entries") or {}).get("sherpamind") or {})
+    if not isinstance(entry, dict):
+        return {}
+    values: dict[str, str] = {}
+    api_key = entry.get("apiKey")
+    if isinstance(api_key, str) and api_key.strip():
+        values["SHERPADESK_API_KEY"] = api_key.strip()
+    api_user = entry.get("apiUser")
+    if isinstance(api_user, str) and api_user.strip():
+        values["SHERPADESK_API_USER"] = api_user.strip()
+    org_key = entry.get("orgKey")
+    if isinstance(org_key, str) and org_key.strip():
+        values["SHERPADESK_ORG_KEY"] = org_key.strip()
+    instance_key = entry.get("instanceKey")
+    if isinstance(instance_key, str) and instance_key.strip():
+        values["SHERPADESK_INSTANCE_KEY"] = instance_key.strip()
+    api_base_url = entry.get("apiBaseUrl")
+    if isinstance(api_base_url, str) and api_base_url.strip():
+        values["SHERPADESK_API_BASE_URL"] = api_base_url.strip()
+    return values
+
+
 def stage_connection_settings(
     *,
     api_base_url: str | None = None,
@@ -143,13 +174,14 @@ def stage_api_user(*, api_user: str | None = None, from_file: Path | None = None
 def load_settings() -> Settings:
     paths = ensure_path_layout()
     file_values = _read_key_value_file(paths.settings_file)
+    openclaw_skill_values = _read_openclaw_skill_entry()
     seed_max_pages_raw = _env_or_file("SHERPAMIND_SEED_MAX_PAGES", file_values)
     return Settings(
-        api_base_url=_env_or_file("SHERPADESK_API_BASE_URL", file_values, "https://api.sherpadesk.com") or "https://api.sherpadesk.com",
-        api_key=os.getenv("SHERPADESK_API_KEY") or _read_secret_file(paths.api_key_file),
-        api_user=os.getenv("SHERPADESK_API_USER") or _read_secret_file(paths.api_user_file),
-        org_key=_env_or_file("SHERPADESK_ORG_KEY", file_values),
-        instance_key=_env_or_file("SHERPADESK_INSTANCE_KEY", file_values),
+        api_base_url=_env_or_file("SHERPADESK_API_BASE_URL", file_values, openclaw_skill_values.get("SHERPADESK_API_BASE_URL") or "https://api.sherpadesk.com") or "https://api.sherpadesk.com",
+        api_key=os.getenv("SHERPADESK_API_KEY") or _read_secret_file(paths.api_key_file) or openclaw_skill_values.get("SHERPADESK_API_KEY"),
+        api_user=os.getenv("SHERPADESK_API_USER") or _read_secret_file(paths.api_user_file) or openclaw_skill_values.get("SHERPADESK_API_USER"),
+        org_key=_env_or_file("SHERPADESK_ORG_KEY", file_values, openclaw_skill_values.get("SHERPADESK_ORG_KEY")),
+        instance_key=_env_or_file("SHERPADESK_INSTANCE_KEY", file_values, openclaw_skill_values.get("SHERPADESK_INSTANCE_KEY")),
         db_path=paths.db_path,
         watch_state_path=paths.watch_state_path,
         notify_channel=_env_or_file("SHERPAMIND_NOTIFY_CHANNEL", file_values),
