@@ -75,6 +75,8 @@ def test_build_hook_payload_contains_ticket_triage_context(tmp_path: Path) -> No
     message = payload["message"]
     assert "new SherpaDesk ticket" in message
     assert "INITIAL POST / original user-submitted issue only" in message
+    assert "Use the SherpaMind skill/query surface" in message
+    assert "Seen before:" in message
     assert "Printer offline in front office" in message
     assert "Alice User" in message or "alice@example.com" in message
     assert "Acme Co" in message
@@ -94,5 +96,7 @@ def test_build_ticket_update_payload_allows_broader_history_context(tmp_path: Pa
     message = payload["message"]
     assert "new NON-TECH update" in message
     assert "broader ticket history" in message
+    assert "Use the SherpaMind skill/query surface" in message
+    assert "Seen before:" in message
     assert "recent_logs" in message
     assert "retrieval_metadata" in message
