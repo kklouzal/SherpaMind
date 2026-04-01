@@ -4,7 +4,7 @@ from pathlib import Path
 from sherpamind.service_manager import unit_contents
 
 
-def test_unit_contents_contains_service_run(monkeypatch, tmp_path: Path) -> None:
+def test_unit_contents_contains_worker_run(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
     home = tmp_path / 'home'
     monkeypatch.setenv('HOME', str(home))
@@ -18,9 +18,9 @@ def test_unit_contents_contains_service_run(monkeypatch, tmp_path: Path) -> None
             }
         }
     }))
-    text = unit_contents()
+    text = unit_contents('hot_watch')
     assert 'ExecStart=' in text
-    assert 'service-run' in text
+    assert 'hot-watch-run' in text
     assert 'SHERPAMIND_WORKSPACE_ROOT=' in text
     assert 'EnvironmentFile=' not in text
     assert 'Environment=SHERPADESK_API_KEY=ui-secret-key' in text

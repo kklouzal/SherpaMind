@@ -6,8 +6,7 @@ from typing import Any
 from urllib import request, error
 
 from .client import SherpaDeskClient
-from .db import now_iso, upsert_ticket_details
-from .documents import materialize_ticket_documents
+from .db import mark_alert_failed, mark_alert_sent, now_iso, upsert_ticket_details
 from .settings import Settings
 from .summaries import get_ticket_summary
 
@@ -124,7 +123,6 @@ def _refresh_ticket_context(settings: Settings, ticket_id: str) -> None:
     client = _build_client(settings)
     detail = client.get(f"tickets/{ticket_id}")
     upsert_ticket_details(settings.db_path, [detail], synced_at=now_iso())
-    materialize_ticket_documents(settings.db_path, limit=None)
 
 
 def _post_hook_payload(settings: Settings, ticket_id: str, payload: dict[str, Any]) -> AlertDispatchResult:
@@ -210,3 +208,23 @@ def dispatch_ticket_update_alert(settings: Settings, ticket_id: str) -> AlertDis
 
     payload = _build_ticket_update_payload(settings, str(ticket_id), summary)
     return _post_hook_payload(settings, str(ticket_id), payload)
+
+
+def dispatch_queued_alert(settings: Settings, alert_row: dict[str, Any]) -> AlertDispatchResult:
+    alert_type = str(alert_row.get("alert_type") or "").strip()
+    ticket_id = str(alert_row.get("ticket_id") or "")
+    if not ticket_id:
+        return AlertDispatchResult(status="error", ticket_id="", message="missing_ticket_id")
+    if alert_type == "new_ticket":
+        return dispatch_new_ticket_alert(settings, ticket_id)
+    if alert_type == "ticket_update":
+        return dispatch_ticket_update_alert(settings, ticket_id)
+    return AlertDispatchResult(status="error", ticket_id=ticket_id, message=f"unknown_alert_type:{alert_type}")
+
+
+def finalize_queued_alert(settings: Settings, alert_row: dict[str, Any], result: AlertDispatchResult, *, retry_after_seconds: int = 120) -> None:
+    alert_id = int(alert_row["id"])
+    if result.status == "ok":
+        mark_alert_sent(settings.db_path, alert_id)
+    else:
+        mark_alert_failed(settings.db_path, alert_id, result.message or result.status, retry_after_seconds=retry_after_seconds)

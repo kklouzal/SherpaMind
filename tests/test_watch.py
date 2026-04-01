@@ -61,33 +61,27 @@ def test_watch_new_tickets_tracks_new_and_removed_ids(tmp_path: Path, monkeypatc
     assert saved["known_open_ticket_ids"] == [1, 2]
 
 
-def test_watch_new_tickets_dispatches_openclaw_alert_for_new_ticket(tmp_path: Path, monkeypatch) -> None:
+def test_watch_new_tickets_enqueues_openclaw_alert_for_new_ticket(tmp_path: Path, monkeypatch) -> None:
     settings = make_settings(tmp_path)
     settings = Settings(
         **{**settings.__dict__, "new_ticket_alerts_enabled": True, "openclaw_webhook_url": "http://127.0.0.1:18789/hooks/agent", "new_ticket_alert_channel": "channel:1488924125736079492"}
     )
+    settings.watch_state_path.write_text(json.dumps({"known_open_ticket_ids": [2], "last_watch_at": None, "open_ticket_snapshot": {"2": {"updated_time": "old"}}}))
     rows = [
         {"id": 1, "subject": "New one", "account_name": "Acme", "created_time": "2026-03-19T10:00:00", "updated_time": "2026-03-19T10:01:00", "priority_name": "High", "status": "Open", "is_new_user_post": False, "is_new_tech_post": False, "next_step_date": None},
+        {"id": 2, "subject": "Existing", "account_name": "Acme", "created_time": "2026-03-19T09:00:00", "updated_time": "2026-03-19T09:10:00", "priority_name": "Low", "status": "Open", "is_new_user_post": False, "is_new_tech_post": False, "next_step_date": None},
     ]
-    seen_ticket_ids = []
-
-    class FakeDispatchResult:
-        def __init__(self, ticket_id: str):
-            self.status = "ok"
-            self.ticket_id = ticket_id
-
     monkeypatch.setattr("sherpamind.watch._build_client", lambda settings: FakeClient(rows))
-    monkeypatch.setattr("sherpamind.watch.dispatch_new_ticket_alert", lambda settings, ticket_id: seen_ticket_ids.append(ticket_id) or FakeDispatchResult(ticket_id))
 
     result = watch_new_tickets(settings)
 
     assert result.status == "ok"
-    assert seen_ticket_ids == ["1"]
-    assert result.stats["new_ticket_alerts_enabled"] is True
-    assert result.stats["new_ticket_alert_dispatches"][0]["ticket_id"] == "1"
+    enqueues = result.stats["new_ticket_alert_enqueues"]
+    assert len(enqueues) == 1
+    assert enqueues[0]["status"] == "enqueued"
 
 
-def test_watch_new_tickets_dispatches_user_update_alert_only_for_non_tech_updates(tmp_path: Path, monkeypatch) -> None:
+def test_watch_new_tickets_enqueues_user_update_alert_only_for_non_tech_updates(tmp_path: Path, monkeypatch) -> None:
     settings = make_settings(tmp_path)
     settings.watch_state_path.write_text(json.dumps({"known_open_ticket_ids": [2, 3], "last_watch_at": None, "open_ticket_snapshot": {"2": {"updated_time": "old"}, "3": {"updated_time": "old"}}}))
     settings = Settings(
@@ -97,19 +91,11 @@ def test_watch_new_tickets_dispatches_user_update_alert_only_for_non_tech_update
         {"id": 2, "subject": "User update", "account_name": "Acme", "created_time": "2026-03-19T09:00:00", "updated_time": "2026-03-19T09:10:00", "priority_name": "Low", "status": "Open", "is_new_user_post": True, "is_new_tech_post": False, "next_step_date": None},
         {"id": 3, "subject": "Tech only update", "account_name": "Acme", "created_time": "2026-03-19T09:00:00", "updated_time": "2026-03-19T09:11:00", "priority_name": "Low", "status": "Open", "is_new_user_post": False, "is_new_tech_post": True, "next_step_date": None},
     ]
-    seen_ticket_ids = []
-
-    class FakeDispatchResult:
-        def __init__(self, ticket_id: str):
-            self.status = "ok"
-            self.ticket_id = ticket_id
-
     monkeypatch.setattr("sherpamind.watch._build_client", lambda settings: FakeClient(rows))
-    monkeypatch.setattr("sherpamind.watch.dispatch_ticket_update_alert", lambda settings, ticket_id: seen_ticket_ids.append(ticket_id) or FakeDispatchResult(ticket_id))
 
     result = watch_new_tickets(settings)
 
     assert result.status == "ok"
-    assert seen_ticket_ids == ["2"]
-    assert result.stats["ticket_update_alerts_enabled"] is True
-    assert result.stats["ticket_update_alert_dispatches"][0]["ticket_id"] == "2"
+    enqueues = result.stats["ticket_update_alert_enqueues"]
+    assert len(enqueues) == 1
+    assert enqueues[0]["status"] == "enqueued"

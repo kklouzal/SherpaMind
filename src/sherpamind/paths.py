@@ -35,9 +35,19 @@ class SherpaMindPaths:
     api_user_file: Path
     db_path: Path
     watch_state_path: Path
+    warm_watch_state_path: Path
     service_state_file: Path
+    hot_watch_state_file: Path
+    alert_dispatch_state_file: Path
+    maintenance_state_file: Path
     service_log: Path
+    hot_watch_log: Path
+    alert_dispatch_log: Path
+    maintenance_log: Path
     run_lock_file: Path
+    hot_watch_lock_file: Path
+    alert_dispatch_lock_file: Path
+    maintenance_lock_file: Path
     runtime_venv: Path
     legacy_env_file: Path
 
@@ -76,9 +86,19 @@ def resolve_paths() -> SherpaMindPaths:
         api_user_file=secrets_root / "sherpadesk_api_user.txt",
         db_path=data_root / "sherpamind.sqlite3",
         watch_state_path=state_root / "watch_state.json",
+        warm_watch_state_path=state_root / "warm_watch_state.json",
         service_state_file=state_root / "service-state.json",
+        hot_watch_state_file=state_root / "hot-watch-state.json",
+        alert_dispatch_state_file=state_root / "alert-dispatch-state.json",
+        maintenance_state_file=state_root / "maintenance-state.json",
         service_log=logs_root / "service.log",
+        hot_watch_log=logs_root / "hot-watch.log",
+        alert_dispatch_log=logs_root / "alert-dispatch.log",
+        maintenance_log=logs_root / "maintenance.log",
         run_lock_file=state_root / "service-run.lock",
+        hot_watch_lock_file=state_root / "hot-watch.lock",
+        alert_dispatch_lock_file=state_root / "alert-dispatch.lock",
+        maintenance_lock_file=state_root / "maintenance.lock",
         runtime_venv=runtime_root / "venv",
         legacy_env_file=private_root / "config.env",
     )

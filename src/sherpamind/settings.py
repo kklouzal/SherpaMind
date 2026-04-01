@@ -33,6 +33,13 @@ class Settings:
     warm_closed_days: int
     cold_closed_pages_per_run: int
     service_hot_open_every_seconds: int = 300
+    service_warm_watch_every_seconds: int = 900
+    service_alert_dispatch_every_seconds: int = 30
+    service_alert_dispatch_batch_size: int = 10
+    service_alert_lease_seconds: int = 300
+    service_alert_retry_base_seconds: int = 120
+    service_alert_max_attempts: int = 8
+    service_maintenance_tick_seconds: int = 30
     service_warm_closed_every_seconds: int = 14400
     service_cold_closed_every_seconds: int = 86400
     service_enrichment_every_seconds: int = 7200
@@ -75,6 +82,14 @@ def _write_key_value_file(path: Path, values: dict[str, str]) -> None:
         "SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN",
         "SHERPAMIND_NEW_TICKET_ALERT_CHANNEL",
         "SHERPAMIND_TICKET_UPDATE_ALERT_CHANNEL",
+        "SHERPAMIND_SERVICE_HOT_OPEN_EVERY_SECONDS",
+        "SHERPAMIND_SERVICE_WARM_WATCH_EVERY_SECONDS",
+        "SHERPAMIND_SERVICE_ALERT_DISPATCH_EVERY_SECONDS",
+        "SHERPAMIND_SERVICE_ALERT_DISPATCH_BATCH_SIZE",
+        "SHERPAMIND_SERVICE_ALERT_LEASE_SECONDS",
+        "SHERPAMIND_SERVICE_ALERT_RETRY_BASE_SECONDS",
+        "SHERPAMIND_SERVICE_ALERT_MAX_ATTEMPTS",
+        "SHERPAMIND_SERVICE_MAINTENANCE_TICK_SECONDS",
     ]
     lines = [
         "# SherpaMind staged non-secret settings",
@@ -187,6 +202,13 @@ def load_settings() -> Settings:
         warm_closed_days=int(_env_or_file("SHERPAMIND_WARM_CLOSED_DAYS", file_values, "7") or "7"),
         cold_closed_pages_per_run=int(_env_or_file("SHERPAMIND_COLD_CLOSED_PAGES_PER_RUN", file_values, "2") or "2"),
         service_hot_open_every_seconds=int(_env_or_file("SHERPAMIND_SERVICE_HOT_OPEN_EVERY_SECONDS", file_values, "300") or "300"),
+        service_warm_watch_every_seconds=int(_env_or_file("SHERPAMIND_SERVICE_WARM_WATCH_EVERY_SECONDS", file_values, "900") or "900"),
+        service_alert_dispatch_every_seconds=int(_env_or_file("SHERPAMIND_SERVICE_ALERT_DISPATCH_EVERY_SECONDS", file_values, "30") or "30"),
+        service_alert_dispatch_batch_size=int(_env_or_file("SHERPAMIND_SERVICE_ALERT_DISPATCH_BATCH_SIZE", file_values, "10") or "10"),
+        service_alert_lease_seconds=int(_env_or_file("SHERPAMIND_SERVICE_ALERT_LEASE_SECONDS", file_values, "300") or "300"),
+        service_alert_retry_base_seconds=int(_env_or_file("SHERPAMIND_SERVICE_ALERT_RETRY_BASE_SECONDS", file_values, "120") or "120"),
+        service_alert_max_attempts=int(_env_or_file("SHERPAMIND_SERVICE_ALERT_MAX_ATTEMPTS", file_values, "8") or "8"),
+        service_maintenance_tick_seconds=int(_env_or_file("SHERPAMIND_SERVICE_MAINTENANCE_TICK_SECONDS", file_values, "30") or "30"),
         service_warm_closed_every_seconds=int(_env_or_file("SHERPAMIND_SERVICE_WARM_CLOSED_EVERY_SECONDS", file_values, "14400") or "14400"),
         service_cold_closed_every_seconds=int(_env_or_file("SHERPAMIND_SERVICE_COLD_CLOSED_EVERY_SECONDS", file_values, "86400") or "86400"),
         service_enrichment_every_seconds=int(_env_or_file("SHERPAMIND_SERVICE_ENRICHMENT_EVERY_SECONDS", file_values, "7200") or "7200"),

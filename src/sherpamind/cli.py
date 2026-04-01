@@ -44,6 +44,9 @@ from .service_manager import (
     uninstall_service,
 )
 from .service_runtime import run_pending_tasks, run_service_loop
+from .hot_watch_worker import run_hot_watch_loop, run_hot_watch_once
+from .alert_dispatch_worker import run_alert_dispatch_loop, run_alert_dispatch_once
+from .maintenance_worker import run_maintenance_loop, run_maintenance_once
 from .ingest import (
     seed_all,
     sync_cold_closed_audit,
@@ -400,13 +403,48 @@ def service_status_cmd() -> None:
 
 @app.command("service-run")
 def service_run() -> None:
-    raise SystemExit(run_service_loop())
+    # Legacy compatibility alias. Real unattended runtime is now split across
+    # hot-watch, alert-dispatch, and maintenance workers installed via systemd.
+    raise SystemExit(run_maintenance_loop())
 
 
 @app.command("service-run-once")
 def service_run_once() -> None:
     settings = load_settings()
-    print(json.dumps(_json_ready(run_pending_tasks(settings)), indent=2))
+    print(json.dumps(_json_ready(run_maintenance_once(settings)), indent=2))
+
+
+@app.command("hot-watch-run")
+def hot_watch_run() -> None:
+    raise SystemExit(run_hot_watch_loop())
+
+
+@app.command("hot-watch-run-once")
+def hot_watch_run_once() -> None:
+    settings = load_settings()
+    print(json.dumps(_json_ready(run_hot_watch_once(settings)), indent=2))
+
+
+@app.command("alert-dispatch-run")
+def alert_dispatch_run() -> None:
+    raise SystemExit(run_alert_dispatch_loop())
+
+
+@app.command("alert-dispatch-run-once")
+def alert_dispatch_run_once() -> None:
+    settings = load_settings()
+    print(json.dumps(_json_ready(run_alert_dispatch_once(settings)), indent=2))
+
+
+@app.command("maintenance-run")
+def maintenance_run() -> None:
+    raise SystemExit(run_maintenance_loop())
+
+
+@app.command("maintenance-run-once")
+def maintenance_run_once() -> None:
+    settings = load_settings()
+    print(json.dumps(_json_ready(run_maintenance_once(settings)), indent=2))
 
 
 @app.command("discover-orgs")

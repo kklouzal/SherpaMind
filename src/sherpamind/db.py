@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, TypeVar
 
 from .text_cleanup import normalize_metadata_label
+from .time_utils import parse_sherpadesk_timestamp
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -188,6 +189,42 @@ CREATE TABLE IF NOT EXISTS vector_chunk_index (
     dims INTEGER NOT NULL,
     content_hash TEXT,
     synced_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS alert_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_type TEXT NOT NULL,
+    ticket_id TEXT NOT NULL,
+    dedupe_key TEXT NOT NULL UNIQUE,
+    payload_json TEXT,
+    status TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 100,
+    available_at TEXT NOT NULL,
+    leased_at TEXT,
+    lease_expires_at TEXT,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    sent_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS worker_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    worker_name TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL,
+    notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS worker_leases (
+    worker_name TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    leased_at TEXT NOT NULL,
+    lease_expires_at TEXT NOT NULL,
+    notes TEXT
 );
 """
 
@@ -947,3 +984,213 @@ def prune_api_request_events(db_path: Path, retention_days: int) -> int:
             return int(cursor.rowcount)
 
     return run_with_db_lock_retries(_operation)
+
+
+def start_worker_run(db_path: Path, worker_name: str, mode: str, notes: str | None = None) -> int:
+    initialize_db(db_path)
+    started_at = now_iso()
+
+    def _operation() -> int:
+        with connect(db_path) as conn:
+            cursor = conn.execute(
+                "INSERT INTO worker_runs(worker_name, mode, started_at, status, notes) VALUES(?, ?, ?, ?, ?)",
+                (worker_name, mode, started_at, "running", notes),
+            )
+            conn.commit()
+            return int(cursor.lastrowid)
+
+    return run_with_db_lock_retries(_operation)
+
+
+def finish_worker_run(db_path: Path, run_id: int, status: str, notes: str | None = None) -> None:
+    initialize_db(db_path)
+
+    def _operation() -> None:
+        with connect(db_path) as conn:
+            conn.execute(
+                "UPDATE worker_runs SET finished_at = ?, status = ?, notes = ? WHERE id = ?",
+                (now_iso(), status, notes, run_id),
+            )
+            conn.commit()
+
+    run_with_db_lock_retries(_operation)
+
+
+def cleanup_stale_worker_runs(db_path: Path, *, stale_after_seconds: int = DB_STALE_RUNNING_AFTER_SECONDS) -> int:
+    initialize_db(db_path)
+    stale_before = (datetime.now(timezone.utc) - timedelta(seconds=stale_after_seconds)).isoformat()
+    finished_at = now_iso()
+
+    def _operation() -> int:
+        with connect(db_path) as conn:
+            rows = conn.execute(
+                "SELECT id, notes FROM worker_runs WHERE status = 'running' AND started_at < ?",
+                (stale_before,),
+            ).fetchall()
+            cleaned = 0
+            for row in rows:
+                existing_notes = row['notes'] or ''
+                suffix = f" [auto-cleanup {finished_at}: stale running worker row]"
+                next_notes = f"{existing_notes}{suffix}" if suffix not in existing_notes else existing_notes
+                conn.execute(
+                    "UPDATE worker_runs SET finished_at = ?, status = ?, notes = ? WHERE id = ?",
+                    (finished_at, 'abandoned', next_notes, row['id']),
+                )
+                cleaned += 1
+            conn.commit()
+            return cleaned
+
+    return run_with_db_lock_retries(_operation)
+
+
+def try_acquire_worker_lease(db_path: Path, worker_name: str, owner_id: str, *, lease_seconds: int = 900, notes: str | None = None) -> bool:
+    initialize_db(db_path)
+    leased_at = now_iso()
+    lease_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=lease_seconds)).isoformat()
+
+    def _operation() -> bool:
+        with connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT owner_id, lease_expires_at FROM worker_leases WHERE worker_name = ?",
+                (worker_name,),
+            ).fetchone()
+            if row is not None:
+                expiry = row['lease_expires_at']
+                if expiry and parse_sherpadesk_timestamp(expiry) and parse_sherpadesk_timestamp(expiry) > datetime.now(timezone.utc):
+                    return False
+            conn.execute(
+                "INSERT INTO worker_leases(worker_name, owner_id, leased_at, lease_expires_at, notes) VALUES(?, ?, ?, ?, ?) "
+                "ON CONFLICT(worker_name) DO UPDATE SET owner_id=excluded.owner_id, leased_at=excluded.leased_at, lease_expires_at=excluded.lease_expires_at, notes=excluded.notes",
+                (worker_name, owner_id, leased_at, lease_expires_at, notes),
+            )
+            conn.commit()
+            return True
+
+    return run_with_db_lock_retries(_operation)
+
+
+def release_worker_lease(db_path: Path, worker_name: str, owner_id: str) -> None:
+    initialize_db(db_path)
+
+    def _operation() -> None:
+        with connect(db_path) as conn:
+            conn.execute(
+                "DELETE FROM worker_leases WHERE worker_name = ? AND owner_id = ?",
+                (worker_name, owner_id),
+            )
+            conn.commit()
+
+    run_with_db_lock_retries(_operation)
+
+
+def enqueue_alert(
+    db_path: Path,
+    *,
+    alert_type: str,
+    ticket_id: str,
+    dedupe_key: str,
+    payload: dict[str, Any] | None = None,
+    priority: int = 100,
+    available_at: str | None = None,
+) -> dict[str, Any]:
+    initialize_db(db_path)
+    created_at = now_iso()
+    available_at = available_at or created_at
+
+    def _operation() -> dict[str, Any]:
+        with connect(db_path) as conn:
+            existing = conn.execute(
+                "SELECT id, status, attempt_count, sent_at FROM alert_queue WHERE dedupe_key = ?",
+                (dedupe_key,),
+            ).fetchone()
+            if existing is not None:
+                return {"status": "duplicate", "alert_id": int(existing['id']), "existing_status": existing['status'], "attempt_count": int(existing['attempt_count'] or 0), "sent_at": existing['sent_at']}
+            cursor = conn.execute(
+                "INSERT INTO alert_queue(alert_type, ticket_id, dedupe_key, payload_json, status, priority, available_at, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (alert_type, str(ticket_id), dedupe_key, _json(payload or {}), 'pending', priority, available_at, created_at, created_at),
+            )
+            conn.commit()
+            return {"status": "enqueued", "alert_id": int(cursor.lastrowid)}
+
+    return run_with_db_lock_retries(_operation)
+
+
+def lease_alert_batch(db_path: Path, *, batch_size: int = 10, lease_seconds: int = 300) -> list[dict[str, Any]]:
+    initialize_db(db_path)
+    leased_at = now_iso()
+    lease_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=lease_seconds)).isoformat()
+
+    def _operation() -> list[dict[str, Any]]:
+        with connect(db_path) as conn:
+            conn.execute(
+                "UPDATE alert_queue SET status = 'pending', leased_at = NULL, lease_expires_at = NULL, updated_at = ? WHERE status = 'leased' AND lease_expires_at < ?",
+                (leased_at, leased_at),
+            )
+            rows = conn.execute(
+                "SELECT id FROM alert_queue WHERE status IN ('pending','failed') AND available_at <= ? ORDER BY priority ASC, id ASC LIMIT ?",
+                (leased_at, batch_size),
+            ).fetchall()
+            ids = [int(row['id']) for row in rows]
+            if not ids:
+                conn.commit()
+                return []
+            conn.executemany(
+                "UPDATE alert_queue SET status = 'leased', leased_at = ?, lease_expires_at = ?, updated_at = ?, attempt_count = attempt_count + 1 WHERE id = ?",
+                [(leased_at, lease_expires_at, leased_at, alert_id) for alert_id in ids],
+            )
+            leased = conn.execute(
+                f"SELECT * FROM alert_queue WHERE id IN ({','.join('?' for _ in ids)}) ORDER BY priority ASC, id ASC",
+                ids,
+            ).fetchall()
+            conn.commit()
+            return [dict(row) for row in leased]
+
+    return run_with_db_lock_retries(_operation)
+
+
+def mark_alert_sent(db_path: Path, alert_id: int) -> None:
+    initialize_db(db_path)
+    sent_at = now_iso()
+
+    def _operation() -> None:
+        with connect(db_path) as conn:
+            conn.execute(
+                "UPDATE alert_queue SET status = 'sent', sent_at = ?, updated_at = ?, lease_expires_at = NULL, leased_at = NULL WHERE id = ?",
+                (sent_at, sent_at, alert_id),
+            )
+            conn.commit()
+
+    run_with_db_lock_retries(_operation)
+
+
+def mark_alert_failed(db_path: Path, alert_id: int, error_message: str, *, retry_after_seconds: int = 120, dead_after_attempts: int = 8) -> None:
+    initialize_db(db_path)
+    updated_at = now_iso()
+    available_at = (datetime.now(timezone.utc) + timedelta(seconds=retry_after_seconds)).isoformat()
+
+    def _operation() -> None:
+        with connect(db_path) as conn:
+            row = conn.execute("SELECT attempt_count FROM alert_queue WHERE id = ?", (alert_id,)).fetchone()
+            attempts = int((row['attempt_count'] if row else 0) or 0)
+            next_status = 'dead' if attempts >= dead_after_attempts else 'failed'
+            conn.execute(
+                "UPDATE alert_queue SET status = ?, available_at = ?, last_error = ?, updated_at = ?, lease_expires_at = NULL, leased_at = NULL WHERE id = ?",
+                (next_status, available_at, error_message, updated_at, alert_id),
+            )
+            conn.commit()
+
+    run_with_db_lock_retries(_operation)
+
+
+def get_alert_queue_summary(db_path: Path) -> dict[str, Any]:
+    initialize_db(db_path)
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT status, COUNT(*) AS count FROM alert_queue GROUP BY status"
+        ).fetchall()
+        oldest_pending = conn.execute(
+            "SELECT created_at FROM alert_queue WHERE status IN ('pending','failed') ORDER BY created_at ASC LIMIT 1"
+        ).fetchone()
+    summary = {row['status']: int(row['count'] or 0) for row in rows}
+    summary['oldest_pending_created_at'] = oldest_pending['created_at'] if oldest_pending else None
+    return summary
