@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from sherpamind.db import (
+    backfill_ticket_core_fields,
     backfill_ticket_entity_stubs,
     backfill_ticket_technician_stubs,
     connect,
@@ -251,6 +252,76 @@ def test_backfill_ticket_technician_stubs_reports_technician_slice(tmp_path: Pat
         tech = conn.execute("SELECT display_name FROM technicians WHERE id = '333'").fetchone()
     assert result["technician_rows_added"] == 1
     assert tech["display_name"] == "Queue Owner"
+
+
+def test_backfill_ticket_core_fields_repairs_blank_structured_ticket_columns(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+    upsert_tickets(
+        db,
+        [{
+            "id": 41,
+            "account_id": 1,
+            "user_id": 2,
+            "tech_id": 333,
+            "subject": "  Printer queue stuck  ",
+            "status": "Closed",
+            "priority_name": "  High  ",
+            "class_name": "Service Request/Move/Add/Change",
+            "created_time": "2026-03-18T01:00:00Z",
+            "updated_time": "2026-03-19T01:00:00Z",
+            "closed_time": "2026-03-20T01:00:00Z",
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+    with connect(db) as conn:
+        conn.execute(
+            """
+            UPDATE tickets
+            SET account_id = NULL,
+                user_id = NULL,
+                assigned_technician_id = NULL,
+                subject = NULL,
+                status = NULL,
+                priority = NULL,
+                category = NULL,
+                created_at = NULL,
+                updated_at = NULL,
+                closed_at = NULL,
+                synced_at = '2026-03-19T01:00:00Z'
+            WHERE id = '41'
+            """
+        )
+        conn.commit()
+    result = backfill_ticket_core_fields(db, synced_at="2026-03-19T03:00:00Z")
+    with connect(db) as conn:
+        ticket = conn.execute(
+            "SELECT account_id, user_id, assigned_technician_id, subject, status, priority, category, created_at, updated_at, closed_at, synced_at FROM tickets WHERE id = '41'"
+        ).fetchone()
+    assert result["ticket_rows_repaired"] == 1
+    assert result["field_repairs"] == {
+        "account_id": 1,
+        "user_id": 1,
+        "assigned_technician_id": 1,
+        "subject": 1,
+        "status": 1,
+        "priority": 1,
+        "category": 1,
+        "created_at": 1,
+        "updated_at": 1,
+        "closed_at": 1,
+    }
+    assert ticket["account_id"] == "1"
+    assert ticket["user_id"] == "2"
+    assert ticket["assigned_technician_id"] == "333"
+    assert ticket["subject"] == "  Printer queue stuck  "
+    assert ticket["status"] == "Closed"
+    assert ticket["priority"] == "High"
+    assert ticket["category"] == "Service Request / Move / Add / Change"
+    assert ticket["created_at"] == "2026-03-18T01:00:00Z"
+    assert ticket["updated_at"] == "2026-03-19T01:00:00Z"
+    assert ticket["closed_at"] == "2026-03-20T01:00:00Z"
+    assert ticket["synced_at"] == "2026-03-19T03:00:00Z"
 
 
 def test_ingest_run_roundtrip(tmp_path: Path) -> None:

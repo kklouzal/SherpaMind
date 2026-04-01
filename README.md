@@ -352,6 +352,7 @@ python3 scripts/run.py <command> [args...]
 - `python3 scripts/run.py init-db`
 - `python3 scripts/run.py backfill-technician-stubs`
 - `python3 scripts/run.py backfill-ticket-entity-stubs`
+- `python3 scripts/run.py backfill-ticket-core-fields`
 - `python3 scripts/run.py setup`
 - `python3 scripts/run.py configure`
 - `python3 scripts/run.py doctor`

@@ -436,6 +436,7 @@ def upsert_tickets(db_path: Path, tickets: list[dict[str, Any]], synced_at: str 
         upsert_technicians(db_path, technician_stubs, synced_at=synced_at)
     with connect(db_path) as conn:
         for ticket in tickets:
+            core = _ticket_core_fields(ticket)
             conn.execute(
                 """
                 INSERT INTO tickets(
@@ -459,16 +460,16 @@ def upsert_tickets(db_path: Path, tickets: list[dict[str, Any]], synced_at: str 
                 """,
                 (
                     str(ticket["id"]),
-                    str(ticket["account_id"]) if ticket.get("account_id") is not None else None,
-                    str(ticket["user_id"]) if ticket.get("user_id") is not None else None,
-                    str(ticket["tech_id"]) if ticket.get("tech_id") is not None else None,
-                    ticket.get("subject"),
-                    ticket.get("status"),
-                    normalize_metadata_label(ticket.get("priority_name") or ticket.get("priority")),
-                    normalize_metadata_label(ticket.get("creation_category_name") or ticket.get("category") or ticket.get("class_name") or ticket.get("submission_category")),
-                    ticket.get("created_time"),
-                    ticket.get("updated_time"),
-                    ticket.get("closed_time"),
+                    core["account_id"],
+                    core["user_id"],
+                    core["assigned_technician_id"],
+                    core["subject"],
+                    core["status"],
+                    core["priority"],
+                    core["category"],
+                    core["created_at"],
+                    core["updated_at"],
+                    core["closed_at"],
                     _json(ticket),
                     synced_at,
                 ),
@@ -545,6 +546,70 @@ def backfill_ticket_technician_stubs(db_path: Path, synced_at: str | None = None
         "technician_count_before": result["technician_count_before"],
         "technician_count_after": result["technician_count_after"],
         "technician_rows_added": result["technician_rows_added"],
+    }
+
+
+def _ticket_core_fields(ticket: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "account_id": str(ticket["account_id"]) if ticket.get("account_id") is not None else None,
+        "user_id": str(ticket["user_id"]) if ticket.get("user_id") is not None else None,
+        "assigned_technician_id": str(ticket["tech_id"]) if ticket.get("tech_id") is not None else None,
+        "subject": ticket.get("subject"),
+        "status": ticket.get("status"),
+        "priority": normalize_metadata_label(ticket.get("priority_name") or ticket.get("priority")),
+        "category": normalize_metadata_label(
+            ticket.get("creation_category_name") or ticket.get("category") or ticket.get("class_name") or ticket.get("submission_category")
+        ),
+        "created_at": ticket.get("created_time"),
+        "updated_at": ticket.get("updated_time"),
+        "closed_at": ticket.get("closed_time"),
+    }
+
+
+def backfill_ticket_core_fields(db_path: Path, synced_at: str | None = None) -> dict[str, Any]:
+    synced_at = synced_at or now_iso()
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT id, raw_json, account_id, user_id, assigned_technician_id, subject, status, priority, category, created_at, updated_at, closed_at, synced_at FROM tickets").fetchall()
+        repaired_rows = 0
+        field_repairs = {
+            "account_id": 0,
+            "user_id": 0,
+            "assigned_technician_id": 0,
+            "subject": 0,
+            "status": 0,
+            "priority": 0,
+            "category": 0,
+            "created_at": 0,
+            "updated_at": 0,
+            "closed_at": 0,
+        }
+
+        for row in rows:
+            ticket = json.loads(row["raw_json"])
+            repaired = _ticket_core_fields(ticket)
+            updates: dict[str, Any] = {}
+            for field_name, repaired_value in repaired.items():
+                current_value = row[field_name]
+                if current_value in (None, "") and repaired_value not in (None, ""):
+                    updates[field_name] = repaired_value
+                    field_repairs[field_name] += 1
+            if not updates:
+                continue
+            updates["synced_at"] = synced_at
+            assignments = ", ".join(f"{field} = ?" for field in updates)
+            conn.execute(
+                f"UPDATE tickets SET {assignments} WHERE id = ?",
+                (*updates.values(), row["id"]),
+            )
+            repaired_rows += 1
+        conn.commit()
+
+    return {
+        "status": "ok",
+        "ticket_rows_scanned": len(rows),
+        "ticket_rows_repaired": repaired_rows,
+        "field_repairs": field_repairs,
+        "synced_at": synced_at,
     }
 
 
