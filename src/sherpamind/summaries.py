@@ -22,7 +22,16 @@ _ENTITY_METADATA_FIELDS: list[tuple[str, str]] = [
     ("resolution_summary", "resolution_summary"),
     ("recent_log_types_csv", "recent_log_types"),
     ("attachment_kinds_csv", "attachment_metadata"),
+    ("attachment_extensions_csv", "attachment_extensions"),
     ("department_label", "department_label"),
+    ("account_location_name", "account_location"),
+    ("default_contract_name", "contract"),
+    ("project_name", "project"),
+    ("user_email_domain", "user_email_domain"),
+    ("technician_email_domain", "technician_email_domain"),
+    ("participant_email_domains_csv", "participant_email_domains"),
+    ("public_participant_email_domains_csv", "public_participant_email_domains"),
+    ("internal_participant_email_domains_csv", "internal_participant_email_domains"),
 ]
 
 
@@ -91,7 +100,16 @@ def _entity_retrieval_health(conn, where_clause: str, params: tuple[object, ...]
                SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.resolution_summary') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.resolution_summary') != '' THEN 1 ELSE 0 END) AS resolution_summary_tickets,
                SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.recent_log_types_csv') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.recent_log_types_csv') != '' THEN 1 ELSE 0 END) AS recent_log_types_tickets,
                SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.attachment_kinds_csv') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.attachment_kinds_csv') != '' THEN 1 ELSE 0 END) AS attachment_metadata_tickets,
-               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.department_label') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.department_label') != '' THEN 1 ELSE 0 END) AS department_label_tickets
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.attachment_extensions_csv') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.attachment_extensions_csv') != '' THEN 1 ELSE 0 END) AS attachment_extensions_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.department_label') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.department_label') != '' THEN 1 ELSE 0 END) AS department_label_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.account_location_name') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.account_location_name') != '' THEN 1 ELSE 0 END) AS account_location_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.default_contract_name') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.default_contract_name') != '' THEN 1 ELSE 0 END) AS contract_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.project_name') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.project_name') != '' THEN 1 ELSE 0 END) AS project_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.user_email_domain') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.user_email_domain') != '' THEN 1 ELSE 0 END) AS user_email_domain_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.technician_email_domain') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.technician_email_domain') != '' THEN 1 ELSE 0 END) AS technician_email_domain_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.participant_email_domains_csv') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.participant_email_domains_csv') != '' THEN 1 ELSE 0 END) AS participant_email_domains_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.public_participant_email_domains_csv') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.public_participant_email_domains_csv') != '' THEN 1 ELSE 0 END) AS public_participant_email_domains_tickets,
+               SUM(CASE WHEN json_extract(document_raw_json, '$.metadata.internal_participant_email_domains_csv') IS NOT NULL AND json_extract(document_raw_json, '$.metadata.internal_participant_email_domains_csv') != '' THEN 1 ELSE 0 END) AS internal_participant_email_domains_tickets
         FROM ticket_core
         """,
         params,

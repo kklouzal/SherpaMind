@@ -261,11 +261,17 @@ def _top_lagging_document_rows(freshness: dict[str, Any]) -> list[dict[str, Any]
 
 
 def _entity_retrieval_health_rows(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    metadata_coverage = summary.get("metadata_coverage") or {}
+    participant_domain_ratio = ((metadata_coverage.get("participant_email_domains") or {}).get("ratio")) or 0.0
     return [{
         "detail_coverage": _format_ratio(summary.get("detail_coverage_ratio")),
+        "log_coverage": _format_ratio(summary.get("log_coverage_ratio")),
+        "attachment_coverage": _format_ratio(summary.get("attachment_coverage_ratio")),
         "document_coverage": _format_ratio(summary.get("document_coverage_ratio")),
         "action_cue_coverage": _format_ratio(summary.get("action_cue_ratio")),
         "resolution_summary_coverage": _format_ratio(summary.get("resolution_summary_ratio")),
+        "attachment_metadata_coverage": _format_ratio(summary.get("attachment_metadata_ratio")),
+        "participant_domain_coverage": _format_ratio(participant_domain_ratio),
         "multi_chunk_ratio": _format_ratio(summary.get("multi_chunk_ratio")),
         "lagging_ratio": _format_ratio(summary.get("lagging_ratio")),
         "avg_lag_minutes": _format_number(summary.get("avg_lag_minutes")),
@@ -299,11 +305,31 @@ def _entity_lag_bucket_rows(summary: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+_ENTITY_METADATA_LABELS: dict[str, str] = {
+    "cleaned_subject": "Cleaned Subject",
+    "issue_summary": "Issue Summary",
+    "action_cue": "Action Cue",
+    "resolution_summary": "Resolution Summary",
+    "recent_log_types": "Recent Log Types",
+    "attachment_metadata": "Attachment Kinds",
+    "attachment_extensions": "Attachment Extensions",
+    "department_label": "Department Label",
+    "account_location": "Account Location",
+    "contract": "Contract",
+    "project": "Project",
+    "user_email_domain": "User Email Domain",
+    "technician_email_domain": "Technician Email Domain",
+    "participant_email_domains": "Participant Email Domains",
+    "public_participant_email_domains": "Public Participant Domains",
+    "internal_participant_email_domains": "Internal Participant Domains",
+}
+
+
 def _entity_metadata_coverage_rows(summary: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for field, stats in (summary.get("metadata_coverage") or {}).items():
         rows.append({
-            "field": field,
+            "field": _ENTITY_METADATA_LABELS.get(field, field.replace("_", " ").title()),
             "tickets": stats.get("tickets", 0),
             "ratio": _format_ratio(stats.get("ratio")),
         })
@@ -1062,9 +1088,13 @@ def generate_public_snapshot(db_path: Path) -> dict:
             "",
             _markdown_table(_entity_retrieval_health_rows(summary["retrieval_health"]), [
                 ("detail_coverage", "Detail Coverage"),
+                ("log_coverage", "Log Coverage"),
+                ("attachment_coverage", "Attachment Coverage"),
                 ("document_coverage", "Document Coverage"),
                 ("action_cue_coverage", "Action Cue Coverage"),
                 ("resolution_summary_coverage", "Resolution Coverage"),
+                ("attachment_metadata_coverage", "Attachment Meta Coverage"),
+                ("participant_domain_coverage", "Participant Domain Coverage"),
                 ("multi_chunk_ratio", "Multi-Chunk Ratio"),
                 ("lagging_ratio", "Lagging Ratio"),
                 ("avg_lag_minutes", "Avg Lag Minutes"),
@@ -1150,9 +1180,13 @@ def generate_public_snapshot(db_path: Path) -> dict:
             "",
             _markdown_table(_entity_retrieval_health_rows(summary["retrieval_health"]), [
                 ("detail_coverage", "Detail Coverage"),
+                ("log_coverage", "Log Coverage"),
+                ("attachment_coverage", "Attachment Coverage"),
                 ("document_coverage", "Document Coverage"),
                 ("action_cue_coverage", "Action Cue Coverage"),
                 ("resolution_summary_coverage", "Resolution Coverage"),
+                ("attachment_metadata_coverage", "Attachment Meta Coverage"),
+                ("participant_domain_coverage", "Participant Domain Coverage"),
                 ("multi_chunk_ratio", "Multi-Chunk Ratio"),
                 ("lagging_ratio", "Lagging Ratio"),
                 ("avg_lag_minutes", "Avg Lag Minutes"),

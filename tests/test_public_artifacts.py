@@ -160,11 +160,17 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Total account docs: `2`" in account_index.read_text()
     assert "Total technician docs: `2`" in technician_index.read_text()
     assert "Total ticket docs: `1`" in ticket_index.read_text()
-    assert "Retrieval health" in acme_doc.read_text()
-    assert "Retrieval lag buckets" in acme_doc.read_text()
-    assert "Retrieval metadata coverage" in acme_doc.read_text()
-    assert "Category breakdown" in tech_one_doc.read_text()
-    assert "Retrieval health" in tech_one_doc.read_text()
+    acme_text = acme_doc.read_text()
+    assert "Retrieval health" in acme_text
+    assert "Log Coverage" in acme_text
+    assert "Participant Domain Coverage" in acme_text
+    assert "Retrieval lag buckets" in acme_text
+    assert "Retrieval metadata coverage" in acme_text
+    assert "Participant Email Domains" in acme_text
+    tech_one_text = tech_one_doc.read_text()
+    assert "Category breakdown" in tech_one_text
+    assert "Retrieval health" in tech_one_text
+    assert "Attachment Meta Coverage" in tech_one_text
     ticket_text = ticket_101_doc.read_text()
     assert "Artifact stats" in ticket_text
     assert "Retrieval health" in ticket_text

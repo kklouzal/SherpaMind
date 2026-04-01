@@ -8,7 +8,7 @@ from sherpamind.summaries import get_account_summary, get_technician_summary, ge
 def seed_fixture(db: Path) -> None:
     initialize_db(db)
     upsert_accounts(db, [{"id": 1, "name": "Acme"}], synced_at="2026-03-19T01:00:00Z")
-    upsert_users(db, [{"id": 11, "account_id": 1, "FullName": "Alice User"}], synced_at="2026-03-19T01:00:00Z")
+    upsert_users(db, [{"id": 11, "account_id": 1, "FullName": "Alice User", "email": "alice@example.com"}], synced_at="2026-03-19T01:00:00Z")
     upsert_technicians(db, [{"id": 21, "FullName": "Tech One", "email": "tech@example.com"}], synced_at="2026-03-19T01:00:00Z")
     upsert_tickets(db, [
         {"id": 101, "account_id": 1, "user_id": 11, "tech_id": 21, "subject": "Issue A", "status": "Open", "updated_time": "2026-03-19T03:00:00Z", "created_time": "2026-03-18T01:00:00Z"},
@@ -27,6 +27,10 @@ def test_account_summary(tmp_path: Path) -> None:
     assert summary["retrieval_health"]["document_tickets"] == 2
     assert summary["retrieval_health"]["detail_tickets"] == 1
     assert summary["retrieval_health"]["metadata_coverage"]["cleaned_subject"]["tickets"] == 2
+    assert summary["retrieval_health"]["metadata_coverage"]["user_email_domain"]["tickets"] == 2
+    assert summary["retrieval_health"]["metadata_coverage"]["technician_email_domain"]["tickets"] == 2
+    assert summary["retrieval_health"]["metadata_coverage"]["participant_email_domains"]["tickets"] == 2
+    assert summary["retrieval_health"]["metadata_coverage"]["public_participant_email_domains"]["tickets"] == 2
     assert len(summary["open_tickets"]) == 1
 
 
@@ -38,6 +42,8 @@ def test_technician_summary(tmp_path: Path) -> None:
     assert summary["stats"]["total_tickets"] == 2
     assert summary["retrieval_health"]["document_tickets"] == 2
     assert summary["retrieval_health"]["detail_tickets"] == 1
+    assert summary["retrieval_health"]["metadata_coverage"]["technician_email_domain"]["tickets"] == 2
+    assert summary["retrieval_health"]["metadata_coverage"]["participant_email_domains"]["tickets"] == 2
     assert summary["retrieval_health"]["lag_buckets"]["current_or_ahead"] == 2
     assert len(summary["open_tickets"]) == 1
 
