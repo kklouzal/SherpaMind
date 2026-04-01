@@ -72,6 +72,9 @@ def test_build_hook_payload_contains_ticket_triage_context(tmp_path: Path) -> No
     assert payload["deliver"] is True
     message = payload["message"]
     assert "new SherpaDesk ticket" in message
+    assert "INITIAL POST / original user-submitted issue only" in message
     assert "Printer offline in front office" in message
     assert "Alice User" in message or "alice@example.com" in message
     assert "Acme Co" in message
+    assert "recent_logs" not in message
+    assert "next_step_context" not in message

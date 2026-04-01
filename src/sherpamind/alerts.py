@@ -28,47 +28,14 @@ class AlertDispatchResult:
 def _normalize_ticket_summary(summary: dict[str, Any]) -> dict[str, Any]:
     ticket = summary.get("ticket") or {}
     metadata = summary.get("retrieval_metadata") or {}
-    recent_logs = summary.get("recent_logs") or []
-    attachments = summary.get("attachments") or []
     artifact_stats = summary.get("artifact_stats") or {}
 
-    issue_bits = [
-        metadata.get("cleaned_subject"),
-        metadata.get("cleaned_initial_post"),
-        metadata.get("cleaned_detail_note"),
-        metadata.get("cleaned_workpad"),
-    ]
-    next_step_bits = [
-        metadata.get("cleaned_next_step"),
-        metadata.get("cleaned_action_cue"),
-        metadata.get("cleaned_followup_note"),
-        metadata.get("cleaned_request_completion_note"),
-    ]
+    initial_post = metadata.get("cleaned_initial_post") or metadata.get("cleaned_subject") or ticket.get("subject")
 
     return {
         "ticket": ticket,
         "artifact_stats": artifact_stats,
-        "issue_context": [bit for bit in issue_bits if bit],
-        "next_step_context": [bit for bit in next_step_bits if bit],
-        "resolution_summary": metadata.get("resolution_summary"),
-        "recent_logs": [
-            {
-                "log_type": row.get("log_type"),
-                "record_date": row.get("record_date"),
-                "actor": row.get("actor"),
-                "is_tech_only": row.get("is_tech_only"),
-                "note": row.get("note"),
-            }
-            for row in recent_logs[:5]
-        ],
-        "attachments": [
-            {
-                "name": row.get("name"),
-                "size": row.get("size"),
-                "recorded_at": row.get("recorded_at"),
-            }
-            for row in attachments[:5]
-        ],
+        "initial_post_context": initial_post,
         "support_group_name": metadata.get("support_group_name"),
         "default_contract_name": metadata.get("default_contract_name"),
         "department_label": metadata.get("department_label"),
@@ -91,11 +58,7 @@ def _build_hook_payload(settings: Settings, ticket_id: str, summary: dict[str, A
         "account": normalized["ticket"].get("account"),
         "requester": normalized["ticket"].get("user_name") or normalized["ticket"].get("user_email"),
         "technician": normalized["ticket"].get("technician"),
-        "issue_context": normalized["issue_context"],
-        "next_step_context": normalized["next_step_context"],
-        "resolution_summary": normalized["resolution_summary"],
-        "recent_logs": normalized["recent_logs"],
-        "attachments": normalized["attachments"],
+        "initial_post_context": normalized["initial_post_context"],
         "support_group_name": normalized["support_group_name"],
         "default_contract_name": normalized["default_contract_name"],
         "department_label": normalized["department_label"],
@@ -107,9 +70,11 @@ def _build_hook_payload(settings: Settings, ticket_id: str, summary: dict[str, A
     prompt = (
         "A new SherpaDesk ticket was detected by SherpaMind. "
         "Write a concise triage alert for Discord for the technician who may pick it up. "
-        "Include: who sent it in (if known), which client/account it is for, a crisp breakdown of the issue, "
-        "and likely next steps / first checks. Be practical, not fluffy. Use bullets, not a markdown table. "
-        "Keep it readable in Discord. End with the ticket id and subject.\n\n"
+        "For this new-ticket synopsis, use the INITIAL POST / original user-submitted issue only as the issue narrative. "
+        "Do not incorporate later technician updates, follow-up notes, resolution thinking, later log history, or inferred post-resolution context into the issue summary. "
+        "You may still use the requester/client/priority/category metadata fields, but the problem description should reflect only the initial user-reported issue. "
+        "Include: who sent it in (if known), which client/account it is for, a crisp breakdown of the initial issue, and likely first checks / next steps for whoever picks it up. "
+        "Be practical, not fluffy. Use bullets, not a markdown table. Keep it readable in Discord. End with the ticket id and subject.\n\n"
         f"Alert destination: {alert_channel}\n"
         "When you are done, send the final alert message to that Discord target using delivery announce to that channel.\n\n"
         f"Ticket context JSON:\n{json.dumps(compact, ensure_ascii=False, indent=2)}"
