@@ -49,19 +49,24 @@ This is now the intended SherpaMind direction:
 
 ## Recommended operating model
 
-### 1. New-ticket watcher lane
+### 1. New-ticket / hot-watch detection lane
 Purpose:
 - detect newly created tickets with high freshness
+- detect requester-side non-tech updates with high freshness
 
 Approach:
 - poll the first few pages of `status=open`
-- run every ~5 minutes
-- compare the returned ticket IDs against the local DB + watcher state
-- alert on unseen IDs
+- run every ~5 minutes (or faster if budget allows)
+- compare the returned ticket IDs and activity flags against local watcher state
+- enqueue durable alert events for:
+  - unseen open-ticket IDs (`new_ticket`)
+  - non-tech/requester-side updates on already-known tickets (`ticket_update`)
+- do **not** dispatch webhooks inline in the watcher
 
 Why this works:
-- new tickets should appear near the front of the active/open set
-- we only need high freshness for the hot active slice, not for the entire historical corpus
+- new tickets and user-side updates should appear near the front of the active/open set
+- the watcher stays latency-friendly because it only detects and enqueues
+- alert delivery becomes retryable and dedupe-safe in a separate dispatcher lane
 
 ### 2. Hot active-ticket sync lane
 Purpose:
@@ -84,18 +89,23 @@ Default starting shape:
 - first 3-10 pages of open tickets
 - tune upward or downward once we see real open-ticket volume
 
-### 3. Warm recently-changed ticket lane
+### 3. Warm recently-changed ticket lanes
 Purpose:
 - catch tickets that recently closed or fell out of the hot open pages
 - catch edits to recent history without rescanning everything
 
 Approach:
-- rescan a larger recent slice of `status=closed`
-- treat closed tickets newer than **7 days** as warm by default
-- run every few hours
-- compare `updated_time`, `closed_time`, and key fields against local state
+- split warm behavior into two distinct concerns:
+  1. **warm watch / detection**
+     - rescan a bounded recent closed slice on a faster cadence
+     - compare snapshots against local warm-watch state
+     - enqueue only requester-side update alerts when that comparison shows a real user-side change
+     - do **not** treat the first baseline pass as permission to flood historical alerts
+  2. **warm closed reconciliation**
+     - run under maintenance cadence
+     - upsert the broader recent closed slice for correctness / analytics freshness
 
-This is the lane that protects us from:
+This is the lane family that protects us from:
 - recent closures
 - reopens
 - post-close edits

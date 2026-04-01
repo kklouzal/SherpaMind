@@ -4,7 +4,7 @@
 
 SherpaMind is a local-first SherpaDesk ingest, sync, enrichment, retrieval-preparation, and analysis system built for OpenClaw.
 
-It keeps canonical SherpaDesk data in SQLite, derives rebuildable retrieval artifacts from that data, runs background maintenance through a local Python service, and exposes a CLI for sync, observability, analysis, and search.
+It keeps canonical SherpaDesk data in SQLite, derives rebuildable retrieval artifacts from that data, runs background work through split local Python workers, and exposes a CLI for sync, observability, analysis, and search.
 
 ## Transparency summary
 
@@ -125,9 +125,11 @@ SherpaMind currently covers five major areas:
    - generates public Markdown artifacts for lightweight inspection
 
 5. **Local backend runtime**
-   - runs as a user-level systemd service
+   - runs as split user-level systemd workers (`hot-watch`, `alert-dispatch`, `maintenance`)
+   - keeps latency-sensitive alert detection separate from heavier maintenance work
+   - uses a durable SQLite-backed alert queue for webhook dispatch retries/dedupe
    - performs periodic sync/enrichment/artifact-refresh work without burning OpenClaw tokens
-   - keeps service state, logs, and request-usage history locally
+   - keeps worker state, logs, queue state, and request-usage history locally
 
 ## Proven capability
 
@@ -144,7 +146,7 @@ Observed capability evidence includes:
 - successful request-budget tracking showing observed runtime behavior well below the documented `600 requests/hour` ceiling during normal service activity
 - successful generated public artifact output under `.SherpaMind/public/docs/`
 - successful local automated validation with the current test suite passing (`60 passed` in the latest run)
-- successful service-backed runtime operation on a Linux host using the documented user-level `systemd` model
+- successful split-worker runtime operation on a Linux host using the documented user-level `systemd` model
 
 These figures are evidence from real observed runs, not guaranteed fixed installation outcomes. Exact counts will vary by target SherpaDesk account, sync timing, and local runtime state, but the project has been proven in live use to perform the ingest, sync, enrichment, retrieval-preparation, artifact-generation, and validation behaviors described here.
 
@@ -213,9 +215,9 @@ SherpaMind uses a workspace-local split storage model:
 - `.SherpaMind/private/data/`
   - canonical SQLite database
 - `.SherpaMind/private/state/`
-  - watch state, service state, sync-progress state
+  - hot/warm watch state, per-worker state, aggregate service state, queue/lease-adjacent runtime state
 - `.SherpaMind/private/logs/`
-  - local service logs
+  - per-worker local logs plus aggregate compatibility log surfaces
 - `.SherpaMind/private/runtime/`
   - runtime venv and other purely local execution artifacts
 - `.SherpaMind/public/`
@@ -224,6 +226,31 @@ SherpaMind uses a workspace-local split storage model:
 
 Canonical truth stays in SQLite.
 Derived artifacts are rebuildable caches, not source-of-truth memory.
+
+### Runtime architecture
+
+SherpaMind no longer runs as one serialized background loop.
+
+The live runtime is split into three worker classes:
+
+1. **Hot watch worker**
+   - polls hot open tickets on the fast lane
+   - performs warm-watch-style change detection on the recent closed slice
+   - detects new tickets and requester-side non-tech updates
+   - writes durable alert events into the local queue instead of dispatching webhooks inline
+
+2. **Alert dispatch worker**
+   - leases queued alert events from SQLite
+   - refreshes per-ticket detail context just-in-time
+   - builds the OpenClaw webhook payload
+   - posts the synopsis request to OpenClaw
+   - marks events sent / failed / retrying with dedupe-safe queue semantics
+
+3. **Maintenance worker**
+   - owns warm closed reconciliation, cold audit, enrichment, retrieval artifact refresh, public snapshot generation, vector refresh, and runtime-status generation
+   - keeps heavy maintenance work isolated so it cannot block the hot alert detection lane
+
+This split exists specifically to avoid the old failure mode where latency-sensitive ticket alerts waited behind cold audit, enrichment, or corpus-wide artifact work.
 
 ### Data layers
 
@@ -368,8 +395,14 @@ python3 scripts/run.py <command> [args...]
 - `python3 scripts/run.py stop-service`
 - `python3 scripts/run.py restart-service`
 - `python3 scripts/run.py service-status`
-- `python3 scripts/run.py service-run`
-- `python3 scripts/run.py service-run-once`
+- `python3 scripts/run.py hot-watch-run`
+- `python3 scripts/run.py hot-watch-run-once`
+- `python3 scripts/run.py alert-dispatch-run`
+- `python3 scripts/run.py alert-dispatch-run-once`
+- `python3 scripts/run.py maintenance-run`
+- `python3 scripts/run.py maintenance-run-once`
+- `python3 scripts/run.py service-run` *(legacy compatibility alias to maintenance loop; not the preferred unattended entrypoint)*
+- `python3 scripts/run.py service-run-once` *(legacy compatibility alias to maintenance one-shot)*
 
 ### SherpaDesk ingest and sync
 
@@ -454,6 +487,13 @@ python3 scripts/run.py install-service
 python3 scripts/run.py service-status
 ```
 
+`install-service` now installs and enables three user-level worker units together:
+- `sherpamind-hot-watch.service`
+- `sherpamind-alert-dispatch.service`
+- `sherpamind-maintenance.service`
+
+`service-status` reports those workers as a set so unattended runtime health is evaluated against the split runtime rather than an old single-daemon mental model.
+
 On a normal Linux host, `python3 scripts/run.py setup` is expected to:
 
 - migrate/archive any legacy SherpaMind state if present
@@ -463,19 +503,23 @@ On a normal Linux host, `python3 scripts/run.py setup` is expected to:
 
 Treat user-level `systemd` installation as a later, explicit operator decision after bootstrap, OpenClaw skill API-key configuration, discovery, and seed validation are complete.
 
-If the target host does not support usable `systemctl --user`, the install is still valid in fallback mode, but the operator/agent should say so plainly and use:
+If the target host does not support usable `systemctl --user`, the install is still valid in fallback mode, but the operator/agent should say so plainly and use worker-specific foreground/one-shot commands such as:
 
 ```bash
-python3 scripts/run.py service-run-once
+python3 scripts/run.py hot-watch-run-once
+python3 scripts/run.py alert-dispatch-run-once
+python3 scripts/run.py maintenance-run-once
 ```
 
-or:
+or the corresponding foreground worker loops:
 
 ```bash
-python3 scripts/run.py service-run
+python3 scripts/run.py hot-watch-run
+python3 scripts/run.py alert-dispatch-run
+python3 scripts/run.py maintenance-run
 ```
 
-instead of claiming the background service was installed.
+The legacy `service-run` / `service-run-once` commands remain compatibility aliases to the maintenance worker only and should not be presented as the preferred split-runtime fallback story.
 
 ## Bootstrap and local configuration
 
@@ -494,7 +538,15 @@ This creates the main workspace-local layout:
 - `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
 - `.SherpaMind/private/data/sherpamind.sqlite3`
 - `.SherpaMind/private/state/watch_state.json`
-- `.SherpaMind/private/logs/service.log`
+- `.SherpaMind/private/state/warm_watch_state.json`
+- `.SherpaMind/private/state/hot-watch-state.json`
+- `.SherpaMind/private/state/alert-dispatch-state.json`
+- `.SherpaMind/private/state/maintenance-state.json`
+- `.SherpaMind/private/state/service-state.json`
+- `.SherpaMind/private/logs/service.log` *(aggregate/compatibility surface)*
+- `.SherpaMind/private/logs/hot-watch.log`
+- `.SherpaMind/private/logs/alert-dispatch.log`
+- `.SherpaMind/private/logs/maintenance.log`
 - `.SherpaMind/private/runtime/venv`
 - `.SherpaMind/public/exports`
 - `.SherpaMind/public/docs`

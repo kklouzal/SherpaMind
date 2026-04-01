@@ -168,7 +168,7 @@ Then use this flow from the installed skill bundle root:
 
 Default expectation on Linux is that `setup` initializes the DB, cleans up any old SherpaMind cron jobs, and can generate an initial public snapshot. Treat user-level `systemd` installation as a later, explicit operator choice rather than part of the earliest bootstrap steps.
 
-If service installation fails because the target host lacks usable `systemctl --user`, continue the bootstrap/config/seed flow anyway, report the service limitation clearly, and use `python3 scripts/run.py service-run-once` or `python3 scripts/run.py service-run` as the fallback operational mode instead of pretending the service installed.
+If service installation fails because the target host lacks usable `systemctl --user`, continue the bootstrap/config/seed flow anyway, report the service limitation clearly, and use the worker-specific fallback commands (`hot-watch-run-once`, `alert-dispatch-run-once`, `maintenance-run-once`, or the corresponding foreground loops) instead of pretending the split services installed.
 
 If install/runtime/use issues or meaningful feature gaps are discovered while operating SherpaMind, check <https://github.com/kklouzal/SherpaMind/issues>. If a matching issue exists, add supporting detail; otherwise open a new issue with clear reproduction/context. Keep issue content anonymized and public-safe.
 
@@ -191,6 +191,9 @@ Use these for setup/maintenance, not routine user queries:
 - `python3 scripts/run.py install-service`
 - `python3 scripts/run.py restart-service`
 - `python3 scripts/run.py service-status`
+- `python3 scripts/run.py hot-watch-run-once`
+- `python3 scripts/run.py alert-dispatch-run-once`
+- `python3 scripts/run.py maintenance-run-once`
 - `python3 scripts/run.py generate-public-snapshot`
 - `python3 scripts/run.py generate-runtime-status`
 

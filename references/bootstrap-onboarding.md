@@ -33,7 +33,7 @@ Use `--summary` for terse line-oriented output.
 - whether the runtime venv already exists
 - whether the OpenClaw-provided API key plus org / instance are present
 - whether the local DB exists yet
-- whether user-level `systemd` is available and whether the service is already installed
+- whether user-level `systemd` is available and whether the split worker services are already installed
 - explicit next steps before unattended mode is attempted
 
 ## Recommended bootstrap flow
@@ -71,6 +71,7 @@ Use `--summary` for terse line-oriented output.
    python3 scripts/run.py install-service
    python3 scripts/run.py service-status
    ```
+   This installs the split worker runtime (`hot-watch`, `alert-dispatch`, `maintenance`) rather than one monolithic daemon.
 
 ## Non-goals
 

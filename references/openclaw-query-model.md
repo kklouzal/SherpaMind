@@ -109,7 +109,9 @@ Possible future exception:
 ### Service/lifecycle commands
 - `python3 scripts/run.py doctor`
 - `python3 scripts/run.py service-status`
-- `python3 scripts/run.py service-run-once`
+- `python3 scripts/run.py hot-watch-run-once`
+- `python3 scripts/run.py alert-dispatch-run-once`
+- `python3 scripts/run.py maintenance-run-once`
 - `python3 scripts/run.py backfill-technician-stubs`
 - `python3 scripts/run.py generate-public-snapshot`
 

@@ -14,7 +14,8 @@ Responsible for:
 - structuring
 - chunking
 - replaceable derived artifact generation
-- background maintenance/runtime behavior
+- queue-backed alert-event detection and delivery preparation
+- split background runtime behavior across hot-watch, alert-dispatch, and maintenance workers
 
 ### 2. OpenClaw skill-front half
 Responsible for:

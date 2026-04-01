@@ -11,20 +11,40 @@ Why:
 
 ## Service model
 
-SherpaMind uses a user-level systemd service where available:
-- unit name: `sherpamind.service`
-- managed through `systemctl --user`
-- executes the skill-local venv python with `-m sherpamind.cli service-run`
+SherpaMind now uses **split user-level systemd workers** where available:
+- `sherpamind-hot-watch.service`
+- `sherpamind-alert-dispatch.service`
+- `sherpamind-maintenance.service`
+- all managed through `systemctl --user`
+
+The worker entrypoints are:
+- `-m sherpamind.cli hot-watch-run`
+- `-m sherpamind.cli alert-dispatch-run`
+- `-m sherpamind.cli maintenance-run`
 
 ## Internal periodic lanes
 
-The backend service owns the periodic work directly:
-- hot open watcher/sync loop
-- warm closed reconciliation loop
-- cold closed audit loop
-- priority enrichment loop
-- public snapshot generation loop
-- periodic service-state/health marker updates
+The backend runtime no longer treats all work as one serialized service pass.
+
+Instead it owns three distinct worker lanes:
+- **hot watch worker**
+  - hot open polling
+  - warm-watch-style recent closed polling
+  - new-ticket / requester-update detection
+  - durable alert-event enqueueing
+- **alert dispatch worker**
+  - alert queue leasing
+  - ticket-detail refresh for queued events
+  - OpenClaw webhook delivery
+  - retry / dedupe / failure accounting
+- **maintenance worker**
+  - warm closed reconciliation
+  - cold closed audit
+  - priority enrichment
+  - retrieval artifact refresh
+  - public snapshot generation
+  - vector refresh
+  - runtime-status generation and maintenance cleanup
 
 The priority enrichment loop should stay retrieval-oriented rather than purely recency-oriented:
 - open tickets first
@@ -77,8 +97,14 @@ The service should also repair stale derived retrieval artifacts when the curren
 - `python3 scripts/run.py stop-service`
 - `python3 scripts/run.py restart-service`
 - `python3 scripts/run.py service-status`
-- `python3 scripts/run.py service-run` (foreground/debug)
-- `python3 scripts/run.py service-run-once`
+- `python3 scripts/run.py hot-watch-run` (foreground/debug)
+- `python3 scripts/run.py hot-watch-run-once`
+- `python3 scripts/run.py alert-dispatch-run` (foreground/debug)
+- `python3 scripts/run.py alert-dispatch-run-once`
+- `python3 scripts/run.py maintenance-run` (foreground/debug)
+- `python3 scripts/run.py maintenance-run-once`
+- `python3 scripts/run.py service-run` *(legacy compatibility alias to maintenance loop)*
+- `python3 scripts/run.py service-run-once` *(legacy compatibility alias to maintenance one-shot)*
 
 ### Lifecycle helpers
 - `python3 scripts/run.py setup`
