@@ -194,6 +194,8 @@ CREATE TABLE IF NOT EXISTS vector_chunk_index (
 DB_LOCK_RETRY_DELAY_SECONDS = 90
 DB_LOCK_MAX_RETRIES = 5
 DB_STALE_RUNNING_AFTER_SECONDS = 6 * 3600
+DB_SQLITE_TIMEOUT_SECONDS = 30.0
+DB_BUSY_TIMEOUT_MS = 30000
 
 T = TypeVar("T")
 
@@ -204,9 +206,11 @@ def now_iso() -> str:
 
 def connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path, timeout=5.0)
+    conn = sqlite3.connect(db_path, timeout=DB_SQLITE_TIMEOUT_SECONDS)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute(f"PRAGMA busy_timeout = {DB_BUSY_TIMEOUT_MS}")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
     return conn
 
 

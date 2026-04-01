@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+import fcntl
 import json
 import math
+import os
 import time
 import traceback
 from typing import Any, Callable
@@ -86,6 +89,31 @@ def _append_log(message: str) -> None:
     paths = ensure_path_layout()
     with paths.service_log.open("a", encoding="utf-8") as f:
         f.write(f"[{_now_iso()}] {message}\n")
+
+
+@contextmanager
+def _task_run_lock(wait: bool = False):
+    paths = ensure_path_layout()
+    paths.run_lock_file.parent.mkdir(parents=True, exist_ok=True)
+    with paths.run_lock_file.open("a+", encoding="utf-8") as fh:
+        lock_flags = fcntl.LOCK_EX
+        if not wait:
+            lock_flags |= fcntl.LOCK_NB
+        try:
+            fcntl.flock(fh.fileno(), lock_flags)
+        except BlockingIOError:
+            raise RuntimeError("task runner already active")
+        fh.seek(0)
+        fh.truncate()
+        fh.write(f"pid={os.getpid()} acquired_at={_now_iso()}\n")
+        fh.flush()
+        try:
+            yield fh
+        finally:
+            fh.seek(0)
+            fh.truncate()
+            fh.flush()
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
 
 def _result_status(value: Any) -> str | None:
@@ -302,67 +330,20 @@ def _detect_immediate_local_repair_needs(settings: Settings) -> dict[str, str]:
 
 def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
     settings = settings or load_settings()
-    state = _load_state()
-    tasks_state = state.setdefault("tasks", {})
-    now = time.time()
-    results = []
+    try:
+        with _task_run_lock(wait=False):
+            state = _load_state()
+            tasks_state = state.setdefault("tasks", {})
+            now = time.time()
+            results = []
 
-    cleaned_stale_runs = cleanup_stale_ingest_runs(settings.db_path)
-    if cleaned_stale_runs:
-        _append_log(f"ingest_runs stale_running_cleaned={cleaned_stale_runs}")
+            cleaned_stale_runs = cleanup_stale_ingest_runs(settings.db_path)
+            if cleaned_stale_runs:
+                _append_log(f"ingest_runs stale_running_cleaned={cleaned_stale_runs}")
 
-    pruned = prune_api_request_events(settings.db_path, settings.api_request_log_retention_days)
-    if pruned:
-        _append_log(f"api_request_events pruned={pruned}")
-    usage = get_api_usage_summary(settings.db_path)
-    bootstrap = _update_cold_bootstrap_status(settings)
-    plan = _build_budget_plan(settings, usage, bootstrap)
-    effective_settings = _effective_settings(settings, plan)
-    state["api_usage_last_seen"] = usage
-    state["budget_plan_last_seen"] = plan.__dict__
-    state["cold_bootstrap_last_seen"] = bootstrap.__dict__
-    forced_tasks = _detect_immediate_local_repair_needs(settings)
-
-    for spec in _task_specs(effective_settings):
-        task_state = tasks_state.setdefault(spec.name, {})
-        last_run = float(task_state.get("last_run_epoch", 0))
-        force_reason = forced_tasks.get(spec.name)
-        if force_reason is None and now - last_run < spec.every_seconds:
-            continue
-        allowed, reason = _budget_gate(plan, spec)
-        if not allowed:
-            task_state.update({
-                "last_skipped_at": _now_iso(),
-                "last_skip_reason": reason,
-            })
-            results.append({"task": spec.name, "status": "skipped", "reason": reason, "forced": bool(force_reason), "force_reason": force_reason})
-            _append_log(f"task={spec.name} status=skipped reason={reason}")
-            continue
-        try:
-            def _run_task() -> Any:
-                return spec.runner(effective_settings)
-
-            result = run_with_db_lock_retries(
-                _run_task,
-                on_retry=lambda attempt, max_retries, exc, task_name=spec.name: _append_log(
-                    f"task={task_name} status=retry attempt={attempt}/{max_retries} error={type(exc).__name__}: {exc}"
-                ),
-            )
-            evaluated = _evaluate_task_result(result)
-            task_state.update({
-                "last_run_epoch": now,
-                "last_status": evaluated.status,
-                "last_run_at": _now_iso(),
-            })
-            if evaluated.status == "ok":
-                task_state.pop("last_error", None)
-                task_state.pop("last_skip_reason", None)
-                results.append({"task": spec.name, "status": "ok", "result": getattr(result, '__dict__', result), "forced": bool(force_reason), "force_reason": force_reason})
-                _append_log(f"task={spec.name} status=ok mode={plan.mode}")
-            else:
-                task_state["last_error"] = evaluated.error_message or str(evaluated.detail)
-                results.append({"task": spec.name, "status": evaluated.status, "result": getattr(result, '__dict__', result), "error": evaluated.error_message, "forced": bool(force_reason), "force_reason": force_reason})
-                _append_log(f"task={spec.name} status={evaluated.status} detail={evaluated.error_message or evaluated.detail}")
+            pruned = prune_api_request_events(settings.db_path, settings.api_request_log_retention_days)
+            if pruned:
+                _append_log(f"api_request_events pruned={pruned}")
             usage = get_api_usage_summary(settings.db_path)
             bootstrap = _update_cold_bootstrap_status(settings)
             plan = _build_budget_plan(settings, usage, bootstrap)
@@ -370,34 +351,93 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
             state["api_usage_last_seen"] = usage
             state["budget_plan_last_seen"] = plan.__dict__
             state["cold_bootstrap_last_seen"] = bootstrap.__dict__
-        except Exception as exc:
-            task_state.update({
-                "last_run_epoch": now,
-                "last_status": "error",
-                "last_run_at": _now_iso(),
-                "last_error": f"{type(exc).__name__}: {exc}",
-            })
-            results.append({"task": spec.name, "status": "error", "error": f"{type(exc).__name__}: {exc}", "forced": bool(force_reason), "force_reason": force_reason})
-            _append_log(f"task={spec.name} status=error error={type(exc).__name__}: {exc}")
-            usage = get_api_usage_summary(settings.db_path)
-            bootstrap = _update_cold_bootstrap_status(settings)
-            plan = _build_budget_plan(settings, usage, bootstrap)
-            state["api_usage_last_seen"] = usage
-            state["budget_plan_last_seen"] = plan.__dict__
-            state["cold_bootstrap_last_seen"] = bootstrap.__dict__
-    state["last_loop_at"] = _now_iso()
-    _save_state(state)
-    return {
-        "status": "ok",
-        "results": results,
-        "state_file": str(ensure_path_layout().service_state_file),
-        "api_usage": usage,
-        "budget_plan": plan.__dict__,
-        "cold_bootstrap": bootstrap.__dict__,
-        "retention_days": settings.api_request_log_retention_days,
-        "pruned_request_events": pruned,
-        "cleaned_stale_ingest_runs": cleaned_stale_runs,
-    }
+            forced_tasks = _detect_immediate_local_repair_needs(settings)
+
+            for spec in _task_specs(effective_settings):
+                task_state = tasks_state.setdefault(spec.name, {})
+                last_run = float(task_state.get("last_run_epoch", 0))
+                force_reason = forced_tasks.get(spec.name)
+                if force_reason is None and now - last_run < spec.every_seconds:
+                    continue
+                allowed, reason = _budget_gate(plan, spec)
+                if not allowed:
+                    task_state.update({
+                        "last_skipped_at": _now_iso(),
+                        "last_skip_reason": reason,
+                    })
+                    results.append({"task": spec.name, "status": "skipped", "reason": reason, "forced": bool(force_reason), "force_reason": force_reason})
+                    _append_log(f"task={spec.name} status=skipped reason={reason}")
+                    continue
+                try:
+                    def _run_task() -> Any:
+                        return spec.runner(effective_settings)
+
+                    result = run_with_db_lock_retries(
+                        _run_task,
+                        on_retry=lambda attempt, max_retries, exc, task_name=spec.name: _append_log(
+                            f"task={task_name} status=retry attempt={attempt}/{max_retries} error={type(exc).__name__}: {exc}"
+                        ),
+                    )
+                    evaluated = _evaluate_task_result(result)
+                    task_state.update({
+                        "last_run_epoch": now,
+                        "last_status": evaluated.status,
+                        "last_run_at": _now_iso(),
+                    })
+                    if evaluated.status == "ok":
+                        task_state.pop("last_error", None)
+                        task_state.pop("last_skip_reason", None)
+                        results.append({"task": spec.name, "status": "ok", "result": getattr(result, '__dict__', result), "forced": bool(force_reason), "force_reason": force_reason})
+                        _append_log(f"task={spec.name} status=ok mode={plan.mode}")
+                    else:
+                        task_state["last_error"] = evaluated.error_message or str(evaluated.detail)
+                        results.append({"task": spec.name, "status": evaluated.status, "result": getattr(result, '__dict__', result), "error": evaluated.error_message, "forced": bool(force_reason), "force_reason": force_reason})
+                        _append_log(f"task={spec.name} status={evaluated.status} detail={evaluated.error_message or evaluated.detail}")
+                    usage = get_api_usage_summary(settings.db_path)
+                    bootstrap = _update_cold_bootstrap_status(settings)
+                    plan = _build_budget_plan(settings, usage, bootstrap)
+                    effective_settings = _effective_settings(settings, plan)
+                    state["api_usage_last_seen"] = usage
+                    state["budget_plan_last_seen"] = plan.__dict__
+                    state["cold_bootstrap_last_seen"] = bootstrap.__dict__
+                except Exception as exc:
+                    task_state.update({
+                        "last_run_epoch": now,
+                        "last_status": "error",
+                        "last_run_at": _now_iso(),
+                        "last_error": f"{type(exc).__name__}: {exc}",
+                    })
+                    results.append({"task": spec.name, "status": "error", "error": f"{type(exc).__name__}: {exc}", "forced": bool(force_reason), "force_reason": force_reason})
+                    _append_log(f"task={spec.name} status=error error={type(exc).__name__}: {exc}")
+                    usage = get_api_usage_summary(settings.db_path)
+                    bootstrap = _update_cold_bootstrap_status(settings)
+                    plan = _build_budget_plan(settings, usage, bootstrap)
+                    state["api_usage_last_seen"] = usage
+                    state["budget_plan_last_seen"] = plan.__dict__
+                    state["cold_bootstrap_last_seen"] = bootstrap.__dict__
+
+            state["last_loop_at"] = _now_iso()
+            _save_state(state)
+            return {
+                "status": "ok",
+                "results": results,
+                "state_file": str(ensure_path_layout().service_state_file),
+                "api_usage": usage,
+                "budget_plan": plan.__dict__,
+                "cold_bootstrap": bootstrap.__dict__,
+                "retention_days": settings.api_request_log_retention_days,
+                "pruned_request_events": pruned,
+                "cleaned_stale_ingest_runs": cleaned_stale_runs,
+            }
+    except RuntimeError as exc:
+        if str(exc) == "task runner already active":
+            _append_log("run_pending_tasks skipped: task runner already active")
+            return {
+                "status": "skipped",
+                "reason": "task_runner_already_active",
+                "state_file": str(ensure_path_layout().service_state_file),
+            }
+        raise
 
 
 def run_service_loop() -> int:

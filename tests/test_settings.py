@@ -104,3 +104,25 @@ def test_load_settings_uses_openclaw_skill_entry_only_for_non_key_context(monkey
     assert settings.api_key is None
     assert settings.org_key == "org-ui"
     assert settings.instance_key == "inst-ui"
+
+
+def test_stage_connection_settings_persists_new_ticket_alert_options(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
+    monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_INSTANCE_KEY", raising=False)
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    stage_connection_settings(
+        org_key="org1",
+        instance_key="inst1",
+        new_ticket_alerts_enabled="true",
+        openclaw_webhook_url="http://127.0.0.1:18789/hooks/agent",
+        openclaw_webhook_token="token123",
+        new_ticket_alert_channel="channel:1488924125736079492",
+    )
+    settings = load_settings()
+    assert settings.new_ticket_alerts_enabled is True
+    assert settings.openclaw_webhook_url == "http://127.0.0.1:18789/hooks/agent"
+    assert settings.openclaw_webhook_token == "token123"
+    assert settings.new_ticket_alert_channel == "channel:1488924125736079492"

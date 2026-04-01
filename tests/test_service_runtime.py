@@ -20,6 +20,10 @@ def make_settings(tmp_path: Path) -> Settings:
         db_path=tmp_path / '.SherpaMind' / 'private' / 'data' / 'sherpamind.sqlite3',
         watch_state_path=tmp_path / '.SherpaMind' / 'private' / 'state' / 'watch_state.json',
         notify_channel=None,
+        new_ticket_alerts_enabled=False,
+        openclaw_webhook_url=None,
+        openclaw_webhook_token=None,
+        new_ticket_alert_channel=None,
         request_min_interval_seconds=0,
         request_timeout_seconds=30,
         seed_page_size=100,
@@ -54,6 +58,17 @@ def test_run_pending_tasks_writes_service_state(monkeypatch, tmp_path: Path) -> 
     result = run_pending_tasks(settings)
     assert result['status'] == 'ok'
     assert (tmp_path / '.SherpaMind' / 'private' / 'state' / 'service-state.json').exists()
+
+
+def test_run_pending_tasks_skips_when_lock_is_held(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
+    settings = make_settings(tmp_path)
+    initialize_db(settings.db_path)
+    from sherpamind.service_runtime import _task_run_lock
+    with _task_run_lock(wait=False):
+        result = run_pending_tasks(settings)
+    assert result['status'] == 'skipped'
+    assert result['reason'] == 'task_runner_already_active'
 
 
 def test_run_pending_tasks_cleans_stale_ingest_rows(monkeypatch, tmp_path: Path) -> None:

@@ -37,6 +37,7 @@ class SherpaMindPaths:
     watch_state_path: Path
     service_state_file: Path
     service_log: Path
+    run_lock_file: Path
     runtime_venv: Path
     legacy_env_file: Path
 
@@ -77,6 +78,7 @@ def resolve_paths() -> SherpaMindPaths:
         watch_state_path=state_root / "watch_state.json",
         service_state_file=state_root / "service-state.json",
         service_log=logs_root / "service.log",
+        run_lock_file=state_root / "service-run.lock",
         runtime_venv=runtime_root / "venv",
         legacy_env_file=private_root / "config.env",
     )
