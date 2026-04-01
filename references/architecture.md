@@ -46,7 +46,7 @@ SherpaMind needs all three behaviors, so the durable design is **SQLite + retrie
 
 ### Adjacent local state
 - `.SherpaMind/private/config/settings.env`
-- `.SherpaMind/private/secrets/sherpadesk_api_key.txt`
+- OpenClaw-managed `SHERPADESK_API_KEY` for live API auth
 - `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
 - `.SherpaMind/private/state/watch_state.json`
 - `.SherpaMind/private/runtime/venv`

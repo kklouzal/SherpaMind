@@ -13,7 +13,7 @@ Before changing API logic, consult:
 
 Expected configuration comes from:
 - `.SherpaMind/private/config/settings.env` for staged non-secret connection/runtime settings
-- `.SherpaMind/private/secrets/sherpadesk_api_key.txt` for the staged API key
+- the OpenClaw `sherpamind` skill configuration for the live `SHERPADESK_API_KEY`
 - optionally `.SherpaMind/private/secrets/sherpadesk_api_user.txt` for a staged API user hint
 - process environment overrides only when needed
 - `.env.example` as the public reference template

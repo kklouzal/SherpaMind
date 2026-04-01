@@ -278,7 +278,7 @@ def setup(
         "next": [
             "python3 scripts/run.py bootstrap-audit",
             "python3 scripts/run.py doctor",
-            "python3 scripts/run.py stage-api-key --from-file <path-to-token-file>",
+            "Configure the OpenClaw `sherpamind` skill with the SherpaDesk API key",
             "python3 scripts/run.py discover-orgs",
             "python3 scripts/run.py configure --org-key <org> --instance-key <instance>",
             "python3 scripts/run.py seed",
@@ -308,8 +308,8 @@ def bootstrap_audit(summary: bool = False) -> None:
 
     if not paths.runtime_venv.exists():
         add_step("bootstrap-runtime", "Bootstrap the runtime venv and staged runtime directories.", "python3 scripts/bootstrap.py")
-    if not paths.api_key_file.exists():
-        add_step("stage-api-key", f"Stage the SherpaDesk API key in {paths.api_key_file} or use stage-api-key.", "python3 scripts/run.py stage-api-key --from-file <path-to-token-file>")
+    if not settings.api_key:
+        add_step("configure-openclaw-skill-api-key", "Configure the OpenClaw `sherpamind` skill with the SherpaDesk API key so runtime surfaces receive SHERPADESK_API_KEY.")
     if not settings.org_key or not settings.instance_key:
         add_step("discover-and-configure-org-instance", "Discover orgs/instances, then persist the chosen org/instance in non-secret settings.", "python3 scripts/run.py discover-orgs")
     if not settings.db_path.exists():
@@ -352,7 +352,7 @@ def bootstrap_audit(summary: bool = False) -> None:
         print(f"ready={payload['ready']}")
         print(f"runtime_root={paths.root}")
         print(f"settings_file={paths.settings_file}")
-        print(f"api_key_file={paths.api_key_file}")
+        print(f"api_key_source=OpenClaw skill env (SHERPADESK_API_KEY)")
         print(f"blocking_step_count={payload['summary']['blocking_step_count']}")
         print(f"nonblocking_step_count={payload['summary']['nonblocking_step_count']}")
         for step in onboarding_steps:

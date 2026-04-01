@@ -143,7 +143,6 @@ def doctor_service() -> dict[str, Any]:
         **status,
         "runtime_python_exists": (paths.runtime_venv / "bin" / "python").exists(),
         "settings_file_exists": paths.settings_file.exists(),
-        "api_key_file_exists": paths.api_key_file.exists(),
         "api_user_file_exists": paths.api_user_file.exists(),
         "service_log_exists": paths.service_log.exists(),
         "service_state_exists": paths.service_state_file.exists(),

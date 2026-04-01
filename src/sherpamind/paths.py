@@ -190,8 +190,6 @@ def _merge_legacy_settings_into_current(paths: SherpaMindPaths) -> None:
             changed_settings = True
     if changed_settings or (legacy_values and not paths.settings_file.exists()):
         _write_settings_file(paths.settings_file, current_settings)
-    if not paths.api_key_file.exists() and legacy_values.get("SHERPADESK_API_KEY"):
-        _write_secret_file(paths.api_key_file, legacy_values["SHERPADESK_API_KEY"])
     if not paths.api_user_file.exists() and legacy_values.get("SHERPADESK_API_USER"):
         _write_secret_file(paths.api_user_file, legacy_values["SHERPADESK_API_USER"])
 

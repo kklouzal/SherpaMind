@@ -17,13 +17,13 @@ For live use it can:
 - create staged runtime dirs under `.SherpaMind/private/config/`, `.SherpaMind/private/secrets/`, `.SherpaMind/private/data/`, `.SherpaMind/private/state/`, `.SherpaMind/private/logs/`, `.SherpaMind/private/runtime/`, and `.SherpaMind/public/`
 - create a Python runtime venv under `.SherpaMind/private/runtime/venv`
 - install Python packages from PyPI during bootstrap
-- store the SherpaDesk API key locally in `.SherpaMind/private/secrets/sherpadesk_api_key.txt`
+- require the SherpaDesk API key to be configured through the OpenClaw `sherpamind` skill so runtime receives `SHERPADESK_API_KEY`
 - optionally store a SherpaDesk API user hint in `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
 - store non-secret connection/runtime settings in `.SherpaMind/private/config/settings.env`
 - optionally install and run a **user-level** `systemd` background service for ongoing sync/enrichment
 
-Primary live staged credentials/config required:
-- API key file: `.SherpaMind/private/secrets/sherpadesk_api_key.txt`
+Primary live credentials/config required:
+- OpenClaw-managed `SHERPADESK_API_KEY` configured for the `sherpamind` skill
 - org/instance settings: `.SherpaMind/private/config/settings.env`
 
 Persistent behavior is intentionally workspace-local and user-scoped; SherpaMind does not require system-wide privilege for its normal service model.
@@ -209,7 +209,7 @@ SherpaMind uses a workspace-local split storage model:
 - `.SherpaMind/private/config/`
   - staged non-secret connection/runtime settings
 - `.SherpaMind/private/secrets/`
-  - staged API key / optional API user secret files
+  - optional staged SherpaDesk API user hint and other non-key local secret-side artifacts
 - `.SherpaMind/private/data/`
   - canonical SQLite database
 - `.SherpaMind/private/state/`
@@ -441,7 +441,6 @@ python3 scripts/run.py bootstrap-audit
 python3 scripts/bootstrap.py
 python3 scripts/run.py setup
 python3 scripts/run.py doctor
-python3 scripts/run.py stage-api-key --from-file <path-to-token-file>
 python3 scripts/run.py discover-orgs
 python3 scripts/run.py configure --org-key <org> --instance-key <instance>
 python3 scripts/run.py seed
@@ -462,7 +461,7 @@ On a normal Linux host, `python3 scripts/run.py setup` is expected to:
 - clean up any legacy SherpaMind OpenClaw cron jobs
 - generate an initial public snapshot
 
-Treat user-level `systemd` installation as a later, explicit operator decision after bootstrap, credential staging, discovery, and seed validation are complete.
+Treat user-level `systemd` installation as a later, explicit operator decision after bootstrap, OpenClaw skill API-key configuration, discovery, and seed validation are complete.
 
 If the target host does not support usable `systemctl --user`, the install is still valid in fallback mode, but the operator/agent should say so plainly and use:
 
@@ -492,7 +491,6 @@ When SherpaMind is installed under an OpenClaw `skills/` directory, the default 
 This creates the main workspace-local layout:
 
 - `.SherpaMind/private/config/settings.env`
-- `.SherpaMind/private/secrets/sherpadesk_api_key.txt`
 - `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
 - `.SherpaMind/private/data/sherpamind.sqlite3`
 - `.SherpaMind/private/state/watch_state.json`
@@ -507,7 +505,6 @@ Useful first-run sequence:
 python3 scripts/run.py bootstrap-audit
 python3 scripts/bootstrap.py
 python3 scripts/run.py setup
-python3 scripts/run.py stage-api-key --from-file <path-to-token-file>
 python3 scripts/run.py discover-orgs
 python3 scripts/run.py configure --org-key <org> --instance-key <instance>
 python3 scripts/run.py seed
@@ -517,7 +514,7 @@ python3 scripts/run.py install-service
 python3 scripts/run.py service-status
 ```
 
-Runtime control/environment overrides are documented in `.env.example`, but the normal staged secret/config flow for live installs is file-based under `.SherpaMind/`, not env-var-first.
+Runtime control/environment overrides are documented in `.env.example`, but the normal live API-key path is OpenClaw skill configuration feeding `SHERPADESK_API_KEY`, while `.SherpaMind/` continues to hold non-secret runtime settings and local derived state.
 
 Important controls include:
 

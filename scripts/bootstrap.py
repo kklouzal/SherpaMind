@@ -71,10 +71,6 @@ def settings_file() -> Path:
     return config_root() / "settings.env"
 
 
-def api_key_file() -> Path:
-    return secrets_root() / "sherpadesk_api_key.txt"
-
-
 def api_user_file() -> Path:
     return secrets_root() / "sherpadesk_api_user.txt"
 
@@ -100,13 +96,13 @@ def ensure_layout() -> None:
         path.mkdir(parents=True, exist_ok=True)
     if not settings_file().exists():
         settings_file().write_text(DEFAULT_SETTINGS_TEMPLATE, encoding="utf-8")
-    for path in [api_key_file(), api_user_file()]:
-        if not path.exists():
-            path.write_text("", encoding="utf-8")
-            try:
-                path.chmod(0o600)
-            except OSError:
-                pass
+    path = api_user_file()
+    if not path.exists():
+        path.write_text("", encoding="utf-8")
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
 
 
 def ensure_venv(venv_root: Path) -> None:

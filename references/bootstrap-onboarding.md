@@ -31,7 +31,7 @@ Use `--summary` for terse line-oriented output.
 - resolved skill root, workspace root, and runtime root
 - staged runtime path layout
 - whether the runtime venv already exists
-- whether the staged API key / org / instance are present
+- whether the OpenClaw-provided API key plus org / instance are present
 - whether the local DB exists yet
 - whether user-level `systemd` is available and whether the service is already installed
 - explicit next steps before unattended mode is attempted
@@ -50,11 +50,7 @@ Use `--summary` for terse line-oriented output.
    python3 scripts/run.py setup
    python3 scripts/run.py doctor
    ```
-3. Stage the SherpaDesk API key locally without putting it in the repo:
-   ```bash
-   cd {baseDir}
-   python3 scripts/run.py stage-api-key --from-file <path-to-token-file>
-   ```
+3. Ensure the OpenClaw `sherpamind` skill is configured with the SherpaDesk API key so runtime surfaces receive `SHERPADESK_API_KEY`.
 4. Discover organizations/instances, then stage the chosen org/instance:
    ```bash
    cd {baseDir}
