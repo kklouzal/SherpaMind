@@ -3,7 +3,7 @@ from pathlib import Path
 from sherpamind.db import initialize_db, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
 from sherpamind.documents import materialize_ticket_documents
 from sherpamind.settings import Settings
-from sherpamind.alerts import _build_hook_payload
+from sherpamind.alerts import _build_hook_payload, _build_ticket_update_payload
 from sherpamind.summaries import get_ticket_summary
 
 
@@ -18,9 +18,11 @@ def make_settings(tmp_path: Path) -> Settings:
         watch_state_path=tmp_path / "watch_state.json",
         notify_channel=None,
         new_ticket_alerts_enabled=True,
+        ticket_update_alerts_enabled=True,
         openclaw_webhook_url="http://127.0.0.1:18789/hooks/agent",
         openclaw_webhook_token=None,
         new_ticket_alert_channel="channel:1488924125736079492",
+        ticket_update_alert_channel="channel:1488924125736079492",
         request_min_interval_seconds=0,
         request_timeout_seconds=30,
         seed_page_size=100,
@@ -78,3 +80,19 @@ def test_build_hook_payload_contains_ticket_triage_context(tmp_path: Path) -> No
     assert "Acme Co" in message
     assert "recent_logs" not in message
     assert "next_step_context" not in message
+
+
+def test_build_ticket_update_payload_allows_broader_history_context(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path)
+    seed_fixture(settings.db_path)
+    summary = get_ticket_summary(settings.db_path, "101", limit_logs=5, limit_attachments=5)
+    payload = _build_ticket_update_payload(settings, "101", summary)
+
+    assert payload["agentId"] == "main"
+    assert payload["channel"] == "discord"
+    assert payload["to"] == "channel:1488924125736079492"
+    message = payload["message"]
+    assert "new NON-TECH update" in message
+    assert "broader ticket history" in message
+    assert "recent_logs" in message
+    assert "retrieval_metadata" in message

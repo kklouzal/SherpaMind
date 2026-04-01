@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .alerts import dispatch_new_ticket_alert
+from .alerts import dispatch_new_ticket_alert, dispatch_ticket_update_alert
 from .client import SherpaDeskClient
 from .db import initialize_db, now_iso, upsert_tickets
 from .settings import Settings
@@ -125,6 +125,12 @@ def watch_new_tickets(settings: Settings) -> WatchResult:
         for ticket in new_tickets:
             alert_results.append(dispatch_new_ticket_alert(settings, str(ticket.get("id"))))
 
+    update_alert_results = []
+    if settings.ticket_update_alerts_enabled:
+        for ticket in changed_tickets:
+            if ticket.get("is_new_user_post") and not ticket.get("is_new_tech_post"):
+                update_alert_results.append(dispatch_ticket_update_alert(settings, str(ticket.get("id"))))
+
     next_state = {
         "known_open_ticket_ids": sorted(current_ids),
         "last_watch_at": synced_at,
@@ -134,6 +140,7 @@ def watch_new_tickets(settings: Settings) -> WatchResult:
         "removed_open_ticket_ids_last_run": closed_or_missing_ids,
         "open_ticket_snapshot": current_snapshot,
         "new_ticket_alert_results_last_run": [result.__dict__ for result in alert_results],
+        "ticket_update_alert_results_last_run": [result.__dict__ for result in update_alert_results],
     }
     _save_watch_state(settings.watch_state_path, next_state)
     set_json_state(settings.db_path, "watch.last_state", next_state)
@@ -164,5 +171,8 @@ def watch_new_tickets(settings: Settings) -> WatchResult:
             "new_ticket_alerts_enabled": settings.new_ticket_alerts_enabled,
             "new_ticket_alert_channel": settings.new_ticket_alert_channel,
             "new_ticket_alert_dispatches": [result.__dict__ for result in alert_results],
+            "ticket_update_alerts_enabled": settings.ticket_update_alerts_enabled,
+            "ticket_update_alert_channel": settings.ticket_update_alert_channel,
+            "ticket_update_alert_dispatches": [result.__dict__ for result in update_alert_results],
         },
     )

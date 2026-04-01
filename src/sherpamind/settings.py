@@ -19,9 +19,11 @@ class Settings:
     watch_state_path: Path
     notify_channel: str | None
     new_ticket_alerts_enabled: bool
+    ticket_update_alerts_enabled: bool
     openclaw_webhook_url: str | None
     openclaw_webhook_token: str | None
     new_ticket_alert_channel: str | None
+    ticket_update_alert_channel: str | None
     request_min_interval_seconds: float
     request_timeout_seconds: float
     seed_page_size: int
@@ -68,9 +70,11 @@ def _write_key_value_file(path: Path, values: dict[str, str]) -> None:
         "SHERPADESK_INSTANCE_KEY",
         "SHERPAMIND_NOTIFY_CHANNEL",
         "SHERPAMIND_NEW_TICKET_ALERTS_ENABLED",
+        "SHERPAMIND_TICKET_UPDATE_ALERTS_ENABLED",
         "SHERPAMIND_OPENCLAW_WEBHOOK_URL",
         "SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN",
         "SHERPAMIND_NEW_TICKET_ALERT_CHANNEL",
+        "SHERPAMIND_TICKET_UPDATE_ALERT_CHANNEL",
     ]
     lines = [
         "# SherpaMind staged non-secret settings",
@@ -127,9 +131,11 @@ def stage_connection_settings(
     instance_key: str | None = None,
     notify_channel: str | None = None,
     new_ticket_alerts_enabled: str | None = None,
+    ticket_update_alerts_enabled: str | None = None,
     openclaw_webhook_url: str | None = None,
     openclaw_webhook_token: str | None = None,
     new_ticket_alert_channel: str | None = None,
+    ticket_update_alert_channel: str | None = None,
 ) -> Path:
     paths = ensure_path_layout()
     current = _read_key_value_file(paths.settings_file)
@@ -139,9 +145,11 @@ def stage_connection_settings(
         "SHERPADESK_INSTANCE_KEY": instance_key,
         "SHERPAMIND_NOTIFY_CHANNEL": notify_channel,
         "SHERPAMIND_NEW_TICKET_ALERTS_ENABLED": new_ticket_alerts_enabled,
+        "SHERPAMIND_TICKET_UPDATE_ALERTS_ENABLED": ticket_update_alerts_enabled,
         "SHERPAMIND_OPENCLAW_WEBHOOK_URL": openclaw_webhook_url,
         "SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN": openclaw_webhook_token,
         "SHERPAMIND_NEW_TICKET_ALERT_CHANNEL": new_ticket_alert_channel,
+        "SHERPAMIND_TICKET_UPDATE_ALERT_CHANNEL": ticket_update_alert_channel,
     }
     for key, value in updates.items():
         if value is not None:
@@ -165,9 +173,11 @@ def load_settings() -> Settings:
         watch_state_path=paths.watch_state_path,
         notify_channel=_env_or_file("SHERPAMIND_NOTIFY_CHANNEL", file_values),
         new_ticket_alerts_enabled=str(_env_or_file("SHERPAMIND_NEW_TICKET_ALERTS_ENABLED", file_values, "false") or "false").strip().lower() in {"1", "true", "yes", "on"},
+        ticket_update_alerts_enabled=str(_env_or_file("SHERPAMIND_TICKET_UPDATE_ALERTS_ENABLED", file_values, "false") or "false").strip().lower() in {"1", "true", "yes", "on"},
         openclaw_webhook_url=_env_or_file("SHERPAMIND_OPENCLAW_WEBHOOK_URL", file_values),
         openclaw_webhook_token=_env_or_file("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN", file_values),
         new_ticket_alert_channel=_env_or_file("SHERPAMIND_NEW_TICKET_ALERT_CHANNEL", file_values),
+        ticket_update_alert_channel=_env_or_file("SHERPAMIND_TICKET_UPDATE_ALERT_CHANNEL", file_values) or _env_or_file("SHERPAMIND_NEW_TICKET_ALERT_CHANNEL", file_values),
         request_min_interval_seconds=float(_env_or_file("SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS", file_values, "8.0") or "8.0"),
         request_timeout_seconds=float(_env_or_file("SHERPAMIND_REQUEST_TIMEOUT_SECONDS", file_values, "30.0") or "30.0"),
         seed_page_size=int(_env_or_file("SHERPAMIND_SEED_PAGE_SIZE", file_values, "100") or "100"),

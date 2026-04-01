@@ -117,12 +117,16 @@ def test_stage_connection_settings_persists_new_ticket_alert_options(monkeypatch
         org_key="org1",
         instance_key="inst1",
         new_ticket_alerts_enabled="true",
+        ticket_update_alerts_enabled="true",
         openclaw_webhook_url="http://127.0.0.1:18789/hooks/agent",
         openclaw_webhook_token="token123",
         new_ticket_alert_channel="channel:1488924125736079492",
+        ticket_update_alert_channel="channel:1488924125736079492",
     )
     settings = load_settings()
     assert settings.new_ticket_alerts_enabled is True
+    assert settings.ticket_update_alerts_enabled is True
     assert settings.openclaw_webhook_url == "http://127.0.0.1:18789/hooks/agent"
     assert settings.openclaw_webhook_token == "token123"
     assert settings.new_ticket_alert_channel == "channel:1488924125736079492"
+    assert settings.ticket_update_alert_channel == "channel:1488924125736079492"
