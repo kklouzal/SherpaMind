@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from .text_cleanup import normalize_metadata_label
 
@@ -190,6 +191,12 @@ CREATE TABLE IF NOT EXISTS vector_chunk_index (
 );
 """
 
+DB_LOCK_RETRY_DELAY_SECONDS = 90
+DB_LOCK_MAX_RETRIES = 5
+DB_STALE_RUNNING_AFTER_SECONDS = 6 * 3600
+
+T = TypeVar("T")
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -197,9 +204,36 @@ def now_iso() -> str:
 
 def connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=5.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
+
+
+def is_db_locked_error(exc: BaseException) -> bool:
+    return isinstance(exc, sqlite3.OperationalError) and "database is locked" in str(exc).lower()
+
+
+def run_with_db_lock_retries(
+    operation: Callable[[], T],
+    *,
+    max_retries: int = DB_LOCK_MAX_RETRIES,
+    delay_seconds: int = DB_LOCK_RETRY_DELAY_SECONDS,
+    on_retry: Callable[[int, int, BaseException], None] | None = None,
+) -> T:
+    attempts = 0
+    while True:
+        try:
+            return operation()
+        except BaseException as exc:
+            if not is_db_locked_error(exc):
+                raise
+            attempts += 1
+            if attempts > max_retries:
+                raise
+            if on_retry is not None:
+                on_retry(attempts, max_retries, exc)
+            time.sleep(delay_seconds)
 
 
 def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
@@ -219,22 +253,59 @@ def initialize_db(db_path: Path) -> None:
 
 
 def start_ingest_run(db_path: Path, mode: str, notes: str | None = None) -> int:
-    with connect(db_path) as conn:
-        cursor = conn.execute(
-            "INSERT INTO ingest_runs(mode, started_at, status, notes) VALUES(?, ?, ?, ?)",
-            (mode, now_iso(), "running", notes),
-        )
-        conn.commit()
-        return int(cursor.lastrowid)
+    def _operation() -> int:
+        with connect(db_path) as conn:
+            cursor = conn.execute(
+                "INSERT INTO ingest_runs(mode, started_at, status, notes) VALUES(?, ?, ?, ?)",
+                (mode, now_iso(), "running", notes),
+            )
+            conn.commit()
+            return int(cursor.lastrowid)
+
+    return run_with_db_lock_retries(_operation)
 
 
 def finish_ingest_run(db_path: Path, run_id: int, status: str, notes: str | None = None) -> None:
-    with connect(db_path) as conn:
-        conn.execute(
-            "UPDATE ingest_runs SET finished_at = ?, status = ?, notes = ? WHERE id = ?",
-            (now_iso(), status, notes, run_id),
-        )
-        conn.commit()
+    def _operation() -> None:
+        with connect(db_path) as conn:
+            conn.execute(
+                "UPDATE ingest_runs SET finished_at = ?, status = ?, notes = ? WHERE id = ?",
+                (now_iso(), status, notes, run_id),
+            )
+            conn.commit()
+
+    run_with_db_lock_retries(_operation)
+
+
+def cleanup_stale_ingest_runs(
+    db_path: Path,
+    *,
+    stale_after_seconds: int = DB_STALE_RUNNING_AFTER_SECONDS,
+    final_status: str = "abandoned",
+) -> int:
+    stale_before = (datetime.now(timezone.utc) - timedelta(seconds=stale_after_seconds)).isoformat()
+    finished_at = now_iso()
+
+    def _operation() -> int:
+        with connect(db_path) as conn:
+            stale_rows = conn.execute(
+                "SELECT id, notes FROM ingest_runs WHERE status = 'running' AND started_at < ?",
+                (stale_before,),
+            ).fetchall()
+            cleaned = 0
+            for row in stale_rows:
+                note_suffix = f" [auto-cleanup {finished_at}: stale running row]"
+                existing_notes = row["notes"] or ""
+                next_notes = f"{existing_notes}{note_suffix}" if note_suffix not in existing_notes else existing_notes
+                conn.execute(
+                    "UPDATE ingest_runs SET finished_at = ?, status = ?, notes = ? WHERE id = ?",
+                    (finished_at, final_status, next_notes, row["id"]),
+                )
+                cleaned += 1
+            conn.commit()
+            return cleaned
+
+    return run_with_db_lock_retries(_operation)
 
 
 def _json(value: Any) -> str:
@@ -822,31 +893,39 @@ def record_api_request_event(
     extra: dict[str, Any] | None = None,
 ) -> None:
     initialize_db(db_path)
-    with connect(db_path) as conn:
-        conn.execute(
-            """
-            INSERT INTO api_request_events(recorded_at, method, path, status_code, outcome, attempt_kind, raw_json)
-            VALUES(?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                now_iso(),
-                method,
-                path,
-                status_code,
-                outcome,
-                attempt_kind,
-                _json(extra or {}),
-            ),
-        )
-        conn.commit()
+
+    def _operation() -> None:
+        with connect(db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO api_request_events(recorded_at, method, path, status_code, outcome, attempt_kind, raw_json)
+                VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    now_iso(),
+                    method,
+                    path,
+                    status_code,
+                    outcome,
+                    attempt_kind,
+                    _json(extra or {}),
+                ),
+            )
+            conn.commit()
+
+    run_with_db_lock_retries(_operation)
 
 
 def prune_api_request_events(db_path: Path, retention_days: int) -> int:
     initialize_db(db_path)
-    with connect(db_path) as conn:
-        cursor = conn.execute(
-            "DELETE FROM api_request_events WHERE julianday(recorded_at) < julianday('now', ?)",
-            (f'-{retention_days} days',),
-        )
-        conn.commit()
-        return int(cursor.rowcount)
+
+    def _operation() -> int:
+        with connect(db_path) as conn:
+            cursor = conn.execute(
+                "DELETE FROM api_request_events WHERE julianday(recorded_at) < julianday('now', ?)",
+                (f'-{retention_days} days',),
+            )
+            conn.commit()
+            return int(cursor.rowcount)
+
+    return run_with_db_lock_retries(_operation)

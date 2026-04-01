@@ -4,6 +4,7 @@ from sherpamind.db import (
     backfill_ticket_core_fields,
     backfill_ticket_entity_stubs,
     backfill_ticket_technician_stubs,
+    cleanup_stale_ingest_runs,
     connect,
     finish_ingest_run,
     initialize_db,
@@ -335,3 +336,23 @@ def test_ingest_run_roundtrip(tmp_path: Path) -> None:
     assert row["status"] == "success"
     assert row["notes"] == "done"
     assert row["finished_at"] is not None
+
+
+def test_cleanup_stale_ingest_runs_marks_old_running_rows_abandoned(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+    with connect(db) as conn:
+        conn.execute(
+            "INSERT INTO ingest_runs(mode, started_at, status, notes) VALUES(?, ?, ?, ?)",
+            ("enrich_priority_ticket_details", "2026-03-01T00:00:00+00:00", "running", "limit=60"),
+        )
+        conn.commit()
+
+    cleaned = cleanup_stale_ingest_runs(db, stale_after_seconds=1)
+    assert cleaned == 1
+
+    with connect(db) as conn:
+        row = conn.execute("SELECT status, finished_at, notes FROM ingest_runs ORDER BY id DESC LIMIT 1").fetchone()
+    assert row["status"] == "abandoned"
+    assert row["finished_at"] is not None
+    assert "auto-cleanup" in row["notes"]

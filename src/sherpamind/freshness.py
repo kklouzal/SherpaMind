@@ -6,7 +6,17 @@ import json
 from typing import Any
 
 from .db import connect
+from .paths import ensure_path_layout
 from .time_utils import parse_sherpadesk_timestamp
+
+
+_SERVICE_TASK_BY_MODE = {
+    "seed": None,
+    "sync_hot_open": "hot_open",
+    "sync_warm_closed": "warm_closed",
+    "sync_cold_closed_audit": "cold_closed",
+    "enrich_priority_ticket_details": "enrichment",
+}
 
 
 _SYNC_LANES: tuple[tuple[str, float], ...] = (
@@ -51,8 +61,34 @@ def _classify_lane(*, latest_status: str | None, latest_finished_age_hours: floa
     return "critical"
 
 
+def _load_service_state() -> dict[str, Any]:
+    path = ensure_path_layout().service_state_file
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def _service_lane_snapshot(service_state: dict[str, Any], mode: str) -> dict[str, Any] | None:
+    task_name = _SERVICE_TASK_BY_MODE.get(mode)
+    if not task_name:
+        return None
+    task_state = ((service_state.get("tasks") or {}).get(task_name) or {})
+    if not task_state:
+        return None
+    return {
+        "task_name": task_name,
+        "last_status": task_state.get("last_status"),
+        "last_run_at": task_state.get("last_run_at"),
+        "last_error": task_state.get("last_error"),
+    }
+
+
 def get_sync_freshness(db_path: Path) -> dict:
     now = datetime.now(timezone.utc)
+    service_state = _load_service_state()
     with connect(db_path) as conn:
         lanes: dict[str, dict[str, Any]] = {}
         for mode, expected_max_age_hours in _SYNC_LANES:
@@ -106,11 +142,36 @@ def get_sync_freshness(db_path: Path) -> dict:
             latest_finished_age_hours = _hours_since(now, latest_finished_at)
             last_success_finished_at = latest_success_dict.get("finished_at") if latest_success_dict else None
             last_success_age_hours = _hours_since(now, last_success_finished_at)
+
+            service_lane = _service_lane_snapshot(service_state, mode)
+            service_last_status = (service_lane or {}).get("last_status")
+            service_last_run_at = (service_lane or {}).get("last_run_at")
+            service_last_run_age_hours = _hours_since(now, service_last_run_at)
+            service_evidence_used = False
+
             freshness_status = _classify_lane(
                 latest_status=latest_status,
                 latest_finished_age_hours=latest_finished_age_hours,
                 expected_max_age_hours=expected_max_age_hours,
             )
+
+            if service_last_status == "ok" and service_last_run_at:
+                db_missing_or_stale = latest_finished_age_hours is None or latest_finished_age_hours > expected_max_age_hours * 2
+                if db_missing_or_stale:
+                    latest_status = "success"
+                    latest_finished_at = service_last_run_at
+                    latest_finished_age_hours = service_last_run_age_hours
+                    if last_success_finished_at is None or (last_success_age_hours is None or service_last_run_age_hours is not None and service_last_run_age_hours < last_success_age_hours):
+                        last_success_finished_at = service_last_run_at
+                        last_success_age_hours = service_last_run_age_hours
+                    freshness_status = _classify_lane(
+                        latest_status=latest_status,
+                        latest_finished_age_hours=latest_finished_age_hours,
+                        expected_max_age_hours=expected_max_age_hours,
+                    )
+                    service_evidence_used = True
+            elif service_last_status in {"error", "partial"} and freshness_status == "healthy":
+                freshness_status = "error"
 
             lane_summary = {
                 "mode": mode,
@@ -132,6 +193,8 @@ def get_sync_freshness(db_path: Path) -> dict:
                 "latest_recorded_started_at": stats["latest_started_at"],
                 "latest_recorded_finished_at": stats["latest_finished_at"],
                 "consecutive_non_success_runs": int(consecutive_failures or 0),
+                "service_state": service_lane,
+                "service_state_used_for_freshness": service_evidence_used,
             }
             lanes[mode] = lane_summary
 

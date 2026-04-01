@@ -4,7 +4,7 @@ from pathlib import Path
 
 from sherpamind.cli import _json_ready
 
-from sherpamind.db import initialize_db, record_api_request_event, replace_ticket_document_chunks, replace_ticket_documents, upsert_ticket_details, upsert_tickets
+from sherpamind.db import initialize_db, record_api_request_event, replace_ticket_document_chunks, replace_ticket_documents, start_ingest_run, upsert_ticket_details, upsert_tickets
 from sherpamind.service_runtime import run_pending_tasks
 from sherpamind.settings import Settings
 from sherpamind.vector_index import build_vector_index, get_vector_index_status
@@ -54,6 +54,22 @@ def test_run_pending_tasks_writes_service_state(monkeypatch, tmp_path: Path) -> 
     result = run_pending_tasks(settings)
     assert result['status'] == 'ok'
     assert (tmp_path / '.SherpaMind' / 'private' / 'state' / 'service-state.json').exists()
+
+
+def test_run_pending_tasks_cleans_stale_ingest_rows(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
+    settings = make_settings(tmp_path)
+    initialize_db(settings.db_path)
+    run_id = start_ingest_run(settings.db_path, mode='enrich_priority_ticket_details', notes='limit=25')
+    with settings.db_path.open('rb+'):
+        pass
+    from sherpamind.db import connect
+    with connect(settings.db_path) as conn:
+        conn.execute("UPDATE ingest_runs SET started_at = '2026-03-01T00:00:00+00:00' WHERE id = ?", (run_id,))
+        conn.commit()
+
+    result = run_pending_tasks(settings)
+    assert result['cleaned_stale_ingest_runs'] >= 1
 
 
 def test_json_ready_normalizes_dataclasses(monkeypatch, tmp_path: Path) -> None:

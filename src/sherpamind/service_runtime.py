@@ -5,10 +5,11 @@ from datetime import datetime, timezone
 import json
 import math
 import time
+import traceback
 from typing import Any, Callable
 
 from .analysis import get_api_usage_summary
-from .db import connect, prune_api_request_events
+from .db import cleanup_stale_ingest_runs, connect, prune_api_request_events, run_with_db_lock_retries
 from .documents import ensure_current_ticket_materialization, get_ticket_document_materialization_status
 from .enrichment import enrich_priority_ticket_details
 from .ingest import sync_cold_closed_audit, sync_hot_open_tickets, sync_warm_closed_tickets
@@ -27,6 +28,13 @@ class TaskSpec:
     every_seconds: int
     runner: Callable[[Settings], Any]
     budget_class: str = "core"
+
+
+@dataclass(frozen=True)
+class TaskRunEvaluation:
+    status: str
+    detail: Any
+    error_message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +86,32 @@ def _append_log(message: str) -> None:
     paths = ensure_path_layout()
     with paths.service_log.open("a", encoding="utf-8") as f:
         f.write(f"[{_now_iso()}] {message}\n")
+
+
+def _result_status(value: Any) -> str | None:
+    if isinstance(value, tuple):
+        statuses = [_result_status(item) for item in value]
+        if any(status in {"error", "failed"} for status in statuses):
+            return "error"
+        if any(status and status != "ok" for status in statuses):
+            return "partial"
+        if any(status == "ok" for status in statuses):
+            return "ok"
+        return None
+    if isinstance(value, dict):
+        status = value.get("status")
+        return str(status) if status is not None else None
+    status = getattr(value, "status", None)
+    return str(status) if status is not None else None
+
+
+def _evaluate_task_result(result: Any) -> TaskRunEvaluation:
+    status = (_result_status(result) or "ok").strip().lower()
+    if status == "ok":
+        return TaskRunEvaluation(status="ok", detail=result)
+    if status in {"error", "failed"}:
+        return TaskRunEvaluation(status="error", detail=result, error_message=str(result))
+    return TaskRunEvaluation(status="partial", detail=result, error_message=status)
 
 
 def _get_cold_bootstrap_status(settings: Settings) -> ColdBootstrapStatus:
@@ -273,6 +307,10 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
     now = time.time()
     results = []
 
+    cleaned_stale_runs = cleanup_stale_ingest_runs(settings.db_path)
+    if cleaned_stale_runs:
+        _append_log(f"ingest_runs stale_running_cleaned={cleaned_stale_runs}")
+
     pruned = prune_api_request_events(settings.db_path, settings.api_request_log_retention_days)
     if pruned:
         _append_log(f"api_request_events pruned={pruned}")
@@ -301,16 +339,30 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
             _append_log(f"task={spec.name} status=skipped reason={reason}")
             continue
         try:
-            result = spec.runner(effective_settings)
+            def _run_task() -> Any:
+                return spec.runner(effective_settings)
+
+            result = run_with_db_lock_retries(
+                _run_task,
+                on_retry=lambda attempt, max_retries, exc, task_name=spec.name: _append_log(
+                    f"task={task_name} status=retry attempt={attempt}/{max_retries} error={type(exc).__name__}: {exc}"
+                ),
+            )
+            evaluated = _evaluate_task_result(result)
             task_state.update({
                 "last_run_epoch": now,
-                "last_status": "ok",
+                "last_status": evaluated.status,
                 "last_run_at": _now_iso(),
             })
-            task_state.pop("last_error", None)
-            task_state.pop("last_skip_reason", None)
-            results.append({"task": spec.name, "status": "ok", "result": getattr(result, '__dict__', result), "forced": bool(force_reason), "force_reason": force_reason})
-            _append_log(f"task={spec.name} status=ok mode={plan.mode}")
+            if evaluated.status == "ok":
+                task_state.pop("last_error", None)
+                task_state.pop("last_skip_reason", None)
+                results.append({"task": spec.name, "status": "ok", "result": getattr(result, '__dict__', result), "forced": bool(force_reason), "force_reason": force_reason})
+                _append_log(f"task={spec.name} status=ok mode={plan.mode}")
+            else:
+                task_state["last_error"] = evaluated.error_message or str(evaluated.detail)
+                results.append({"task": spec.name, "status": evaluated.status, "result": getattr(result, '__dict__', result), "error": evaluated.error_message, "forced": bool(force_reason), "force_reason": force_reason})
+                _append_log(f"task={spec.name} status={evaluated.status} detail={evaluated.error_message or evaluated.detail}")
             usage = get_api_usage_summary(settings.db_path)
             bootstrap = _update_cold_bootstrap_status(settings)
             plan = _build_budget_plan(settings, usage, bootstrap)
@@ -344,6 +396,7 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
         "cold_bootstrap": bootstrap.__dict__,
         "retention_days": settings.api_request_log_retention_days,
         "pruned_request_events": pruned,
+        "cleaned_stale_ingest_runs": cleaned_stale_runs,
     }
 
 
@@ -351,5 +404,9 @@ def run_service_loop() -> int:
     settings = load_settings()
     _append_log("service loop starting")
     while True:
-        run_pending_tasks(settings)
+        try:
+            run_pending_tasks(settings)
+        except Exception as exc:
+            _append_log(f"service_loop status=error error={type(exc).__name__}: {exc}")
+            _append_log(traceback.format_exc().rstrip())
         time.sleep(30)
