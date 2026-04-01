@@ -336,6 +336,9 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
             tasks_state = state.setdefault("tasks", {})
             now = time.time()
             results = []
+            state["last_loop_started_at"] = _now_iso()
+            state["loop_status"] = "running"
+            _save_state(state)
 
             cleaned_stale_runs = cleanup_stale_ingest_runs(settings.db_path)
             if cleaned_stale_runs:
@@ -384,6 +387,7 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
                         "last_status": evaluated.status,
                         "last_run_at": _now_iso(),
                     })
+                    state["last_loop_progress_at"] = _now_iso()
                     if evaluated.status == "ok":
                         task_state.pop("last_error", None)
                         task_state.pop("last_skip_reason", None)
@@ -407,6 +411,7 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
                         "last_run_at": _now_iso(),
                         "last_error": f"{type(exc).__name__}: {exc}",
                     })
+                    state["last_loop_progress_at"] = _now_iso()
                     results.append({"task": spec.name, "status": "error", "error": f"{type(exc).__name__}: {exc}", "forced": bool(force_reason), "force_reason": force_reason})
                     _append_log(f"task={spec.name} status=error error={type(exc).__name__}: {exc}")
                     usage = get_api_usage_summary(settings.db_path)
@@ -417,6 +422,7 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
                     state["cold_bootstrap_last_seen"] = bootstrap.__dict__
 
             state["last_loop_at"] = _now_iso()
+            state["loop_status"] = "idle"
             _save_state(state)
             return {
                 "status": "ok",
@@ -432,6 +438,10 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
     except RuntimeError as exc:
         if str(exc) == "task runner already active":
             _append_log("run_pending_tasks skipped: task runner already active")
+            state = _load_state()
+            state["loop_status"] = "busy"
+            state["last_loop_progress_at"] = _now_iso()
+            _save_state(state)
             return {
                 "status": "skipped",
                 "reason": "task_runner_already_active",

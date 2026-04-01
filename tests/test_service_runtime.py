@@ -59,7 +59,11 @@ def test_run_pending_tasks_writes_service_state(monkeypatch, tmp_path: Path) -> 
     initialize_db(settings.db_path)
     result = run_pending_tasks(settings)
     assert result['status'] == 'ok'
-    assert (tmp_path / '.SherpaMind' / 'private' / 'state' / 'service-state.json').exists()
+    state_path = tmp_path / '.SherpaMind' / 'private' / 'state' / 'service-state.json'
+    assert state_path.exists()
+    state = json.loads(state_path.read_text())
+    assert state['loop_status'] == 'idle'
+    assert state['last_loop_started_at']
 
 
 def test_run_pending_tasks_skips_when_lock_is_held(monkeypatch, tmp_path: Path) -> None:

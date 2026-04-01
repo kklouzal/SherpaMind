@@ -356,3 +356,20 @@ def test_cleanup_stale_ingest_runs_marks_old_running_rows_abandoned(tmp_path: Pa
     assert row["status"] == "abandoned"
     assert row["finished_at"] is not None
     assert "auto-cleanup" in row["notes"]
+
+
+def test_start_ingest_run_abandons_older_same_mode_running_rows(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+    first_run = start_ingest_run(db, mode="enrich_priority_ticket_details", notes="limit=240")
+    second_run = start_ingest_run(db, mode="enrich_priority_ticket_details", notes="limit=240")
+    assert second_run > first_run
+
+    with connect(db) as conn:
+        rows = conn.execute(
+            "SELECT id, status, finished_at, notes FROM ingest_runs WHERE mode = 'enrich_priority_ticket_details' ORDER BY id"
+        ).fetchall()
+    assert rows[0]["status"] == "abandoned"
+    assert rows[0]["finished_at"] is not None
+    assert "superseded by newer enrich_priority_ticket_details run" in rows[0]["notes"]
+    assert rows[1]["status"] == "running"

@@ -257,11 +257,25 @@ def initialize_db(db_path: Path) -> None:
 
 
 def start_ingest_run(db_path: Path, mode: str, notes: str | None = None) -> int:
+    started_at = now_iso()
+
     def _operation() -> int:
         with connect(db_path) as conn:
+            stale_same_mode_rows = conn.execute(
+                "SELECT id, notes FROM ingest_runs WHERE mode = ? AND status = 'running'",
+                (mode,),
+            ).fetchall()
+            for row in stale_same_mode_rows:
+                note_suffix = f" [auto-cleanup {started_at}: superseded by newer {mode} run]"
+                existing_notes = row["notes"] or ""
+                next_notes = f"{existing_notes}{note_suffix}" if note_suffix not in existing_notes else existing_notes
+                conn.execute(
+                    "UPDATE ingest_runs SET finished_at = ?, status = ?, notes = ? WHERE id = ?",
+                    (started_at, "abandoned", next_notes, row["id"]),
+                )
             cursor = conn.execute(
                 "INSERT INTO ingest_runs(mode, started_at, status, notes) VALUES(?, ?, ?, ?)",
-                (mode, now_iso(), "running", notes),
+                (mode, started_at, "running", notes),
             )
             conn.commit()
             return int(cursor.lastrowid)
