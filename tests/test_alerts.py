@@ -77,6 +77,9 @@ def test_build_hook_payload_contains_ticket_triage_context(tmp_path: Path) -> No
     assert "INITIAL POST / original user-submitted issue only" in message
     assert "Use the SherpaMind skill/query surface" in message
     assert "Seen before:" in message
+    assert "3-5 short sentences or bullet-style lines" in message
+    assert "Issue synopsis:" in message
+    assert "First checks / next steps:" in message
     assert "Printer offline in front office" in message
     assert "Alice User" in message or "alice@example.com" in message
     assert "Acme Co" in message
@@ -98,5 +101,8 @@ def test_build_ticket_update_payload_allows_broader_history_context(tmp_path: Pa
     assert "broader ticket history" in message
     assert "Use the SherpaMind skill/query surface" in message
     assert "Seen before:" in message
+    assert "3-5 short sentences or bullet-style lines" in message
+    assert "Update synopsis:" in message
+    assert "Recommended follow-up / next steps:" in message
     assert "recent_logs" in message
     assert "retrieval_metadata" in message
