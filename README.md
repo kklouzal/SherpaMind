@@ -237,6 +237,7 @@ The live runtime is split into three worker classes:
    - polls hot open tickets on the fast lane
    - performs warm-watch-style change detection on the recent closed slice
    - detects new tickets and requester-side non-tech updates
+   - keeps touched hot/warm ticket documents and chunks close to canonical freshness instead of waiting for a later full maintenance sweep
    - writes durable alert events into the local queue instead of dispatching webhooks inline
 
 2. **Alert dispatch worker**

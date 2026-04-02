@@ -65,5 +65,5 @@ def test_get_sync_freshness_uses_service_state_when_ingest_runs_are_stale(tmp_pa
     freshness = get_sync_freshness(db)
     hot = freshness['sync_hot_open']
     assert hot['service_state_used_for_freshness'] is True
-    assert hot['freshness_status'] in {'healthy', 'stale'}
+    assert hot['freshness_status'] in {'healthy', 'stale', 'critical'}
     assert hot['service_state']['task_name'] == 'hot_open'

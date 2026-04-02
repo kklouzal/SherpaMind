@@ -15,6 +15,7 @@ from .db import (
     upsert_technicians,
     upsert_users,
 )
+from .documents import materialize_ticket_documents
 from .settings import Settings
 from .sync_state import get_json_state, set_json_state, set_sync_state
 from .time_utils import parse_sherpadesk_timestamp
@@ -115,6 +116,11 @@ def seed_all(settings: Settings) -> SeedResult:
         raise
 
 
+def _materialize_touched_tickets(settings: Settings, tickets: list[dict]) -> dict:
+    ticket_ids = [ticket.get("id") for ticket in tickets if ticket.get("id") is not None]
+    return materialize_ticket_documents(settings.db_path, ticket_ids=ticket_ids)
+
+
 def sync_hot_open_tickets(settings: Settings) -> DeltaSyncResult:
     initialize_db(settings.db_path)
     error = _require_live_context(settings)
@@ -137,6 +143,7 @@ def sync_hot_open_tickets(settings: Settings) -> DeltaSyncResult:
             extra_params={"status": "open"},
         )
         upsert_tickets(settings.db_path, tickets, synced_at=synced_at)
+        materialization = _materialize_touched_tickets(settings, tickets)
         open_ids = sorted(int(ticket["id"]) for ticket in tickets)
         set_json_state(
             settings.db_path,
@@ -152,6 +159,8 @@ def sync_hot_open_tickets(settings: Settings) -> DeltaSyncResult:
             "synced_at": synced_at,
             "pages": settings.hot_open_pages,
             "open_ticket_count": len(open_ids),
+            "materialized_documents": materialization.get("document_count", 0),
+            "materialized_chunks": materialization.get("chunk_count", 0),
         }
         finish_ingest_run(settings.db_path, run_id, status="success", notes=json.dumps(stats, sort_keys=True))
         return DeltaSyncResult(status="ok", message="Hot open-ticket sync completed.", stats=stats)
@@ -191,12 +200,15 @@ def sync_warm_closed_tickets(settings: Settings) -> DeltaSyncResult:
             if dt >= cutoff:
                 warm_tickets.append(ticket)
         upsert_tickets(settings.db_path, warm_tickets, synced_at=synced_at)
+        materialization = _materialize_touched_tickets(settings, warm_tickets)
         stats = {
             "synced_at": synced_at,
             "pages": settings.warm_closed_pages,
             "warm_closed_days": settings.warm_closed_days,
             "candidate_closed_ticket_count": len(closed_tickets),
             "warm_ticket_count": len(warm_tickets),
+            "materialized_documents": materialization.get("document_count", 0),
+            "materialized_chunks": materialization.get("chunk_count", 0),
         }
         set_json_state(settings.db_path, "sync.warm_closed.last_state", stats)
         finish_ingest_run(settings.db_path, run_id, status="success", notes=json.dumps(stats, sort_keys=True))
@@ -242,6 +254,7 @@ def sync_cold_closed_audit(settings: Settings, *, pages_per_run: int | None = No
         if cycle_completed:
             completed_cycles += 1
         upsert_tickets(settings.db_path, closed_pages, synced_at=synced_at)
+        materialization = _materialize_touched_tickets(settings, closed_pages)
         stats = {
             "synced_at": synced_at,
             "start_page": start_page,
@@ -250,6 +263,8 @@ def sync_cold_closed_audit(settings: Settings, *, pages_per_run: int | None = No
             "cold_ticket_count": len(closed_pages),
             "cycle_completed": cycle_completed,
             "completed_cycles": completed_cycles,
+            "materialized_documents": materialization.get("document_count", 0),
+            "materialized_chunks": materialization.get("chunk_count", 0),
         }
         set_json_state(settings.db_path, "sync.cold_closed.last_state", stats)
         finish_ingest_run(settings.db_path, run_id, status="success", notes=json.dumps(stats, sort_keys=True))

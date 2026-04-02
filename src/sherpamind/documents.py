@@ -663,7 +663,30 @@ def _resolve_action_cue(
     return None, "missing"
 
 
-def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict]:
+def _normalize_ticket_id_filter(ticket_ids: list[str | int] | tuple[str | int, ...] | set[str | int] | None) -> list[str]:
+    if not ticket_ids:
+        return []
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for value in ticket_ids:
+        candidate = str(value).strip()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        ordered.append(candidate)
+    return ordered
+
+
+def build_ticket_documents(
+    db_path: Path,
+    limit: int | None = None,
+    *,
+    ticket_ids: list[str | int] | tuple[str | int, ...] | set[str | int] | None = None,
+) -> list[dict]:
+    scoped_ticket_ids = _normalize_ticket_id_filter(ticket_ids)
+    scoped_only = ticket_ids is not None
+    if scoped_only and not scoped_ticket_ids:
+        return []
     query = """
         SELECT t.id,
                t.subject,
@@ -852,15 +875,19 @@ def build_ticket_documents(db_path: Path, limit: int | None = None) -> list[dict
         LEFT JOIN users u ON u.id = t.user_id
         LEFT JOIN technicians te ON te.id = t.assigned_technician_id
         LEFT JOIN ticket_details td ON td.ticket_id = t.id
-        ORDER BY COALESCE(t.updated_at, t.created_at) DESC, t.id DESC
     """
-    params: tuple = ()
+    params: list[Any] = []
+    if scoped_ticket_ids:
+        placeholders = ",".join("?" for _ in scoped_ticket_ids)
+        query += f"\n        WHERE t.id IN ({placeholders})"
+        params.extend(scoped_ticket_ids)
+    query += "\n        ORDER BY COALESCE(t.updated_at, t.created_at) DESC, t.id DESC"
     if limit is not None:
         query += " LIMIT ?"
-        params = (limit,)
+        params.append(limit)
 
     with connect(db_path) as conn:
-        rows = conn.execute(query, params).fetchall()
+        rows = conn.execute(query, tuple(params)).fetchall()
 
     docs: list[dict] = []
     for row in rows:
@@ -1381,8 +1408,24 @@ def build_ticket_document_chunks(docs: list[dict]) -> list[dict]:
     return chunks
 
 
-def materialize_ticket_documents(db_path: Path, limit: int | None = None) -> dict:
-    docs = build_ticket_documents(db_path, limit=limit)
+def materialize_ticket_documents(
+    db_path: Path,
+    limit: int | None = None,
+    *,
+    ticket_ids: list[str | int] | tuple[str | int, ...] | set[str | int] | None = None,
+) -> dict:
+    scoped_ticket_ids = _normalize_ticket_id_filter(ticket_ids)
+    scoped_only = ticket_ids is not None
+    if scoped_only and not scoped_ticket_ids:
+        return {
+            "status": "ok",
+            "document_count": 0,
+            "chunk_count": 0,
+            "synced_at": now_iso(),
+            "materialization_version": DOCUMENT_MATERIALIZATION_VERSION,
+            "scoped_ticket_count": 0,
+        }
+    docs = build_ticket_documents(db_path, limit=limit, ticket_ids=scoped_ticket_ids if scoped_only else None)
     chunks = build_ticket_document_chunks(docs)
     synced_at = now_iso()
     replace_ticket_documents(db_path, docs, synced_at=synced_at)
@@ -1393,6 +1436,7 @@ def materialize_ticket_documents(db_path: Path, limit: int | None = None) -> dic
         "chunk_count": len(chunks),
         "synced_at": synced_at,
         "materialization_version": DOCUMENT_MATERIALIZATION_VERSION,
+        "scoped_ticket_count": len(scoped_ticket_ids) if scoped_ticket_ids else None,
     }
 
 

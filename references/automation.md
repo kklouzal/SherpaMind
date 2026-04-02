@@ -31,6 +31,7 @@ Instead it owns three distinct worker lanes:
   - hot open polling
   - warm-watch-style recent closed polling
   - new-ticket / requester-update detection
+  - near-live rematerialization of touched hot/warm ticket retrieval artifacts so canonical sync does not leave open-ticket docs stale until a later maintenance pass
   - durable alert-event enqueueing
 - **alert dispatch worker**
   - alert queue leasing

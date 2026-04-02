@@ -62,8 +62,13 @@ def test_sync_hot_open_tickets_persists_open_ids(tmp_path: Path, monkeypatch) ->
     monkeypatch.setattr("sherpamind.ingest._build_client", lambda settings: FakeClient(open_rows=rows))
     result = sync_hot_open_tickets(settings)
     assert result.status == "ok"
+    assert result.stats["materialized_documents"] == 1
     state = get_json_state(settings.db_path, "sync.hot_open.last_state")
     assert state["open_ticket_ids"] == [11]
+    with connect(settings.db_path) as conn:
+        doc = conn.execute("SELECT ticket_id, text FROM ticket_documents WHERE ticket_id = '11'").fetchone()
+    assert doc["ticket_id"] == '11'
+    assert 'Ticket #11: Open' in doc["text"]
 
 
 def test_sync_warm_closed_filters_by_cutoff(tmp_path: Path, monkeypatch) -> None:
@@ -76,9 +81,12 @@ def test_sync_warm_closed_filters_by_cutoff(tmp_path: Path, monkeypatch) -> None
     result = sync_warm_closed_tickets(settings)
     assert result.status == "ok"
     assert result.stats["warm_ticket_count"] == 1
+    assert result.stats["materialized_documents"] == 1
     with connect(settings.db_path) as conn:
         count = conn.execute("SELECT COUNT(*) AS c FROM tickets").fetchone()["c"]
+        doc_count = conn.execute("SELECT COUNT(*) AS c FROM ticket_documents").fetchone()["c"]
     assert count == 1
+    assert doc_count == 1
 
 
 def test_sync_cold_closed_audit_advances_page_pointer(tmp_path: Path, monkeypatch) -> None:
@@ -87,6 +95,10 @@ def test_sync_cold_closed_audit_advances_page_pointer(tmp_path: Path, monkeypatc
     monkeypatch.setattr("sherpamind.ingest._build_client", lambda settings: fake)
     result = sync_cold_closed_audit(settings)
     assert result.status == "ok"
+    assert result.stats["materialized_documents"] == 3
     state = get_json_state(settings.db_path, "sync.cold_closed.last_state")
     assert state["start_page"] == 0
     assert state["next_page"] == 0
+    with connect(settings.db_path) as conn:
+        chunk_count = conn.execute("SELECT COUNT(*) AS c FROM ticket_document_chunks").fetchone()["c"]
+    assert chunk_count == 3
