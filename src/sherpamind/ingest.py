@@ -6,6 +6,7 @@ import json
 
 from .client import SherpaDeskClient
 from .db import (
+    enqueue_derived_refresh,
     finish_ingest_run,
     initialize_db,
     now_iso,
@@ -116,9 +117,12 @@ def seed_all(settings: Settings) -> SeedResult:
         raise
 
 
-def _materialize_touched_tickets(settings: Settings, tickets: list[dict]) -> dict:
+def _materialize_touched_tickets(settings: Settings, tickets: list[dict], *, source: str, priority: int = 50) -> dict:
     ticket_ids = [ticket.get("id") for ticket in tickets if ticket.get("id") is not None]
-    return materialize_ticket_documents(settings.db_path, ticket_ids=ticket_ids)
+    result = materialize_ticket_documents(settings.db_path, ticket_ids=ticket_ids)
+    for ticket_id in sorted({str(ticket_id) for ticket_id in ticket_ids if ticket_id is not None}):
+        enqueue_derived_refresh(settings.db_path, ticket_id=ticket_id, source=source, priority=priority)
+    return result
 
 
 def sync_hot_open_tickets(settings: Settings) -> DeltaSyncResult:
@@ -143,7 +147,7 @@ def sync_hot_open_tickets(settings: Settings) -> DeltaSyncResult:
             extra_params={"status": "open"},
         )
         upsert_tickets(settings.db_path, tickets, synced_at=synced_at)
-        materialization = _materialize_touched_tickets(settings, tickets)
+        materialization = _materialize_touched_tickets(settings, tickets, source="sync_hot_open", priority=15)
         open_ids = sorted(int(ticket["id"]) for ticket in tickets)
         set_json_state(
             settings.db_path,
@@ -200,7 +204,7 @@ def sync_warm_closed_tickets(settings: Settings) -> DeltaSyncResult:
             if dt >= cutoff:
                 warm_tickets.append(ticket)
         upsert_tickets(settings.db_path, warm_tickets, synced_at=synced_at)
-        materialization = _materialize_touched_tickets(settings, warm_tickets)
+        materialization = _materialize_touched_tickets(settings, warm_tickets, source="sync_warm_closed", priority=40)
         stats = {
             "synced_at": synced_at,
             "pages": settings.warm_closed_pages,
@@ -254,7 +258,7 @@ def sync_cold_closed_audit(settings: Settings, *, pages_per_run: int | None = No
         if cycle_completed:
             completed_cycles += 1
         upsert_tickets(settings.db_path, closed_pages, synced_at=synced_at)
-        materialization = _materialize_touched_tickets(settings, closed_pages)
+        materialization = _materialize_touched_tickets(settings, closed_pages, source="sync_cold_closed_audit", priority=80)
         stats = {
             "synced_at": synced_at,
             "start_page": start_page,

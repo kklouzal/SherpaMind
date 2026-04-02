@@ -40,32 +40,53 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return sum(x * y for x, y in zip(a, b))
 
 
-def _load_chunk_rows(db_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
+def _load_chunk_rows(
+    db_path: Path,
+    limit: int | None = None,
+    *,
+    ticket_ids: list[str] | None = None,
+) -> list[dict[str, Any]]:
     query = """
         SELECT chunk_id, doc_id, ticket_id, text, content_hash
         FROM ticket_document_chunks
-        ORDER BY ticket_id DESC, chunk_index ASC
     """
-    params: tuple[Any, ...] = ()
+    params: list[Any] = []
+    if ticket_ids:
+        placeholders = ",".join("?" for _ in ticket_ids)
+        query += f" WHERE ticket_id IN ({placeholders})"
+        params.extend(ticket_ids)
+    query += " ORDER BY ticket_id DESC, chunk_index ASC"
     if limit is not None:
         query += " LIMIT ?"
-        params = (limit,)
+        params.append(limit)
     with connect(db_path) as conn:
-        rows = conn.execute(query, params).fetchall()
+        rows = conn.execute(query, tuple(params)).fetchall()
     return [dict(row) for row in rows]
 
 
-def build_vector_index(db_path: Path, dims: int = DEFAULT_DIMS, limit: int | None = None) -> dict[str, Any]:
+def build_vector_index(
+    db_path: Path,
+    dims: int = DEFAULT_DIMS,
+    limit: int | None = None,
+    *,
+    ticket_ids: list[str] | None = None,
+) -> dict[str, Any]:
     initialize_db(db_path)
-    rows = _load_chunk_rows(db_path, limit=limit)
+    scoped_ticket_ids = sorted({str(ticket_id) for ticket_id in (ticket_ids or []) if str(ticket_id).strip()})
+    rows = _load_chunk_rows(db_path, limit=limit, ticket_ids=scoped_ticket_ids or None)
     current_ids = {row["chunk_id"] for row in rows}
     inserted_or_updated = 0
     skipped_unchanged = 0
     with connect(db_path) as conn:
-        existing = {
-            row["chunk_id"]: dict(row)
-            for row in conn.execute("SELECT chunk_id, content_hash, dims FROM vector_chunk_index").fetchall()
-        }
+        if scoped_ticket_ids:
+            placeholders = ",".join("?" for _ in scoped_ticket_ids)
+            existing_rows = conn.execute(
+                f"SELECT chunk_id, content_hash, dims FROM vector_chunk_index WHERE ticket_id IN ({placeholders})",
+                tuple(scoped_ticket_ids),
+            ).fetchall()
+        else:
+            existing_rows = conn.execute("SELECT chunk_id, content_hash, dims FROM vector_chunk_index").fetchall()
+        existing = {row["chunk_id"]: dict(row) for row in existing_rows}
         synced_at = now_iso()
         for row in rows:
             current = existing.get(row["chunk_id"])
@@ -108,6 +129,7 @@ def build_vector_index(db_path: Path, dims: int = DEFAULT_DIMS, limit: int | Non
         "skipped_unchanged": skipped_unchanged,
         "deleted_stale": len(stale_ids),
         "dims": dims,
+        "ticket_scope_count": len(scoped_ticket_ids) if scoped_ticket_ids else None,
     }
 
 

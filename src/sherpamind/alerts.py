@@ -6,7 +6,7 @@ from typing import Any
 from urllib import request, error
 
 from .client import SherpaDeskClient
-from .db import mark_alert_failed, mark_alert_sent, mark_ticket_update_alert_sent, now_iso, upsert_ticket_details
+from .db import enqueue_derived_refresh, mark_alert_failed, mark_alert_sent, mark_ticket_update_alert_sent, now_iso, upsert_ticket_details
 from .settings import Settings
 from .summaries import get_ticket_summary
 
@@ -137,6 +137,7 @@ def _refresh_ticket_context(settings: Settings, ticket_id: str) -> None:
     client = _build_client(settings)
     detail = client.get(f"tickets/{ticket_id}")
     upsert_ticket_details(settings.db_path, [detail], synced_at=now_iso())
+    enqueue_derived_refresh(settings.db_path, ticket_id=str(ticket_id), source="alert_context", priority=20)
 
 
 def _post_hook_payload(settings: Settings, ticket_id: str, payload: dict[str, Any]) -> AlertDispatchResult:

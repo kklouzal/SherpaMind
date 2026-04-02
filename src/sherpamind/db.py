@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
@@ -225,6 +226,19 @@ CREATE TABLE IF NOT EXISTS worker_leases (
     leased_at TEXT NOT NULL,
     lease_expires_at TEXT NOT NULL,
     notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS derived_refresh_queue (
+    ticket_id TEXT PRIMARY KEY,
+    source TEXT,
+    priority INTEGER NOT NULL DEFAULT 100,
+    requested_at TEXT NOT NULL,
+    leased_at TEXT,
+    lease_expires_at TEXT,
+    completed_at TEXT,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS ticket_alert_state (
@@ -1058,6 +1072,40 @@ def cleanup_stale_worker_runs(db_path: Path, *, stale_after_seconds: int = DB_ST
     return run_with_db_lock_retries(_operation)
 
 
+def get_worker_lease(db_path: Path, worker_name: str) -> dict[str, Any] | None:
+    initialize_db(db_path)
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT worker_name, owner_id, leased_at, lease_expires_at, notes FROM worker_leases WHERE worker_name = ?",
+            (worker_name,),
+        ).fetchone()
+    return dict(row) if row is not None else None
+
+
+def _worker_owner_pid(owner_id: str | None) -> int | None:
+    if not owner_id:
+        return None
+    parts = str(owner_id).split(":")
+    if len(parts) < 2:
+        return None
+    try:
+        return int(parts[1])
+    except (TypeError, ValueError):
+        return None
+
+
+def _pid_is_alive(pid: int | None) -> bool:
+    if pid is None or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def try_acquire_worker_lease(db_path: Path, worker_name: str, owner_id: str, *, lease_seconds: int = 900, notes: str | None = None) -> bool:
     initialize_db(db_path)
     leased_at = now_iso()
@@ -1070,8 +1118,10 @@ def try_acquire_worker_lease(db_path: Path, worker_name: str, owner_id: str, *, 
                 (worker_name,),
             ).fetchone()
             if row is not None:
-                expiry = row['lease_expires_at']
-                if expiry and parse_sherpadesk_timestamp(expiry) and parse_sherpadesk_timestamp(expiry) > datetime.now(timezone.utc):
+                expiry = parse_sherpadesk_timestamp(row['lease_expires_at']) if row['lease_expires_at'] else None
+                owner_pid = _worker_owner_pid(row['owner_id'])
+                owner_alive = _pid_is_alive(owner_pid)
+                if expiry and expiry > datetime.now(timezone.utc) and row['owner_id'] != owner_id and owner_alive:
                     return False
             conn.execute(
                 "INSERT INTO worker_leases(worker_name, owner_id, leased_at, lease_expires_at, notes) VALUES(?, ?, ?, ?, ?) "
@@ -1080,6 +1130,23 @@ def try_acquire_worker_lease(db_path: Path, worker_name: str, owner_id: str, *, 
             )
             conn.commit()
             return True
+
+    return run_with_db_lock_retries(_operation)
+
+
+def renew_worker_lease(db_path: Path, worker_name: str, owner_id: str, *, lease_seconds: int = 900, notes: str | None = None) -> bool:
+    initialize_db(db_path)
+    leased_at = now_iso()
+    lease_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=lease_seconds)).isoformat()
+
+    def _operation() -> bool:
+        with connect(db_path) as conn:
+            cursor = conn.execute(
+                "UPDATE worker_leases SET leased_at = ?, lease_expires_at = ?, notes = ? WHERE worker_name = ? AND owner_id = ?",
+                (leased_at, lease_expires_at, notes, worker_name, owner_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
 
     return run_with_db_lock_retries(_operation)
 
@@ -1209,6 +1276,123 @@ def get_alert_queue_summary(db_path: Path) -> dict[str, Any]:
     summary = {row['status']: int(row['count'] or 0) for row in rows}
     summary['oldest_pending_created_at'] = oldest_pending['created_at'] if oldest_pending else None
     return summary
+
+
+def enqueue_derived_refresh(
+    db_path: Path,
+    *,
+    ticket_id: str,
+    source: str,
+    priority: int = 100,
+) -> dict[str, Any]:
+    initialize_db(db_path)
+    requested_at = now_iso()
+
+    def _operation() -> dict[str, Any]:
+        with connect(db_path) as conn:
+            existing = conn.execute(
+                "SELECT ticket_id, priority, attempt_count, lease_expires_at FROM derived_refresh_queue WHERE ticket_id = ?",
+                (str(ticket_id),),
+            ).fetchone()
+            conn.execute(
+                """
+                INSERT INTO derived_refresh_queue(ticket_id, source, priority, requested_at, leased_at, lease_expires_at, completed_at, attempt_count, last_error, updated_at)
+                VALUES(?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, ?)
+                ON CONFLICT(ticket_id) DO UPDATE SET
+                    source = excluded.source,
+                    priority = MIN(derived_refresh_queue.priority, excluded.priority),
+                    requested_at = excluded.requested_at,
+                    leased_at = NULL,
+                    lease_expires_at = NULL,
+                    completed_at = NULL,
+                    last_error = NULL,
+                    updated_at = excluded.updated_at
+                """,
+                (str(ticket_id), source, int(priority), requested_at, requested_at),
+            )
+            conn.commit()
+            return {
+                "status": "updated" if existing is not None else "enqueued",
+                "ticket_id": str(ticket_id),
+                "priority": min(int(existing['priority']), int(priority)) if existing is not None and existing['priority'] is not None else int(priority),
+            }
+
+    return run_with_db_lock_retries(_operation)
+
+
+def lease_derived_refresh_batch(db_path: Path, *, batch_size: int = 25, lease_seconds: int = 300) -> list[dict[str, Any]]:
+    initialize_db(db_path)
+    leased_at = now_iso()
+    lease_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=lease_seconds)).isoformat()
+
+    def _operation() -> list[dict[str, Any]]:
+        with connect(db_path) as conn:
+            conn.execute(
+                "UPDATE derived_refresh_queue SET leased_at = NULL, lease_expires_at = NULL, updated_at = ? WHERE lease_expires_at IS NOT NULL AND lease_expires_at < ?",
+                (leased_at, leased_at),
+            )
+            rows = conn.execute(
+                """
+                SELECT ticket_id
+                FROM derived_refresh_queue
+                WHERE completed_at IS NULL AND (lease_expires_at IS NULL OR lease_expires_at < ?)
+                ORDER BY priority ASC, requested_at ASC, ticket_id ASC
+                LIMIT ?
+                """,
+                (leased_at, batch_size),
+            ).fetchall()
+            ticket_ids = [str(row['ticket_id']) for row in rows]
+            if not ticket_ids:
+                conn.commit()
+                return []
+            conn.executemany(
+                "UPDATE derived_refresh_queue SET leased_at = ?, lease_expires_at = ?, attempt_count = attempt_count + 1, updated_at = ? WHERE ticket_id = ?",
+                [(leased_at, lease_expires_at, leased_at, ticket_id) for ticket_id in ticket_ids],
+            )
+            leased = conn.execute(
+                f"SELECT * FROM derived_refresh_queue WHERE ticket_id IN ({','.join('?' for _ in ticket_ids)}) ORDER BY priority ASC, requested_at ASC, ticket_id ASC",
+                ticket_ids,
+            ).fetchall()
+            conn.commit()
+            return [dict(row) for row in leased]
+
+    return run_with_db_lock_retries(_operation)
+
+
+def complete_derived_refresh_batch(db_path: Path, ticket_ids: list[str], *, error_message: str | None = None) -> None:
+    initialize_db(db_path)
+    if not ticket_ids:
+        return
+    completed_at = now_iso()
+
+    def _operation() -> None:
+        with connect(db_path) as conn:
+            if error_message:
+                conn.executemany(
+                    "UPDATE derived_refresh_queue SET leased_at = NULL, lease_expires_at = NULL, last_error = ?, updated_at = ? WHERE ticket_id = ?",
+                    [(error_message, completed_at, str(ticket_id)) for ticket_id in ticket_ids],
+                )
+            else:
+                conn.executemany(
+                    "DELETE FROM derived_refresh_queue WHERE ticket_id = ?",
+                    [(str(ticket_id),) for ticket_id in ticket_ids],
+                )
+            conn.commit()
+
+    run_with_db_lock_retries(_operation)
+
+
+def get_derived_refresh_summary(db_path: Path) -> dict[str, Any]:
+    initialize_db(db_path)
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS pending_count, MIN(requested_at) AS oldest_requested_at, MIN(priority) AS highest_priority FROM derived_refresh_queue WHERE completed_at IS NULL"
+        ).fetchone()
+    return {
+        "pending_count": int(row['pending_count'] or 0),
+        "oldest_requested_at": row['oldest_requested_at'],
+        "highest_priority": row['highest_priority'],
+    }
 
 
 def get_ticket_alert_state(db_path: Path, ticket_id: str) -> dict[str, Any] | None:

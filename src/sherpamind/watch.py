@@ -8,6 +8,7 @@ from typing import Any
 from .client import SherpaDeskClient
 from .db import (
     enqueue_alert,
+    enqueue_derived_refresh,
     get_ticket_alert_state,
     initialize_db,
     mark_new_ticket_alert_sent,
@@ -188,6 +189,17 @@ def _watch_ticket_set(settings: Settings, *, path: str, extra_params: dict[str, 
         baseline_only=baseline_only,
     )
 
+    touched_tickets = [str(ticket.get("id")) for ticket in new_tickets + changed_tickets if ticket.get("id") is not None]
+    derived_refresh_enqueues = [
+        enqueue_derived_refresh(
+            settings.db_path,
+            ticket_id=ticket_id,
+            source=state_key,
+            priority=10 if state_key == "watch.last_state" else 40,
+        )
+        for ticket_id in sorted(set(touched_tickets))
+    ]
+
     if state_key == "watch.warm_state":
         for ticket in tickets:
             mark_ticket_closed_confirmed(settings.db_path, str(ticket.get("id")), status=ticket.get("status"), updated_time=ticket.get("updated_time"))
@@ -199,6 +211,7 @@ def _watch_ticket_set(settings: Settings, *, path: str, extra_params: dict[str, 
         "new_ticket_ids_last_run": new_ids,
         "removed_open_ticket_ids_last_run": removed_ids,
         "open_ticket_snapshot": current_snapshot,
+        "derived_refresh_enqueues": derived_refresh_enqueues,
         **enqueue_results,
     }
     _save_watch_state(state_path, next_state)
