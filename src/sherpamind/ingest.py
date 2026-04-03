@@ -3,14 +3,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
+import os
 
 from .client import SherpaDeskClient
 from .db import (
     enqueue_derived_refresh,
     finish_ingest_run,
+    get_ingest_mode_lease,
     initialize_db,
     now_iso,
+    release_ingest_mode_lease,
+    renew_ingest_mode_lease,
     start_ingest_run,
+    try_acquire_ingest_mode_lease,
     upsert_accounts,
     upsert_tickets,
     upsert_technicians,
@@ -125,12 +130,39 @@ def _materialize_touched_tickets(settings: Settings, tickets: list[dict], *, sou
     return result
 
 
+DEFAULT_INGEST_MODE_LEASE_SECONDS = 1800
+
+
+def _ingest_mode_owner(mode: str) -> str:
+    return f"ingest:{os.getpid()}:{mode}:{int(datetime.now(timezone.utc).timestamp())}"
+
+
+def _acquire_ingest_mode_lease(settings: Settings, mode: str) -> tuple[str, dict | None] | None:
+    owner_id = _ingest_mode_owner(mode)
+    acquired = try_acquire_ingest_mode_lease(
+        settings.db_path,
+        mode,
+        owner_id,
+        lease_seconds=DEFAULT_INGEST_MODE_LEASE_SECONDS,
+        notes=f"{mode} single-flight",
+    )
+    if not acquired:
+        return None
+    return owner_id, get_ingest_mode_lease(settings.db_path, mode)
+
+
 def sync_hot_open_tickets(settings: Settings) -> DeltaSyncResult:
     initialize_db(settings.db_path)
     error = _require_live_context(settings)
     if error:
         status = "needs_org_context" if "ORG_KEY" in error else "needs_config"
         return DeltaSyncResult(status=status, message=error)
+
+    lease = _acquire_ingest_mode_lease(settings, "sync_hot_open")
+    if lease is None:
+        active_lease = get_ingest_mode_lease(settings.db_path, "sync_hot_open")
+        return DeltaSyncResult(status="skipped", message="Hot open-ticket sync skipped because another sync_hot_open run still holds the single-flight ingest lease.", stats={"lease": active_lease})
+    owner_id, active_lease = lease
 
     run_id = start_ingest_run(
         settings.db_path,
@@ -147,6 +179,7 @@ def sync_hot_open_tickets(settings: Settings) -> DeltaSyncResult:
             extra_params={"status": "open"},
         )
         upsert_tickets(settings.db_path, tickets, synced_at=synced_at)
+        renew_ingest_mode_lease(settings.db_path, "sync_hot_open", owner_id, lease_seconds=DEFAULT_INGEST_MODE_LEASE_SECONDS, notes="sync_hot_open materialization")
         materialization = _materialize_touched_tickets(settings, tickets, source="sync_hot_open", priority=15)
         open_ids = sorted(int(ticket["id"]) for ticket in tickets)
         set_json_state(
@@ -165,12 +198,15 @@ def sync_hot_open_tickets(settings: Settings) -> DeltaSyncResult:
             "open_ticket_count": len(open_ids),
             "materialized_documents": materialization.get("document_count", 0),
             "materialized_chunks": materialization.get("chunk_count", 0),
+            "lease": active_lease,
         }
         finish_ingest_run(settings.db_path, run_id, status="success", notes=json.dumps(stats, sort_keys=True))
         return DeltaSyncResult(status="ok", message="Hot open-ticket sync completed.", stats=stats)
     except Exception as exc:
         finish_ingest_run(settings.db_path, run_id, status="failed", notes=f"{type(exc).__name__}: {exc}")
         raise
+    finally:
+        release_ingest_mode_lease(settings.db_path, "sync_hot_open", owner_id)
 
 
 def sync_warm_closed_tickets(settings: Settings) -> DeltaSyncResult:
@@ -179,6 +215,12 @@ def sync_warm_closed_tickets(settings: Settings) -> DeltaSyncResult:
     if error:
         status = "needs_org_context" if "ORG_KEY" in error else "needs_config"
         return DeltaSyncResult(status=status, message=error)
+
+    lease = _acquire_ingest_mode_lease(settings, "sync_warm_closed")
+    if lease is None:
+        active_lease = get_ingest_mode_lease(settings.db_path, "sync_warm_closed")
+        return DeltaSyncResult(status="skipped", message="Warm closed-ticket sync skipped because another sync_warm_closed run still holds the single-flight ingest lease.", stats={"lease": active_lease})
+    owner_id, active_lease = lease
 
     run_id = start_ingest_run(
         settings.db_path,
@@ -204,6 +246,7 @@ def sync_warm_closed_tickets(settings: Settings) -> DeltaSyncResult:
             if dt >= cutoff:
                 warm_tickets.append(ticket)
         upsert_tickets(settings.db_path, warm_tickets, synced_at=synced_at)
+        renew_ingest_mode_lease(settings.db_path, "sync_warm_closed", owner_id, lease_seconds=DEFAULT_INGEST_MODE_LEASE_SECONDS, notes="sync_warm_closed materialization")
         materialization = _materialize_touched_tickets(settings, warm_tickets, source="sync_warm_closed", priority=40)
         stats = {
             "synced_at": synced_at,
@@ -213,6 +256,7 @@ def sync_warm_closed_tickets(settings: Settings) -> DeltaSyncResult:
             "warm_ticket_count": len(warm_tickets),
             "materialized_documents": materialization.get("document_count", 0),
             "materialized_chunks": materialization.get("chunk_count", 0),
+            "lease": active_lease,
         }
         set_json_state(settings.db_path, "sync.warm_closed.last_state", stats)
         finish_ingest_run(settings.db_path, run_id, status="success", notes=json.dumps(stats, sort_keys=True))
@@ -220,6 +264,8 @@ def sync_warm_closed_tickets(settings: Settings) -> DeltaSyncResult:
     except Exception as exc:
         finish_ingest_run(settings.db_path, run_id, status="failed", notes=f"{type(exc).__name__}: {exc}")
         raise
+    finally:
+        release_ingest_mode_lease(settings.db_path, "sync_warm_closed", owner_id)
 
 
 def sync_cold_closed_audit(settings: Settings, *, pages_per_run: int | None = None) -> DeltaSyncResult:
@@ -230,6 +276,12 @@ def sync_cold_closed_audit(settings: Settings, *, pages_per_run: int | None = No
         return DeltaSyncResult(status=status, message=error)
 
     pages_per_run = pages_per_run or settings.cold_closed_pages_per_run
+    lease = _acquire_ingest_mode_lease(settings, "sync_cold_closed_audit")
+    if lease is None:
+        active_lease = get_ingest_mode_lease(settings.db_path, "sync_cold_closed_audit")
+        return DeltaSyncResult(status="skipped", message="Cold closed-ticket audit skipped because another sync_cold_closed_audit run still holds the single-flight ingest lease.", stats={"lease": active_lease})
+    owner_id, active_lease = lease
+
     run_id = start_ingest_run(
         settings.db_path,
         mode="sync_cold_closed_audit",
@@ -258,6 +310,7 @@ def sync_cold_closed_audit(settings: Settings, *, pages_per_run: int | None = No
         if cycle_completed:
             completed_cycles += 1
         upsert_tickets(settings.db_path, closed_pages, synced_at=synced_at)
+        renew_ingest_mode_lease(settings.db_path, "sync_cold_closed_audit", owner_id, lease_seconds=DEFAULT_INGEST_MODE_LEASE_SECONDS, notes=f"sync_cold_closed_audit materialization pages={pages_per_run}")
         materialization = _materialize_touched_tickets(settings, closed_pages, source="sync_cold_closed_audit", priority=80)
         stats = {
             "synced_at": synced_at,
@@ -269,6 +322,7 @@ def sync_cold_closed_audit(settings: Settings, *, pages_per_run: int | None = No
             "completed_cycles": completed_cycles,
             "materialized_documents": materialization.get("document_count", 0),
             "materialized_chunks": materialization.get("chunk_count", 0),
+            "lease": active_lease,
         }
         set_json_state(settings.db_path, "sync.cold_closed.last_state", stats)
         finish_ingest_run(settings.db_path, run_id, status="success", notes=json.dumps(stats, sort_keys=True))
@@ -276,6 +330,8 @@ def sync_cold_closed_audit(settings: Settings, *, pages_per_run: int | None = No
     except Exception as exc:
         finish_ingest_run(settings.db_path, run_id, status="failed", notes=f"{type(exc).__name__}: {exc}")
         raise
+    finally:
+        release_ingest_mode_lease(settings.db_path, "sync_cold_closed_audit", owner_id)
 
 
 def sync_delta(settings: Settings) -> DeltaSyncResult:

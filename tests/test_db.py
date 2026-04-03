@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from sherpamind.db import (
@@ -8,6 +9,7 @@ from sherpamind.db import (
     connect,
     finish_ingest_run,
     get_ticket_alert_state,
+    get_ingest_mode_lease,
     initialize_db,
     mark_new_ticket_alert_sent,
     mark_ticket_closed_confirmed,
@@ -16,6 +18,7 @@ from sherpamind.db import (
     replace_ticket_document_chunks,
     replace_ticket_documents,
     start_ingest_run,
+    try_acquire_ingest_mode_lease,
     upsert_accounts,
     upsert_ticket_details,
     upsert_tickets,
@@ -41,6 +44,7 @@ def test_initialize_db_creates_core_tables(tmp_path: Path) -> None:
     assert 'ticket_documents' in names
     assert 'ticket_document_chunks' in names
     assert 'api_request_events' in names
+    assert 'ingest_mode_leases' in names
 
 
 def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:
@@ -341,6 +345,35 @@ def test_ingest_run_roundtrip(tmp_path: Path) -> None:
     assert row["status"] == "success"
     assert row["notes"] == "done"
     assert row["finished_at"] is not None
+
+
+
+def test_ingest_mode_lease_allows_dead_owner_takeover(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+
+    acquired = try_acquire_ingest_mode_lease(
+        db,
+        "sync_hot_open",
+        "ingest:999999:sync_hot_open:1",
+        lease_seconds=1800,
+        notes="stale dead owner",
+    )
+    assert acquired is True
+
+    taken_over = try_acquire_ingest_mode_lease(
+        db,
+        "sync_hot_open",
+        f"ingest:{os.getpid()}:sync_hot_open:2",
+        lease_seconds=1800,
+        notes="live replacement owner",
+    )
+    assert taken_over is True
+
+    lease = get_ingest_mode_lease(db, "sync_hot_open")
+    assert lease is not None
+    assert lease["owner_id"] == f"ingest:{os.getpid()}:sync_hot_open:2"
+    assert lease["notes"] == "live replacement owner"
 
 
 def test_cleanup_stale_ingest_runs_marks_old_running_rows_abandoned(tmp_path: Path) -> None:

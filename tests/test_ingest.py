@@ -1,9 +1,10 @@
+import os
 from pathlib import Path
 
 from sherpamind.ingest import sync_cold_closed_audit, sync_hot_open_tickets, sync_warm_closed_tickets
 from sherpamind.settings import Settings
 from sherpamind.sync_state import get_json_state
-from sherpamind.db import connect
+from sherpamind.db import connect, try_acquire_ingest_mode_lease
 
 
 class FakeClient:
@@ -102,3 +103,72 @@ def test_sync_cold_closed_audit_advances_page_pointer(tmp_path: Path, monkeypatc
     with connect(settings.db_path) as conn:
         chunk_count = conn.execute("SELECT COUNT(*) AS c FROM ticket_document_chunks").fetchone()["c"]
     assert chunk_count == 3
+
+
+def test_sync_hot_open_skips_when_single_flight_lease_is_active(tmp_path: Path, monkeypatch) -> None:
+    settings = make_settings(tmp_path)
+    monkeypatch.setattr("sherpamind.ingest._build_client", lambda settings: FakeClient(open_rows=[]))
+    acquired = try_acquire_ingest_mode_lease(
+        settings.db_path,
+        "sync_hot_open",
+        f"ingest:{os.getpid()}:sync_hot_open:1",
+        lease_seconds=1800,
+        notes="test active lease",
+    )
+    assert acquired is True
+
+    result = sync_hot_open_tickets(settings)
+
+    assert result.status == "skipped"
+    assert "single-flight ingest lease" in result.message
+    with connect(settings.db_path) as conn:
+        running = conn.execute(
+            "SELECT COUNT(*) AS c FROM ingest_runs WHERE mode = 'sync_hot_open' AND status = 'running'"
+        ).fetchone()["c"]
+    assert running == 0
+
+
+def test_sync_warm_closed_skips_when_single_flight_lease_is_active(tmp_path: Path, monkeypatch) -> None:
+    settings = make_settings(tmp_path)
+    monkeypatch.setattr("sherpamind.ingest._build_client", lambda settings: FakeClient(closed_rows=[]))
+    acquired = try_acquire_ingest_mode_lease(
+        settings.db_path,
+        "sync_warm_closed",
+        f"ingest:{os.getpid()}:sync_warm_closed:1",
+        lease_seconds=1800,
+        notes="test active lease",
+    )
+    assert acquired is True
+
+    result = sync_warm_closed_tickets(settings)
+
+    assert result.status == "skipped"
+    assert "single-flight ingest lease" in result.message
+    with connect(settings.db_path) as conn:
+        running = conn.execute(
+            "SELECT COUNT(*) AS c FROM ingest_runs WHERE mode = 'sync_warm_closed' AND status = 'running'"
+        ).fetchone()["c"]
+    assert running == 0
+
+
+def test_sync_cold_closed_audit_skips_when_single_flight_lease_is_active(tmp_path: Path, monkeypatch) -> None:
+    settings = make_settings(tmp_path)
+    monkeypatch.setattr("sherpamind.ingest._build_client", lambda settings: FakeClient(closed_pages={0: []}))
+    acquired = try_acquire_ingest_mode_lease(
+        settings.db_path,
+        "sync_cold_closed_audit",
+        f"ingest:{os.getpid()}:sync_cold_closed_audit:1",
+        lease_seconds=1800,
+        notes="test active lease",
+    )
+    assert acquired is True
+
+    result = sync_cold_closed_audit(settings)
+
+    assert result.status == "skipped"
+    assert "single-flight ingest lease" in result.message
+    with connect(settings.db_path) as conn:
+        running = conn.execute(
+            "SELECT COUNT(*) AS c FROM ingest_runs WHERE mode = 'sync_cold_closed_audit' AND status = 'running'"
+        ).fetchone()["c"]
+    assert running == 0

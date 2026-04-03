@@ -65,6 +65,8 @@ That first full-pass completion should be durable state, not guesswork.
 
 The service should also repair stale derived retrieval artifacts when the current document materializer version no longer matches what is stored in `ticket_documents`. That keeps metadata/chunking improvements from depending on a human remembering to force a rematerialization pass.
 
+Individual ingest lanes should also be **single-flight**. If `sync_hot_open`, `sync_warm_closed`, or especially `sync_cold_closed_audit` is already running, a second caller should skip cleanly behind an active ingest lease instead of starting a duplicate run and merely abandoning the older `running` row afterward.
+
 ## Install vs update behavior
 
 ### First install

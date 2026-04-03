@@ -92,6 +92,7 @@ SherpaMind currently covers five major areas:
    - refreshes hot open-ticket state
    - reconciles recently closed tickets
    - performs rolling cold closed-ticket audits
+   - enforces single-flight ingest leases per sync lane so overlapping manual/service runs do not double-run the same hot/warm/cold ingest mode and then “clean up” the duplicate afterward
    - tracks whether the historical cold corpus has completed at least one full pass
    - uses spare hourly API headroom opportunistically to accelerate cold audit/detail deepening before that first full pass completes
    - slows cold re-audit/re-enrichment back down after the first full pass so most budget remains available for hot/warm freshness while still preserving long-tail maintenance
@@ -129,7 +130,7 @@ SherpaMind currently covers five major areas:
    - keeps latency-sensitive alert detection separate from heavier maintenance work
    - uses a durable SQLite-backed alert queue for webhook dispatch retries/dedupe
    - performs periodic sync/enrichment/artifact-refresh work without burning OpenClaw tokens
-   - keeps worker state, logs, queue state, and request-usage history locally
+   - keeps worker state, logs, queue state, request-usage history, and ingest-mode single-flight leases locally
 
 ## Proven capability
 

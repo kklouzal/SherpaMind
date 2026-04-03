@@ -171,6 +171,14 @@ CREATE TABLE IF NOT EXISTS ingest_runs (
     notes TEXT
 );
 
+CREATE TABLE IF NOT EXISTS ingest_mode_leases (
+    mode TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    leased_at TEXT NOT NULL,
+    lease_expires_at TEXT NOT NULL,
+    notes TEXT
+);
+
 CREATE TABLE IF NOT EXISTS api_request_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     recorded_at TEXT NOT NULL,
@@ -1082,7 +1090,7 @@ def get_worker_lease(db_path: Path, worker_name: str) -> dict[str, Any] | None:
     return dict(row) if row is not None else None
 
 
-def _worker_owner_pid(owner_id: str | None) -> int | None:
+def _lease_owner_pid(owner_id: str | None) -> int | None:
     if not owner_id:
         return None
     parts = str(owner_id).split(":")
@@ -1119,7 +1127,7 @@ def try_acquire_worker_lease(db_path: Path, worker_name: str, owner_id: str, *, 
             ).fetchone()
             if row is not None:
                 expiry = parse_sherpadesk_timestamp(row['lease_expires_at']) if row['lease_expires_at'] else None
-                owner_pid = _worker_owner_pid(row['owner_id'])
+                owner_pid = _lease_owner_pid(row['owner_id'])
                 owner_alive = _pid_is_alive(owner_pid)
                 if expiry and expiry > datetime.now(timezone.utc) and row['owner_id'] != owner_id and owner_alive:
                     return False
@@ -1159,6 +1167,75 @@ def release_worker_lease(db_path: Path, worker_name: str, owner_id: str) -> None
             conn.execute(
                 "DELETE FROM worker_leases WHERE worker_name = ? AND owner_id = ?",
                 (worker_name, owner_id),
+            )
+            conn.commit()
+
+    run_with_db_lock_retries(_operation)
+
+
+def get_ingest_mode_lease(db_path: Path, mode: str) -> dict[str, Any] | None:
+    initialize_db(db_path)
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT mode, owner_id, leased_at, lease_expires_at, notes FROM ingest_mode_leases WHERE mode = ?",
+            (mode,),
+        ).fetchone()
+    return dict(row) if row is not None else None
+
+
+def try_acquire_ingest_mode_lease(db_path: Path, mode: str, owner_id: str, *, lease_seconds: int = 1800, notes: str | None = None) -> bool:
+    initialize_db(db_path)
+    leased_at = now_iso()
+    lease_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=lease_seconds)).isoformat()
+
+    def _operation() -> bool:
+        with connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT owner_id, lease_expires_at FROM ingest_mode_leases WHERE mode = ?",
+                (mode,),
+            ).fetchone()
+            if row is not None:
+                expiry = parse_sherpadesk_timestamp(row['lease_expires_at']) if row['lease_expires_at'] else None
+                owner_pid = _lease_owner_pid(row['owner_id'])
+                owner_alive = _pid_is_alive(owner_pid)
+                if expiry and expiry > datetime.now(timezone.utc) and row['owner_id'] != owner_id and owner_alive:
+                    return False
+            conn.execute(
+                "INSERT INTO ingest_mode_leases(mode, owner_id, leased_at, lease_expires_at, notes) VALUES(?, ?, ?, ?, ?) "
+                "ON CONFLICT(mode) DO UPDATE SET owner_id=excluded.owner_id, leased_at=excluded.leased_at, lease_expires_at=excluded.lease_expires_at, notes=excluded.notes",
+                (mode, owner_id, leased_at, lease_expires_at, notes),
+            )
+            conn.commit()
+            return True
+
+    return run_with_db_lock_retries(_operation)
+
+
+def renew_ingest_mode_lease(db_path: Path, mode: str, owner_id: str, *, lease_seconds: int = 1800, notes: str | None = None) -> bool:
+    initialize_db(db_path)
+    leased_at = now_iso()
+    lease_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=lease_seconds)).isoformat()
+
+    def _operation() -> bool:
+        with connect(db_path) as conn:
+            cursor = conn.execute(
+                "UPDATE ingest_mode_leases SET leased_at = ?, lease_expires_at = ?, notes = ? WHERE mode = ? AND owner_id = ?",
+                (leased_at, lease_expires_at, notes, mode, owner_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    return run_with_db_lock_retries(_operation)
+
+
+def release_ingest_mode_lease(db_path: Path, mode: str, owner_id: str) -> None:
+    initialize_db(db_path)
+
+    def _operation() -> None:
+        with connect(db_path) as conn:
+            conn.execute(
+                "DELETE FROM ingest_mode_leases WHERE mode = ? AND owner_id = ?",
+                (mode, owner_id),
             )
             conn.commit()
 
