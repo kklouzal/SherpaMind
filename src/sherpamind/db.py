@@ -190,6 +190,20 @@ CREATE TABLE IF NOT EXISTS api_request_events (
     raw_json TEXT
 );
 
+CREATE TABLE IF NOT EXISTS ticket_detail_failures (
+    ticket_id TEXT PRIMARY KEY,
+    status_code INTEGER,
+    error_kind TEXT,
+    error_message TEXT,
+    last_path TEXT,
+    last_failure_at TEXT NOT NULL,
+    next_retry_at TEXT,
+    failure_count INTEGER NOT NULL DEFAULT 1,
+    permanent_failure INTEGER NOT NULL DEFAULT 0,
+    raw_json TEXT NOT NULL,
+    FOREIGN KEY(ticket_id) REFERENCES tickets(id)
+);
+
 CREATE TABLE IF NOT EXISTS vector_chunk_index (
     chunk_id TEXT PRIMARY KEY,
     doc_id TEXT NOT NULL,
@@ -323,10 +337,17 @@ def initialize_db(db_path: Path) -> None:
     with connect(db_path) as conn:
         conn.executescript(SCHEMA)
         # Lightweight schema evolution for older local DBs created before new columns/tables existed.
-        if 'ticket_documents' in {row['name'] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+        table_names = {row['name'] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if 'ticket_documents' in table_names:
             ticket_doc_cols = _table_columns(conn, 'ticket_documents')
             if 'content_hash' not in ticket_doc_cols:
                 conn.execute("ALTER TABLE ticket_documents ADD COLUMN content_hash TEXT")
+        if 'ticket_detail_failures' in table_names:
+            failure_cols = _table_columns(conn, 'ticket_detail_failures')
+            if 'last_path' not in failure_cols:
+                conn.execute("ALTER TABLE ticket_detail_failures ADD COLUMN last_path TEXT")
+            if 'raw_json' not in failure_cols:
+                conn.execute("ALTER TABLE ticket_detail_failures ADD COLUMN raw_json TEXT NOT NULL DEFAULT '{}' ")
         conn.commit()
 
 
@@ -1021,6 +1042,87 @@ def prune_api_request_events(db_path: Path, retention_days: int) -> int:
             return int(cursor.rowcount)
 
     return run_with_db_lock_retries(_operation)
+
+
+def record_ticket_detail_failure(
+    db_path: Path,
+    *,
+    ticket_id: str,
+    status_code: int | None,
+    error_kind: str,
+    error_message: str,
+    last_path: str,
+    last_failure_at: str | None = None,
+    next_retry_at: str | None = None,
+    permanent_failure: bool = False,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    initialize_db(db_path)
+    failure_at = last_failure_at or now_iso()
+
+    def _operation() -> None:
+        with connect(db_path) as conn:
+            existing = conn.execute(
+                "SELECT failure_count FROM ticket_detail_failures WHERE ticket_id = ?",
+                (str(ticket_id),),
+            ).fetchone()
+            next_count = int(existing["failure_count"] or 0) + 1 if existing else 1
+            payload = {
+                "status_code": status_code,
+                "error_kind": error_kind,
+                "error_message": error_message,
+                "last_path": last_path,
+                "last_failure_at": failure_at,
+                "next_retry_at": next_retry_at,
+                "failure_count": next_count,
+                "permanent_failure": bool(permanent_failure),
+            }
+            if extra:
+                payload["extra"] = extra
+            conn.execute(
+                """
+                INSERT INTO ticket_detail_failures(
+                    ticket_id, status_code, error_kind, error_message, last_path,
+                    last_failure_at, next_retry_at, failure_count, permanent_failure, raw_json
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(ticket_id) DO UPDATE SET
+                    status_code = excluded.status_code,
+                    error_kind = excluded.error_kind,
+                    error_message = excluded.error_message,
+                    last_path = excluded.last_path,
+                    last_failure_at = excluded.last_failure_at,
+                    next_retry_at = excluded.next_retry_at,
+                    failure_count = excluded.failure_count,
+                    permanent_failure = excluded.permanent_failure,
+                    raw_json = excluded.raw_json
+                """,
+                (
+                    str(ticket_id),
+                    status_code,
+                    error_kind,
+                    error_message,
+                    last_path,
+                    failure_at,
+                    next_retry_at,
+                    next_count,
+                    1 if permanent_failure else 0,
+                    _json(payload),
+                ),
+            )
+            conn.commit()
+
+    run_with_db_lock_retries(_operation)
+
+
+def clear_ticket_detail_failure(db_path: Path, ticket_id: str) -> None:
+    initialize_db(db_path)
+
+    def _operation() -> None:
+        with connect(db_path) as conn:
+            conn.execute("DELETE FROM ticket_detail_failures WHERE ticket_id = ?", (str(ticket_id),))
+            conn.commit()
+
+    run_with_db_lock_retries(_operation)
 
 
 def start_worker_run(db_path: Path, worker_name: str, mode: str, notes: str | None = None) -> int:

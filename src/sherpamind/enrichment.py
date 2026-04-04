@@ -2,11 +2,23 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 import json
 from typing import Any
 
+import httpx
+
 from .client import SherpaDeskClient
-from .db import finish_ingest_run, initialize_db, now_iso, start_ingest_run, upsert_ticket_details, upsert_tickets
+from .db import (
+    clear_ticket_detail_failure,
+    finish_ingest_run,
+    initialize_db,
+    now_iso,
+    record_ticket_detail_failure,
+    start_ingest_run,
+    upsert_ticket_details,
+    upsert_tickets,
+)
 from .documents import materialize_ticket_documents
 from .settings import Settings
 from .sync_state import set_json_state
@@ -257,6 +269,16 @@ def _candidate_ticket_rows(db_path, limit: int) -> list[dict]:
                 FROM tickets t
                 LEFT JOIN ticket_details td ON td.ticket_id = t.id
                 LEFT JOIN ticket_documents doc ON doc.ticket_id = t.id
+                LEFT JOIN ticket_detail_failures tdf ON tdf.ticket_id = t.id
+                WHERE NOT (
+                    tdf.ticket_id IS NOT NULL
+                    AND julianday(COALESCE(tdf.next_retry_at, '0001-01-01T00:00:00+00:00')) > julianday('now')
+                    AND (
+                        t.updated_at IS NULL
+                        OR t.updated_at = ''
+                        OR julianday(COALESCE(tdf.last_failure_at, '0001-01-01T00:00:00+00:00')) >= julianday(COALESCE(t.updated_at, '0001-01-01T00:00:00+00:00'))
+                    )
+                )
             )
             SELECT id,
                    bucket,
@@ -305,6 +327,20 @@ def _candidate_ticket_rows(db_path, limit: int) -> list[dict]:
     return selected[:limit]
 
 
+def _detail_failure_retry_delay(ticket_status_code: int | None, failure_count: int) -> tuple[str | None, bool]:
+    failure_count = max(int(failure_count), 1)
+    if ticket_status_code == 404:
+        return None, True
+    if ticket_status_code in {400, 401, 403}:
+        delay_minutes = min(6 * (2 ** max(failure_count - 1, 0)), 6 * 60)
+    elif ticket_status_code == 429:
+        delay_minutes = min(15 * (2 ** max(failure_count - 1, 0)), 12 * 60)
+    else:
+        delay_minutes = min(5 * (2 ** max(failure_count - 1, 0)), 6 * 60)
+    retry_at = datetime.now(timezone.utc) + timedelta(minutes=delay_minutes)
+    return retry_at.isoformat(), False
+
+
 def enrich_priority_ticket_details(settings: Settings, limit: int = 50, materialize_docs: bool = True) -> EnrichmentResult:
     initialize_db(settings.db_path)
     if not settings.api_key or not settings.org_key or not settings.instance_key:
@@ -319,11 +355,43 @@ def enrich_priority_ticket_details(settings: Settings, limit: int = 50, material
         candidates = _candidate_ticket_rows(settings.db_path, limit=limit)
         ticket_ids = [str(row['id']) for row in candidates]
         details = []
+        failures: list[dict[str, Any]] = []
         synced_at = now_iso()
         for ticket_id in ticket_ids:
-            detail = client.get(f'tickets/{ticket_id}')
+            path = f'tickets/{ticket_id}'
+            try:
+                detail = client.get(path)
+            except httpx.HTTPStatusError as exc:
+                with_status = int(exc.response.status_code)
+                existing_failures = next((row for row in failures if row['ticket_id'] == ticket_id), None)
+                failure_count = int(existing_failures['failure_count']) + 1 if existing_failures else 1
+                next_retry_at, permanent_failure = _detail_failure_retry_delay(with_status, failure_count)
+                failure = {
+                    'ticket_id': ticket_id,
+                    'status_code': with_status,
+                    'error_kind': type(exc).__name__,
+                    'error_message': str(exc),
+                    'last_path': path,
+                    'next_retry_at': next_retry_at,
+                    'permanent_failure': permanent_failure,
+                    'failure_count': failure_count,
+                }
+                failures.append(failure)
+                record_ticket_detail_failure(
+                    settings.db_path,
+                    ticket_id=ticket_id,
+                    status_code=with_status,
+                    error_kind=failure['error_kind'],
+                    error_message=failure['error_message'],
+                    last_path=path,
+                    last_failure_at=synced_at,
+                    next_retry_at=next_retry_at,
+                    permanent_failure=permanent_failure,
+                )
+                continue
             if isinstance(detail, dict):
                 details.append(detail)
+                clear_ticket_detail_failure(settings.db_path, ticket_id)
         upsert_tickets(settings.db_path, details, synced_at=synced_at)
         upsert_ticket_details(settings.db_path, details, synced_at=synced_at)
         doc_stats = materialize_ticket_documents(settings.db_path, limit=None) if materialize_docs else None
@@ -339,6 +407,10 @@ def enrich_priority_ticket_details(settings: Settings, limit: int = 50, material
             'selected_technician_count': len({str(row.get('technician_key') or '').strip() or 'unknown' for row in candidates}),
             'synced_at': synced_at,
             'materialized_documents': doc_stats['document_count'] if doc_stats else None,
+            'failed_ticket_count': len(failures),
+            'failed_ticket_ids': [failure['ticket_id'] for failure in failures],
+            'permanent_failure_count': sum(1 for failure in failures if failure['permanent_failure']),
+            'temporary_failure_count': sum(1 for failure in failures if not failure['permanent_failure']),
         }
         set_json_state(settings.db_path, 'enrichment.priority_tickets.last_state', stats)
         finish_ingest_run(settings.db_path, run_id, status='success', notes=json.dumps(stats, sort_keys=True))

@@ -8,13 +8,25 @@ import base64
 import httpx
 from tenacity import (
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
 
 from .db import record_api_request_event
 from .rate_limit import RequestPacer
+
+
+_RETRYABLE_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
+
+
+def is_retryable_http_error(exc: BaseException) -> bool:
+    if not isinstance(exc, httpx.HTTPError):
+        return False
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return True
+    status_code = int(exc.response.status_code)
+    return status_code in _RETRYABLE_HTTP_STATUS_CODES
 
 
 @dataclass
@@ -54,7 +66,7 @@ class SherpaDeskClient:
     @retry(
         stop=stop_after_attempt(4),
         wait=wait_exponential(multiplier=1, min=1, max=16),
-        retry=retry_if_exception_type(httpx.HTTPError),
+        retry=retry_if_exception(is_retryable_http_error),
         reraise=True,
     )
     def get(self, path: str, params: dict[str, Any] | None = None) -> Any:

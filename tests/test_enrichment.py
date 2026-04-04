@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import httpx
+
 from sherpamind.enrichment import _candidate_ticket_rows, enrich_priority_ticket_details
 from sherpamind.settings import Settings
 from sherpamind.db import connect, initialize_db, replace_ticket_documents, upsert_ticket_details, upsert_tickets
@@ -131,6 +133,111 @@ def test_candidate_selection_spreads_cold_coverage_to_undercovered_categories(tm
 
     candidates = _candidate_ticket_rows(db, limit=1)
     assert [row['id'] for row in candidates] == ['203']
+
+
+def test_enrichment_records_detail_failures_and_continues(tmp_path: Path, monkeypatch) -> None:
+    settings = make_settings(tmp_path)
+    initialize_db(settings.db_path)
+    upsert_tickets(settings.db_path, [
+        {'id': 101, 'subject': 'Open A', 'status': 'Open', 'created_time': '2026-03-19T01:00:00Z', 'updated_time': '2026-03-19T02:00:00Z'},
+        {'id': 102, 'subject': 'Open B', 'status': 'Open', 'created_time': '2026-03-19T01:05:00Z', 'updated_time': '2026-03-19T02:05:00Z'},
+    ])
+
+    class MixedClient:
+        def get(self, path, params=None):
+            ticket_id = path.split('/')[-1]
+            if ticket_id == '101':
+                request = httpx.Request('GET', f'https://api.sherpadesk.com/{path}')
+                response = httpx.Response(404, request=request)
+                raise httpx.HTTPStatusError('not found', request=request, response=response)
+            return {
+                'id': int(ticket_id),
+                'subject': f'Ticket {ticket_id}',
+                'status': 'Open',
+                'created_time': '2026-03-18T01:00:00Z',
+                'updated_time': '2026-03-19T01:00:00Z',
+                'ticketlogs': [],
+                'timelogs': [],
+                'attachments': [],
+            }
+
+    monkeypatch.setattr('sherpamind.enrichment._build_client', lambda settings: MixedClient())
+    result = enrich_priority_ticket_details(settings, limit=2, materialize_docs=False)
+    assert result.status == 'ok'
+    assert result.stats['enriched_ticket_count'] == 1
+    assert result.stats['failed_ticket_count'] == 1
+    assert result.stats['permanent_failure_count'] == 1
+    with connect(settings.db_path) as conn:
+        failure = conn.execute(
+            "SELECT ticket_id, status_code, permanent_failure, failure_count FROM ticket_detail_failures WHERE ticket_id = '101'"
+        ).fetchone()
+        detail_ids = {
+            row['ticket_id'] for row in conn.execute('SELECT ticket_id FROM ticket_details').fetchall()
+        }
+    assert failure['ticket_id'] == '101'
+    assert failure['status_code'] == 404
+    assert failure['permanent_failure'] == 1
+    assert failure['failure_count'] == 1
+    assert detail_ids == {'102'}
+
+
+def test_candidate_selection_skips_cooling_down_detail_failures_until_ticket_changes(tmp_path: Path) -> None:
+    db = tmp_path / 'sherpamind.sqlite3'
+    initialize_db(db)
+    upsert_tickets(db, [
+        {
+            'id': 401,
+            'subject': 'Cooling down ticket',
+            'status': 'Open',
+            'priority_name': 'High',
+            'created_time': '2026-03-19T01:00:00Z',
+            'updated_time': '2026-03-19T02:00:00Z',
+        },
+        {
+            'id': 402,
+            'subject': 'Healthy ticket',
+            'status': 'Open',
+            'priority_name': 'Normal',
+            'created_time': '2026-03-19T01:00:00Z',
+            'updated_time': '2026-03-19T02:05:00Z',
+        },
+    ])
+    with connect(db) as conn:
+        conn.execute(
+            """
+            INSERT INTO ticket_detail_failures(
+                ticket_id, status_code, error_kind, error_message, last_path,
+                last_failure_at, next_retry_at, failure_count, permanent_failure, raw_json
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                '401',
+                404,
+                'HTTPStatusError',
+                'not found',
+                'tickets/401',
+                '2026-03-19T02:00:00+00:00',
+                '2999-01-01T00:00:00+00:00',
+                1,
+                1,
+                '{}',
+            ),
+        )
+        conn.commit()
+
+    candidates = _candidate_ticket_rows(db, limit=2)
+    assert [row['id'] for row in candidates] == ['402']
+
+    upsert_tickets(db, [{
+        'id': 401,
+        'subject': 'Cooling down ticket updated',
+        'status': 'Open',
+        'priority_name': 'High',
+        'created_time': '2026-03-19T01:00:00Z',
+        'updated_time': '2026-03-19T03:00:00Z',
+    }])
+    candidates_after_update = _candidate_ticket_rows(db, limit=2)
+    assert [row['id'] for row in candidates_after_update] == ['401', '402']
 
 
 def test_candidate_selection_prefers_retrieval_poor_cold_groups_when_detail_coverage_ties(tmp_path: Path) -> None:

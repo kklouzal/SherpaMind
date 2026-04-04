@@ -432,6 +432,20 @@ def get_enrichment_coverage(db_path: Path) -> dict:
               AND julianday(REPLACE(substr(t.closed_at, 1, 19), 'T', ' ')) >= julianday('now', '-7 days')
             """
         ).fetchone()["c"]
+        failure = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS tracked_failures,
+                SUM(CASE WHEN permanent_failure = 1 THEN 1 ELSE 0 END) AS permanent_failures,
+                SUM(CASE WHEN permanent_failure = 0 THEN 1 ELSE 0 END) AS temporary_failures,
+                SUM(CASE WHEN next_retry_at IS NOT NULL AND julianday(next_retry_at) > julianday('now') THEN 1 ELSE 0 END) AS cooling_down_failures,
+                SUM(CASE WHEN status_code = 404 THEN 1 ELSE 0 END) AS status_404_failures,
+                SUM(CASE WHEN status_code = 401 THEN 1 ELSE 0 END) AS status_401_failures,
+                SUM(CASE WHEN status_code = 403 THEN 1 ELSE 0 END) AS status_403_failures,
+                MAX(last_failure_at) AS latest_failure_at
+            FROM ticket_detail_failures
+            """
+        ).fetchone()
         retrieval = conn.execute(
             """
             SELECT
@@ -525,6 +539,16 @@ def get_enrichment_coverage(db_path: Path) -> dict:
             "warm_detail_coverage_ratio": round((warm_detail_count / closed_tickets), 4) if closed_tickets else 0.0,
             "detail_backlog": max(total_tickets - detail_count, 0),
             "detail_gap_pressure": detail_gap_pressure,
+            "detail_failures": {
+                "tracked_tickets": int(failure["tracked_failures"] or 0),
+                "permanent_tickets": int(failure["permanent_failures"] or 0),
+                "temporary_tickets": int(failure["temporary_failures"] or 0),
+                "cooling_down_tickets": int(failure["cooling_down_failures"] or 0),
+                "http_404_tickets": int(failure["status_404_failures"] or 0),
+                "http_401_tickets": int(failure["status_401_failures"] or 0),
+                "http_403_tickets": int(failure["status_403_failures"] or 0),
+                "latest_failure_at": failure["latest_failure_at"],
+            },
         },
         "retrieval": {
             "ticket_documents": document_count,

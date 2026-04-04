@@ -51,10 +51,12 @@ The priority enrichment loop should stay retrieval-oriented rather than purely r
 - open tickets first
 - recently closed tickets next
 - then broaden historical detail coverage across under-covered categories/accounts/technicians so the retrieval corpus gets deeper breadth over time instead of repeatedly clustering around one narrow slice of recent history
+- record per-ticket detail-fetch failures with retry/backoff state so non-retriable or currently cooling-down tickets do not get re-hit every maintenance wave, while still allowing retry if the ticket later changes upstream
 
 These run from internal Python timers, not OpenClaw cron.
 
 The service also tracks real SherpaDesk request usage in SQLite and should use that to reserve the forecast hot/warm budget first, then spend spare hourly headroom opportunistically on cold audit and enrichment work instead of throttling cold depth with only a static conservative cadence.
+Client retry behavior should stay selective: retry transient transport/server pressure, not persistent/non-retriable 4xx responses.
 Old request-event rows are pruned automatically by retention policy so the request log remains bounded.
 
 Cold-history work should run in two phases:

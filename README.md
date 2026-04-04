@@ -98,6 +98,7 @@ SherpaMind currently covers five major areas:
    - slows cold re-audit/re-enrichment back down after the first full pass so most budget remains available for hot/warm freshness while still preserving long-tail maintenance
    - backfills account, user, and technician stub rows from stable ticket payload labels when standalone entity endpoints are thinner than real ticket history
    - enriches a bounded priority ticket set through single-ticket detail fetches
+   - tracks per-ticket detail-fetch failures with retry/backoff state so non-retriable or cooling-down tickets do not get hammered every maintenance wave
    - biases cold-detail enrichment toward under-covered categories/accounts/technicians so historical retrieval depth broadens instead of clustering only around the newest cold tickets
    - stores ticket logs and attachment metadata from detail responses
 
@@ -117,6 +118,7 @@ SherpaMind currently covers five major areas:
 4. **Operator and OpenClaw observability**
    - reports dataset counts and sync freshness health, including per-lane staleness/missing/error state
    - reports enrichment coverage and retrieval coverage
+   - reports tracked detail-fetch failure state (temporary vs permanent, cooldown pressure, and common HTTP status classes) so enrichment gaps can be distinguished from unreachable-ticket/API problems
    - surfaces detail-gap pressure across under-covered accounts, categories, and technicians so enrichment breadth can be steered deliberately instead of guessed
    - reports retrieval-metadata readiness across the materialized document layer
    - reports source-vs-materialized coverage for source-backed metadata so thin fields can be distinguished as upstream absence vs backend promotion drift, with transformed-field hygiene that treats malformed upstream email strings as source-quality issues instead of false promotion gaps
@@ -332,6 +334,7 @@ Current operating bias is conservative:
 
 - verify endpoint behavior before widening usage
 - rate-limit requests conservatively
+- retry only transient transport/server-side failures; do not waste repeated retries on non-retriable 4xx responses
 - keep secrets local only
 - prefer bounded enrichment and measured sync lanes over aggressive crawling
 

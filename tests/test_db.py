@@ -44,6 +44,7 @@ def test_initialize_db_creates_core_tables(tmp_path: Path) -> None:
     assert 'ticket_documents' in names
     assert 'ticket_document_chunks' in names
     assert 'api_request_events' in names
+    assert 'ticket_detail_failures' in names
     assert 'ingest_mode_leases' in names
 
 
