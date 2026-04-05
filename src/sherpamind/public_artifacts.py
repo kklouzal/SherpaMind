@@ -312,6 +312,8 @@ _ENTITY_METADATA_LABELS: dict[str, str] = {
     "resolution_summary": "Resolution Summary",
     "recent_log_types": "Recent Log Types",
     "attachment_metadata": "Attachment Kinds",
+    "attachment_names": "Attachment Names",
+    "attachment_name_tokens": "Attachment Name Tokens",
     "attachment_extensions": "Attachment Extensions",
     "department_label": "Department Label",
     "account_location": "Account Location",

@@ -246,9 +246,14 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Attachments (metadata only)" in primary["text"]
     assert "Attachment kinds: archive, image, log" in primary["text"]
     assert "Attachment extensions: log, png, zip" in primary["text"]
+    assert "Attachment name tokens: shot, logs, agent" in primary["text"]
     assert "Attachment total size bytes: 3794" in primary["text"]
     assert primary["metadata"]["attachments"][0]["name"] == "shot.png"
     assert primary["metadata"]["attachment_names"] == ["shot.png", "logs.zip", "agent.log"]
+    assert primary["metadata"]["attachment_names_csv"] == "shot.png, logs.zip, agent.log"
+    assert primary["metadata"]["attachment_name_tokens"] == ["shot", "logs", "agent"]
+    assert primary["metadata"]["attachment_name_tokens_csv"] == "shot, logs, agent"
+    assert primary["metadata"]["attachment_name_token_count"] == 3
     assert primary["metadata"]["attachment_extensions"] == ["log", "png", "zip"]
     assert primary["metadata"]["attachment_extensions_csv"] == "log, png, zip"
     assert primary["metadata"]["attachment_kinds"] == ["archive", "image", "log"]

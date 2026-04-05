@@ -10,7 +10,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_metadata_label, normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 16
+DOCUMENT_MATERIALIZATION_VERSION = 17
 
 
 def _content_hash(text: str) -> str:
@@ -271,9 +271,37 @@ def _attachment_kind(name: str | None) -> str:
     return _ATTACHMENT_KIND_BY_EXTENSION.get(extension, "other")
 
 
+def _attachment_name_tokens(name: str | None) -> list[str]:
+    if not name:
+        return []
+    candidate = str(name).strip().rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    if not candidate:
+        return []
+    stem = candidate.rsplit(".", 1)[0]
+    parts = re.split(r"[^a-z0-9]+", stem.lower())
+    stopwords = {
+        "a", "an", "and", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "v", "ver", "version",
+        "copy", "final", "img", "file", "new", "old", "scan", "screenshot", "screen", "photo", "image", "attachment",
+    }
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        if len(part) < 2:
+            continue
+        if part in stopwords:
+            continue
+        if part.isdigit() and len(part) >= 4:
+            continue
+        if part not in seen:
+            seen.add(part)
+            tokens.append(part)
+    return tokens
+
+
 def _summarize_attachment_metadata(rows: list[dict[str, Any]]) -> dict[str, Any]:
     names: list[str] = []
     extensions: list[str] = []
+    name_tokens: list[str] = []
     kind_counts: dict[str, int] = {}
     kind_order: list[str] = []
     total_size_bytes = 0
@@ -285,6 +313,9 @@ def _summarize_attachment_metadata(rows: list[dict[str, Any]]) -> dict[str, Any]
         name = _first_present(row.get("name"))
         if name:
             names.append(name)
+            for token in _attachment_name_tokens(name):
+                if token not in name_tokens:
+                    name_tokens.append(token)
         extension = _attachment_extension(name)
         if extension:
             extensions.append(extension)
@@ -307,6 +338,10 @@ def _summarize_attachment_metadata(rows: list[dict[str, Any]]) -> dict[str, Any]
     attachment_kinds = sorted(kind_counts)
     return {
         "attachment_names": names,
+        "attachment_names_csv": ", ".join(names) if names else None,
+        "attachment_name_tokens": name_tokens,
+        "attachment_name_tokens_csv": ", ".join(name_tokens) if name_tokens else None,
+        "attachment_name_token_count": len(name_tokens),
         "attachment_extensions": unique_extensions,
         "attachment_extensions_csv": ", ".join(unique_extensions) if unique_extensions else None,
         "attachment_kinds": attachment_kinds,
@@ -1193,6 +1228,8 @@ def build_ticket_documents(
             text_parts.append(f"Attachment kinds: {attachment_summary['attachment_kinds_csv']}")
         if attachment_summary.get("attachment_extensions_csv"):
             text_parts.append(f"Attachment extensions: {attachment_summary['attachment_extensions_csv']}")
+        if attachment_summary.get("attachment_name_tokens_csv"):
+            text_parts.append(f"Attachment name tokens: {attachment_summary['attachment_name_tokens_csv']}")
         if attachment_summary.get("attachment_total_size_bytes") is not None:
             text_parts.append(f"Attachment total size bytes: {attachment_summary['attachment_total_size_bytes']}")
 

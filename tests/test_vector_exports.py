@@ -96,6 +96,9 @@ def seed(db: Path) -> None:
                     "submission_category": "Portal",
                     "resolution_category": "Completed",
                     "attachments_count": 3,
+                    "attachment_names_csv": "photo.png, bundle.zip, agent.log",
+                    "attachment_name_tokens_csv": "photo, bundle, agent",
+                    "attachment_name_token_count": 3,
                     "attachment_extensions_csv": "log, png, zip",
                     "attachment_kinds_csv": "archive, image, log",
                     "attachment_kind_primary": "image",
@@ -316,6 +319,9 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["recent_internal_actor_labels"] == "Tech One"
     assert row["metadata"]["latest_waiting_log_date"] == "2026-03-20T10:00:00Z"
     assert row["metadata"]["latest_resolution_log_date"] == "2026-03-19T10:00:00Z"
+    assert row["metadata"]["attachment_names"] == "photo.png, bundle.zip, agent.log"
+    assert row["metadata"]["attachment_name_tokens"] == "photo, bundle, agent"
+    assert row["metadata"]["attachment_name_token_count"] == 3
     assert row["metadata"]["attachment_extensions"] == "log, png, zip"
     assert row["metadata"]["attachment_kinds"] == "archive, image, log"
     assert row["metadata"]["attachment_kind_primary"] == "image"
@@ -615,6 +621,9 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["department_label"]["chunks"] == 2
     assert summary["metadata_coverage"]["ticket_number"]["chunks"] == 2
     assert summary["metadata_coverage"]["ticket_key"]["chunks"] == 2
+    assert summary["metadata_coverage"]["attachment_names"]["chunks"] == 1
+    assert summary["metadata_coverage"]["attachment_name_tokens"]["chunks"] == 1
+    assert summary["metadata_coverage"]["attachment_name_token_count"]["chunks"] == 1
     assert summary["metadata_coverage"]["attachment_extensions"]["chunks"] == 1
     assert summary["metadata_coverage"]["attachment_kinds"]["chunks"] == 1
     assert summary["metadata_coverage"]["attachment_kind_primary"]["chunks"] == 1
