@@ -166,6 +166,7 @@ SherpaMind should also expose enough observability that OpenClaw can trust the r
 - whether embedding-ready exports preserve chunk order/position metadata cleanly enough for vector-sidecar consumers to reconstruct nearby context without guessing, while also surfacing chunk-semantic section cues so downstream retrieval can tell identity/setup chunks from issue/action/resolution/attachment evidence
 - whether materialized chunks are actually keeping up with ticket-update freshness at the per-document level, including lagging-document counts, open-vs-closed splits, lag buckets, and top stale samples
 - whether important retrieval metadata is materially populated at both the chunk level and the document level so a few multi-chunk tickets do not distort coverage reads
+- whether API pressure is mostly healthy success traffic, repeated HTTP failures on a specific status class/path (for example 404/401/429 clusters), or transport-layer instability, so runtime triage does not have to guess from one undifferentiated error total
 - a real SQLite column/table
 - a reusable structural query
 - the ticket document/chunk materialization layer

@@ -193,7 +193,10 @@ def test_run_pending_tasks_builds_vector_index(monkeypatch, tmp_path: Path) -> N
 
     runtime_status_path = tmp_path / '.SherpaMind' / 'public' / 'docs' / 'runtime' / 'status.md'
     assert runtime_status_path.exists()
-    assert 'Vector index status' in runtime_status_path.read_text()
+    runtime_status = runtime_status_path.read_text()
+    assert 'Vector index status' in runtime_status
+    assert 'API status breakdown' in runtime_status
+    assert 'API top failing paths' in runtime_status
 
 
 def test_run_pending_tasks_forces_local_retrieval_repair_when_materialization_is_stale(monkeypatch, tmp_path: Path) -> None:

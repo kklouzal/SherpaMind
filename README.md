@@ -604,10 +604,12 @@ Common outputs include:
 SherpaMind also tracks real API usage in SQLite and reports:
 
 - requests in the last hour
-- error count in the last hour
+- split success vs HTTP-error vs transport-error counts
+- error ratio in the last hour
 - remaining hourly budget
 - budget utilization ratio
 - most-hit API paths
+- HTTP status-code breakdowns and top failing paths so repeated 404/401/429-style pressure is visible immediately
 
 Vector and retrieval readiness reporting includes:
 

@@ -621,7 +621,9 @@ def get_api_usage_summary(db_path: Path, hourly_limit: int = 600) -> dict:
         last_hour = conn.execute(
             """
             SELECT COUNT(*) AS request_count,
-                   SUM(CASE WHEN status_code IS NOT NULL AND status_code >= 400 THEN 1 ELSE 0 END) AS error_count,
+                   SUM(CASE WHEN status_code IS NOT NULL AND status_code >= 400 THEN 1 ELSE 0 END) AS http_error_response_count,
+                   SUM(CASE WHEN status_code IS NOT NULL AND status_code < 400 THEN 1 ELSE 0 END) AS http_success_response_count,
+                   SUM(CASE WHEN status_code IS NULL THEN 1 ELSE 0 END) AS transport_error_count,
                    MIN(recorded_at) AS earliest_at,
                    MAX(recorded_at) AS latest_at
             FROM api_request_events
@@ -638,15 +640,71 @@ def get_api_usage_summary(db_path: Path, hourly_limit: int = 600) -> dict:
             LIMIT 10
             """
         ).fetchall()
+        status_breakdown = conn.execute(
+            """
+            SELECT status_code, COUNT(*) AS request_count
+            FROM api_request_events
+            WHERE julianday(recorded_at) >= julianday('now', '-1 hour')
+              AND status_code IS NOT NULL
+            GROUP BY status_code
+            ORDER BY request_count DESC, status_code ASC
+            LIMIT 10
+            """
+        ).fetchall()
+        outcome_breakdown = conn.execute(
+            """
+            SELECT outcome, COUNT(*) AS request_count
+            FROM api_request_events
+            WHERE julianday(recorded_at) >= julianday('now', '-1 hour')
+            GROUP BY outcome
+            ORDER BY request_count DESC, outcome ASC
+            """
+        ).fetchall()
+        top_error_paths = conn.execute(
+            """
+            SELECT path,
+                   COALESCE(CAST(status_code AS TEXT), outcome) AS error_key,
+                   COUNT(*) AS request_count
+            FROM api_request_events
+            WHERE julianday(recorded_at) >= julianday('now', '-1 hour')
+              AND (status_code IS NULL OR status_code >= 400)
+            GROUP BY path, error_key
+            ORDER BY request_count DESC, path ASC, error_key ASC
+            LIMIT 10
+            """
+        ).fetchall()
     request_count = int(last_hour["request_count"] or 0)
+    http_error_response_count = int(last_hour["http_error_response_count"] or 0)
+    transport_error_count = int(last_hour["transport_error_count"] or 0)
+    total_error_count = http_error_response_count + transport_error_count
     return {
         "requests_last_hour": request_count,
-        "errors_last_hour": int(last_hour["error_count"] or 0),
+        "errors_last_hour": total_error_count,
+        "http_success_responses_last_hour": int(last_hour["http_success_response_count"] or 0),
+        "http_error_responses_last_hour": http_error_response_count,
+        "transport_errors_last_hour": transport_error_count,
+        "error_ratio": round((total_error_count / request_count), 4) if request_count else 0.0,
         "remaining_hourly_budget": max(0, hourly_limit - request_count),
         "budget_utilization_ratio": round(request_count / hourly_limit, 4),
         "earliest_request_at": last_hour["earliest_at"],
         "latest_request_at": last_hour["latest_at"],
         "top_paths_last_hour": [dict(row) for row in top_paths],
+        "status_breakdown_last_hour": [
+            {
+                "status_code": int(row["status_code"]),
+                "request_count": int(row["request_count"] or 0),
+            }
+            for row in status_breakdown
+        ],
+        "outcome_breakdown_last_hour": [dict(row) for row in outcome_breakdown],
+        "top_error_paths_last_hour": [
+            {
+                "path": row["path"],
+                "error_key": row["error_key"],
+                "request_count": int(row["request_count"] or 0),
+            }
+            for row in top_error_paths
+        ],
     }
 
 

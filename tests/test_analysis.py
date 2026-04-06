@@ -126,6 +126,8 @@ def test_analysis_reports(tmp_path: Path) -> None:
     open_ages = list_open_ticket_ages(db, limit=2)
     recent_accounts = list_recent_account_activity(db, days=30, limit=5)
     recent_techs = list_technician_recent_load(db, days=30, limit=5)
+    record_api_request_event(db, method="GET", path="tickets", status_code=404, outcome="http_response")
+    record_api_request_event(db, method="GET", path="tickets", status_code=None, outcome="http_error")
     usage = get_api_usage_summary(db)
     coverage = get_enrichment_coverage(db)
     summary = get_dataset_summary(db)
@@ -170,7 +172,20 @@ def test_analysis_reports(tmp_path: Path) -> None:
     assert open_ages[0]["status"] == "Open"
     assert recent_accounts[0]["ticket_count"] >= 1
     assert recent_techs[0]["ticket_count"] >= 1
-    assert usage["requests_last_hour"] == 1
+    assert usage["requests_last_hour"] == 3
+    assert usage["errors_last_hour"] == 2
+    assert usage["http_success_responses_last_hour"] == 1
+    assert usage["http_error_responses_last_hour"] == 1
+    assert usage["transport_errors_last_hour"] == 1
+    assert usage["error_ratio"] == 0.6667
+    assert usage["status_breakdown_last_hour"] == [
+        {"status_code": 200, "request_count": 1},
+        {"status_code": 404, "request_count": 1},
+    ]
+    assert usage["top_error_paths_last_hour"] == [
+        {"path": "tickets", "error_key": "404", "request_count": 1},
+        {"path": "tickets", "error_key": "http_error", "request_count": 1},
+    ]
     assert coverage["ticket_details_covered"] == 1
     assert coverage["open_detail_coverage"] == 1
     assert coverage["detail_gap_pressure"]["accounts"]["summary"]["min_tickets"] == 10
@@ -189,7 +204,7 @@ def test_analysis_reports(tmp_path: Path) -> None:
     assert summary["counts"]["ticket_logs"] == 1
     assert summary["counts"]["ticket_attachments"] == 1
     assert summary["counts"]["ticket_document_chunks"] == 1
-    assert summary["counts"]["api_request_events"] == 1
+    assert summary["counts"]["api_request_events"] == 3
     assert snapshot["dataset_summary"]["counts"]["tickets"] == 3
     assert search[0]["doc_id"] == "ticket:101"
     assert search[0]["priority"] == "High"

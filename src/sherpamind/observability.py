@@ -45,6 +45,39 @@ def _sync_lane_rows(freshness: dict) -> list[dict]:
     return rows
 
 
+def _api_usage_summary_rows(usage: dict) -> list[dict]:
+    return [{
+        "requests_last_hour": usage.get("requests_last_hour", 0),
+        "http_success_responses_last_hour": usage.get("http_success_responses_last_hour", 0),
+        "http_error_responses_last_hour": usage.get("http_error_responses_last_hour", 0),
+        "transport_errors_last_hour": usage.get("transport_errors_last_hour", 0),
+        "error_ratio": usage.get("error_ratio", 0.0),
+        "remaining_hourly_budget": usage.get("remaining_hourly_budget", 0),
+        "budget_utilization_ratio": usage.get("budget_utilization_ratio", 0.0),
+    }]
+
+
+def _api_status_rows(usage: dict) -> list[dict]:
+    rows: list[dict] = []
+    for row in usage.get("status_breakdown_last_hour") or []:
+        rows.append({
+            "status_code": row.get("status_code", ""),
+            "requests": row.get("request_count", 0),
+        })
+    return rows
+
+
+def _api_error_path_rows(usage: dict) -> list[dict]:
+    rows: list[dict] = []
+    for row in usage.get("top_error_paths_last_hour") or []:
+        rows.append({
+            "path": row.get("path", ""),
+            "error_key": row.get("error_key", ""),
+            "requests": row.get("request_count", 0),
+        })
+    return rows
+
+
 def generate_runtime_status_artifacts(db_path: Path) -> dict:
     paths = ensure_path_layout()
     runtime_dir = paths.docs_root / "runtime"
@@ -108,6 +141,30 @@ def generate_runtime_status_artifacts(db_path: Path) -> dict:
         "```json",
         json.dumps(freshness, indent=2),
         "```",
+        "",
+        "## API usage summary",
+        _markdown_table(_api_usage_summary_rows(usage), [
+            ("requests_last_hour", "Requests (1h)"),
+            ("http_success_responses_last_hour", "HTTP Success"),
+            ("http_error_responses_last_hour", "HTTP Error Responses"),
+            ("transport_errors_last_hour", "Transport Errors"),
+            ("error_ratio", "Error Ratio"),
+            ("remaining_hourly_budget", "Remaining Budget"),
+            ("budget_utilization_ratio", "Budget Utilization"),
+        ]),
+        "",
+        "## API status breakdown",
+        _markdown_table(_api_status_rows(usage), [
+            ("status_code", "Status"),
+            ("requests", "Requests"),
+        ]),
+        "",
+        "## API top failing paths",
+        _markdown_table(_api_error_path_rows(usage), [
+            ("path", "Path"),
+            ("error_key", "Error"),
+            ("requests", "Requests"),
+        ]),
         "",
         "## API usage",
         "```json",
