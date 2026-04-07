@@ -198,6 +198,20 @@ def _source_breakdown_rows(source_counts: dict[str, dict[str, Any]]) -> list[dic
     return rows
 
 
+def _api_failure_signature_rows(usage: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for row in usage.get("failure_signatures_last_hour") or []:
+        rows.append({
+            "label": row.get("label", ""),
+            "family": row.get("family", ""),
+            "requests": row.get("request_count", 0),
+            "ratio": _format_ratio(row.get("request_ratio")),
+            "sample_status": row.get("sample_status_code", ""),
+            "sample_path": row.get("sample_path", ""),
+        })
+    return rows
+
+
 def _sync_freshness_lane_rows(freshness: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for mode, lane in (freshness.get("lanes") or {}).items():
@@ -512,6 +526,36 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "```json",
         json.dumps(sync_freshness, indent=2),
         "```",
+        "",
+        "## API failure diagnosis",
+        "",
+        _markdown_table([
+            {
+                "likely_root_cause": dataset_summary.get("api_usage", {}).get("likely_root_cause_last_hour", "") or "",
+                "likely_authentication_issue": dataset_summary.get("api_usage", {}).get("likely_authentication_issue_last_hour", False),
+                "likely_configuration_issue": dataset_summary.get("api_usage", {}).get("likely_configuration_issue_last_hour", False),
+                "likely_rate_limit_issue": dataset_summary.get("api_usage", {}).get("likely_rate_limit_issue_last_hour", False),
+            }
+        ], [
+            ("likely_root_cause", "Likely Root Cause"),
+            ("likely_authentication_issue", "Auth Issue"),
+            ("likely_configuration_issue", "Config Issue"),
+            ("likely_rate_limit_issue", "Rate Limit Issue"),
+        ]),
+        "",
+        "## API failure signatures",
+        "",
+        _markdown_table(
+            _api_failure_signature_rows(dataset_summary.get("api_usage", {})),
+            [
+                ("label", "Signature"),
+                ("family", "Family"),
+                ("requests", "Requests"),
+                ("ratio", "Ratio"),
+                ("sample_status", "Sample Status"),
+                ("sample_path", "Sample Path"),
+            ],
+        ),
         "",
         "## Status counts",
         "",

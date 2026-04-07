@@ -18,6 +18,7 @@ from .rate_limit import RequestPacer
 
 
 _RETRYABLE_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
+_HTTP_ERROR_BODY_PREVIEW_LIMIT = 400
 
 
 def is_retryable_http_error(exc: BaseException) -> bool:
@@ -27,6 +28,15 @@ def is_retryable_http_error(exc: BaseException) -> bool:
         return True
     status_code = int(exc.response.status_code)
     return status_code in _RETRYABLE_HTTP_STATUS_CODES
+
+
+def _sanitize_http_error_body(text: str | None) -> str | None:
+    if text is None:
+        return None
+    collapsed = " ".join(str(text).split())
+    if not collapsed:
+        return None
+    return collapsed[:_HTTP_ERROR_BODY_PREVIEW_LIMIT]
 
 
 @dataclass
@@ -89,7 +99,22 @@ class SherpaDeskClient:
                 if "json" in content_type.lower():
                     return response.json()
                 return response.text
-        except httpx.HTTPStatusError:
+        except httpx.HTTPStatusError as exc:
+            if self.request_tracking_db_path is not None:
+                response = exc.response
+                record_api_request_event(
+                    self.request_tracking_db_path,
+                    method="GET",
+                    path=path,
+                    status_code=response.status_code,
+                    outcome="http_response",
+                    attempt_kind="get",
+                    extra={
+                        "params": params or {},
+                        "detail": str(exc),
+                        "response_body_preview": _sanitize_http_error_body(response.text),
+                    },
+                )
             raise
         except httpx.HTTPError as exc:
             if self.request_tracking_db_path is not None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 from .db import connect, initialize_db
 from .documents import DOCUMENT_MATERIALIZATION_VERSION
@@ -615,6 +616,122 @@ def get_enrichment_coverage(db_path: Path) -> dict:
     }
 
 
+_AUTH_FAILURE_SIGNATURES: tuple[tuple[str, str, str], ...] = (
+    ("invalid_api_token", "auth", "token was not found"),
+    ("invalid_api_token", "auth", "invalid token"),
+    ("invalid_api_token", "auth", "invalid api token"),
+    ("invalid_api_token", "auth", "api token"),
+    ("invalid_org_instance_identity", "config", "organization"),
+    ("invalid_org_instance_identity", "config", "instance"),
+    ("invalid_auth_identity", "auth", "basic auth"),
+    ("rate_limited", "rate_limit", "rate limit"),
+)
+
+
+def _load_api_event_extra(raw_json: str | None) -> dict:
+    if not raw_json:
+        return {}
+    try:
+        parsed = json.loads(raw_json)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _classify_api_failure_signature(status_code: int | None, detail: str | None, body_preview: str | None) -> dict[str, str | None]:
+    haystack = " ".join(part for part in (detail, body_preview) if part).lower()
+    if status_code == 401:
+        return {"signature": "unauthorized", "family": "auth", "label": "Unauthorized / rejected credentials"}
+    if status_code == 403:
+        return {"signature": "forbidden", "family": "auth", "label": "Forbidden / insufficient access"}
+    if status_code == 429:
+        return {"signature": "rate_limited", "family": "rate_limit", "label": "Rate limited"}
+    for signature, family, needle in _AUTH_FAILURE_SIGNATURES:
+        if needle in haystack:
+            label = {
+                "invalid_api_token": "Invalid or unknown API token",
+                "invalid_org_instance_identity": "Invalid org/instance identity",
+                "invalid_auth_identity": "Invalid auth identity",
+                "rate_limited": "Rate limited",
+            }.get(signature, signature.replace("_", " ").title())
+            return {"signature": signature, "family": family, "label": label}
+    if status_code == 404 and haystack:
+        return {"signature": "not_found_with_body", "family": "unknown", "label": "404 with diagnostic body"}
+    if status_code is not None and status_code >= 400:
+        return {"signature": f"http_{status_code}", "family": "http", "label": f"HTTP {status_code}"}
+    return {"signature": None, "family": None, "label": None}
+
+
+def _summarize_api_failure_signatures(rows: list[dict], request_count: int) -> dict:
+    counts: dict[tuple[str, str, str], int] = {}
+    samples: dict[tuple[str, str, str], dict] = {}
+    for row in rows:
+        extra = _load_api_event_extra(row.get("raw_json"))
+        classified = _classify_api_failure_signature(
+            row.get("status_code"),
+            extra.get("detail"),
+            extra.get("response_body_preview"),
+        )
+        signature = classified.get("signature")
+        family = classified.get("family")
+        label = classified.get("label")
+        if not signature or not family or not label:
+            continue
+        key = (str(signature), str(family), str(label))
+        counts[key] = counts.get(key, 0) + 1
+        samples.setdefault(
+            key,
+            {
+                "detail": extra.get("detail"),
+                "response_body_preview": extra.get("response_body_preview"),
+                "status_code": row.get("status_code"),
+                "path": row.get("path"),
+            },
+        )
+
+    rows_out: list[dict] = []
+    family_counts: dict[str, int] = {}
+    for (signature, family, label), count in sorted(counts.items(), key=lambda item: (-item[1], item[0][0])):
+        sample = samples[(signature, family, label)]
+        family_counts[family] = family_counts.get(family, 0) + count
+        rows_out.append(
+            {
+                "signature": signature,
+                "family": family,
+                "label": label,
+                "request_count": count,
+                "request_ratio": round((count / request_count), 4) if request_count else 0.0,
+                "sample_status_code": sample.get("status_code"),
+                "sample_path": sample.get("path"),
+                "sample_detail": sample.get("detail"),
+                "sample_response_body_preview": sample.get("response_body_preview"),
+            }
+        )
+
+    dominant = rows_out[0] if rows_out else None
+    auth_like_count = sum(count for family, count in family_counts.items() if family == "auth")
+    config_like_count = sum(count for family, count in family_counts.items() if family == "config")
+    rate_limit_count = sum(count for family, count in family_counts.items() if family == "rate_limit")
+    likely_root_cause = None
+    preferred_specific = sorted(
+        [row for row in rows_out if row.get("family") in {"auth", "config", "rate_limit"}],
+        key=lambda row: (-int(row.get("request_count") or 0), str(row.get("label") or "")),
+    )
+    if preferred_specific:
+        likely_root_cause = preferred_specific[0]["label"]
+    elif dominant:
+        likely_root_cause = dominant["label"]
+    return {
+        "rows": rows_out,
+        "families": family_counts,
+        "dominant_signature": dominant,
+        "likely_root_cause": likely_root_cause,
+        "likely_authentication_issue": auth_like_count > 0,
+        "likely_configuration_issue": config_like_count > 0,
+        "likely_rate_limit_issue": rate_limit_count > 0,
+    }
+
+
 def get_api_usage_summary(db_path: Path, hourly_limit: int = 600) -> dict:
     initialize_db(db_path)
     with connect(db_path) as conn:
@@ -673,10 +790,21 @@ def get_api_usage_summary(db_path: Path, hourly_limit: int = 600) -> dict:
             LIMIT 10
             """
         ).fetchall()
+        recent_error_events = conn.execute(
+            """
+            SELECT path, status_code, outcome, attempt_kind, raw_json
+            FROM api_request_events
+            WHERE julianday(recorded_at) >= julianday('now', '-1 hour')
+              AND (status_code IS NULL OR status_code >= 400)
+            ORDER BY recorded_at DESC, id DESC
+            LIMIT 200
+            """
+        ).fetchall()
     request_count = int(last_hour["request_count"] or 0)
     http_error_response_count = int(last_hour["http_error_response_count"] or 0)
     transport_error_count = int(last_hour["transport_error_count"] or 0)
     total_error_count = http_error_response_count + transport_error_count
+    failure_signatures = _summarize_api_failure_signatures([dict(row) for row in recent_error_events], request_count)
     return {
         "requests_last_hour": request_count,
         "errors_last_hour": total_error_count,
@@ -705,6 +833,13 @@ def get_api_usage_summary(db_path: Path, hourly_limit: int = 600) -> dict:
             }
             for row in top_error_paths
         ],
+        "failure_signatures_last_hour": failure_signatures["rows"],
+        "failure_family_counts_last_hour": failure_signatures["families"],
+        "dominant_failure_signature_last_hour": failure_signatures["dominant_signature"],
+        "likely_root_cause_last_hour": failure_signatures["likely_root_cause"],
+        "likely_authentication_issue_last_hour": failure_signatures["likely_authentication_issue"],
+        "likely_configuration_issue_last_hour": failure_signatures["likely_configuration_issue"],
+        "likely_rate_limit_issue_last_hour": failure_signatures["likely_rate_limit_issue"],
     }
 
 

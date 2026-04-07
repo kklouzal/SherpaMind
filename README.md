@@ -122,8 +122,9 @@ SherpaMind currently covers five major areas:
    - surfaces detail-gap pressure across under-covered accounts, categories, and technicians so enrichment breadth can be steered deliberately instead of guessed
    - reports retrieval-metadata readiness across the materialized document layer
    - reports source-vs-materialized coverage for source-backed metadata so thin fields can be distinguished as upstream absence vs backend promotion drift, with transformed-field hygiene that treats malformed upstream email strings as source-quality issues instead of false promotion gaps
-- reports action-cue provenance so operators can see whether ticket guidance came from literal next-step text, explicit follow-up notes, request-completion notes, or waiting-log fallback
+   - reports action-cue provenance so operators can see whether ticket guidance came from literal next-step text, explicit follow-up notes, request-completion notes, or waiting-log fallback
    - reports API usage and hourly budget pressure
+   - classifies repeated API failure signatures from captured HTTP error detail/body previews so auth/config breakage is obvious instead of hiding inside undifferentiated 4xx counts
    - reports vector index readiness and drift
    - generates public Markdown artifacts for lightweight inspection
 

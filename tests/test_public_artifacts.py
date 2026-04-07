@@ -109,6 +109,8 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Sync freshness summary" in text
     assert "Sync freshness lanes" in text
     assert "Sync freshness" in text
+    assert "API failure diagnosis" in text
+    assert "API failure signatures" in text
     assert "Attachment metadata summary" in text
     assert "Retrieval metadata readiness" in text
     assert "Account artifact coverage" in text

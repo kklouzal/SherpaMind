@@ -78,6 +78,20 @@ def _api_error_path_rows(usage: dict) -> list[dict]:
     return rows
 
 
+def _api_failure_signature_rows(usage: dict) -> list[dict]:
+    rows: list[dict] = []
+    for row in usage.get("failure_signatures_last_hour") or []:
+        rows.append({
+            "label": row.get("label", ""),
+            "family": row.get("family", ""),
+            "requests": row.get("request_count", 0),
+            "ratio": row.get("request_ratio", 0.0),
+            "sample_status": row.get("sample_status_code", ""),
+            "sample_path": row.get("sample_path", ""),
+        })
+    return rows
+
+
 def generate_runtime_status_artifacts(db_path: Path) -> dict:
     paths = ensure_path_layout()
     runtime_dir = paths.docs_root / "runtime"
@@ -164,6 +178,31 @@ def generate_runtime_status_artifacts(db_path: Path) -> dict:
             ("path", "Path"),
             ("error_key", "Error"),
             ("requests", "Requests"),
+        ]),
+        "",
+        "## API failure diagnosis",
+        _markdown_table([
+            {
+                "likely_root_cause": usage.get("likely_root_cause_last_hour", "") or "",
+                "likely_authentication_issue": usage.get("likely_authentication_issue_last_hour", False),
+                "likely_configuration_issue": usage.get("likely_configuration_issue_last_hour", False),
+                "likely_rate_limit_issue": usage.get("likely_rate_limit_issue_last_hour", False),
+            }
+        ], [
+            ("likely_root_cause", "Likely Root Cause"),
+            ("likely_authentication_issue", "Auth Issue"),
+            ("likely_configuration_issue", "Config Issue"),
+            ("likely_rate_limit_issue", "Rate Limit Issue"),
+        ]),
+        "",
+        "## API failure signatures",
+        _markdown_table(_api_failure_signature_rows(usage), [
+            ("label", "Signature"),
+            ("family", "Family"),
+            ("requests", "Requests"),
+            ("ratio", "Ratio"),
+            ("sample_status", "Sample Status"),
+            ("sample_path", "Sample Path"),
         ]),
         "",
         "## API usage",

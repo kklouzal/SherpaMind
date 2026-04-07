@@ -126,7 +126,17 @@ def test_analysis_reports(tmp_path: Path) -> None:
     open_ages = list_open_ticket_ages(db, limit=2)
     recent_accounts = list_recent_account_activity(db, days=30, limit=5)
     recent_techs = list_technician_recent_load(db, days=30, limit=5)
-    record_api_request_event(db, method="GET", path="tickets", status_code=404, outcome="http_response")
+    record_api_request_event(
+        db,
+        method="GET",
+        path="tickets",
+        status_code=404,
+        outcome="http_response",
+        extra={
+            "detail": "Client error '404 User with this token was not found.' for url 'https://api.sherpadesk.com/tickets'",
+            "response_body_preview": "User with this token was not found.",
+        },
+    )
     record_api_request_event(db, method="GET", path="tickets", status_code=None, outcome="http_error")
     usage = get_api_usage_summary(db)
     coverage = get_enrichment_coverage(db)
@@ -186,6 +196,14 @@ def test_analysis_reports(tmp_path: Path) -> None:
         {"path": "tickets", "error_key": "404", "request_count": 1},
         {"path": "tickets", "error_key": "http_error", "request_count": 1},
     ]
+    assert usage["likely_root_cause_last_hour"] == "Invalid or unknown API token"
+    assert usage["likely_authentication_issue_last_hour"] is True
+    assert usage["likely_configuration_issue_last_hour"] is False
+    assert usage["likely_rate_limit_issue_last_hour"] is False
+    assert usage["failure_family_counts_last_hour"] == {"auth": 1}
+    assert usage["dominant_failure_signature_last_hour"]["signature"] == "invalid_api_token"
+    assert usage["failure_signatures_last_hour"][0]["label"] == "Invalid or unknown API token"
+    assert usage["failure_signatures_last_hour"][0]["sample_response_body_preview"] == "User with this token was not found."
     assert coverage["ticket_details_covered"] == 1
     assert coverage["open_detail_coverage"] == 1
     assert coverage["detail_gap_pressure"]["accounts"]["summary"]["min_tickets"] == 10
