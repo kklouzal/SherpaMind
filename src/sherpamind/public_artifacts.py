@@ -268,6 +268,9 @@ def _entity_retrieval_health_rows(summary: dict[str, Any]) -> list[dict[str, Any
         "log_coverage": _format_ratio(summary.get("log_coverage_ratio")),
         "attachment_coverage": _format_ratio(summary.get("attachment_coverage_ratio")),
         "document_coverage": _format_ratio(summary.get("document_coverage_ratio")),
+        "vector_ready_coverage": _format_ratio(summary.get("vector_ready_ratio")),
+        "current_materialization_coverage": _format_ratio(summary.get("current_materialization_ratio")),
+        "chunk_hash_coverage": _format_ratio(summary.get("chunk_hash_complete_ratio")),
         "action_cue_coverage": _format_ratio(summary.get("action_cue_ratio")),
         "resolution_summary_coverage": _format_ratio(summary.get("resolution_summary_ratio")),
         "attachment_metadata_coverage": _format_ratio(summary.get("attachment_metadata_ratio")),
@@ -278,6 +281,25 @@ def _entity_retrieval_health_rows(summary: dict[str, Any]) -> list[dict[str, Any
         "max_lag_minutes": _format_number(summary.get("max_lag_minutes")),
         "latest_chunk_synced_at": summary.get("latest_chunk_synced_at") or "",
     }]
+
+
+def _entity_retrieval_gap_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        result.append({
+            "id": row.get("id", ""),
+            "subject": row.get("subject", ""),
+            "status": row.get("status", ""),
+            "priority": row.get("priority", ""),
+            "retrieval_gap": str(row.get("retrieval_gap") or "").replace("_", " ").title(),
+            "document_available": row.get("document_available"),
+            "current_materialization": row.get("current_materialization"),
+            "vector_ready": row.get("vector_ready"),
+            "all_chunk_hashes_present": row.get("all_chunk_hashes_present"),
+            "lag_minutes": _format_number(row.get("lag_minutes")),
+            "updated_at": row.get("updated_at") or "",
+        })
+    return result
 
 
 def _entity_lag_bucket_rows(summary: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1093,6 +1115,9 @@ def generate_public_snapshot(db_path: Path) -> dict:
                 ("log_coverage", "Log Coverage"),
                 ("attachment_coverage", "Attachment Coverage"),
                 ("document_coverage", "Document Coverage"),
+                ("vector_ready_coverage", "Vector Ready Coverage"),
+                ("current_materialization_coverage", "Current Materialization"),
+                ("chunk_hash_coverage", "Chunk Hash Coverage"),
                 ("action_cue_coverage", "Action Cue Coverage"),
                 ("resolution_summary_coverage", "Resolution Coverage"),
                 ("attachment_metadata_coverage", "Attachment Meta Coverage"),
@@ -1101,6 +1126,22 @@ def generate_public_snapshot(db_path: Path) -> dict:
                 ("lagging_ratio", "Lagging Ratio"),
                 ("avg_lag_minutes", "Avg Lag Minutes"),
                 ("max_lag_minutes", "Max Lag Minutes"),
+            ]),
+            "",
+            "## Retrieval gap tickets",
+            "",
+            _markdown_table(_entity_retrieval_gap_rows(summary["retrieval_gap_tickets"]), [
+                ("id", "Ticket ID"),
+                ("subject", "Subject"),
+                ("status", "Status"),
+                ("priority", "Priority"),
+                ("retrieval_gap", "Gap"),
+                ("document_available", "Doc"),
+                ("current_materialization", "Current Version"),
+                ("vector_ready", "Vector Ready"),
+                ("all_chunk_hashes_present", "Chunk Hashes"),
+                ("lag_minutes", "Lag Minutes"),
+                ("updated_at", "Updated"),
             ]),
             "",
             "## Retrieval lag buckets",
@@ -1185,6 +1226,9 @@ def generate_public_snapshot(db_path: Path) -> dict:
                 ("log_coverage", "Log Coverage"),
                 ("attachment_coverage", "Attachment Coverage"),
                 ("document_coverage", "Document Coverage"),
+                ("vector_ready_coverage", "Vector Ready Coverage"),
+                ("current_materialization_coverage", "Current Materialization"),
+                ("chunk_hash_coverage", "Chunk Hash Coverage"),
                 ("action_cue_coverage", "Action Cue Coverage"),
                 ("resolution_summary_coverage", "Resolution Coverage"),
                 ("attachment_metadata_coverage", "Attachment Meta Coverage"),
@@ -1193,6 +1237,22 @@ def generate_public_snapshot(db_path: Path) -> dict:
                 ("lagging_ratio", "Lagging Ratio"),
                 ("avg_lag_minutes", "Avg Lag Minutes"),
                 ("max_lag_minutes", "Max Lag Minutes"),
+            ]),
+            "",
+            "## Retrieval gap tickets",
+            "",
+            _markdown_table(_entity_retrieval_gap_rows(summary["retrieval_gap_tickets"]), [
+                ("id", "Ticket ID"),
+                ("subject", "Subject"),
+                ("status", "Status"),
+                ("priority", "Priority"),
+                ("retrieval_gap", "Gap"),
+                ("document_available", "Doc"),
+                ("current_materialization", "Current Version"),
+                ("vector_ready", "Vector Ready"),
+                ("all_chunk_hashes_present", "Chunk Hashes"),
+                ("lag_minutes", "Lag Minutes"),
+                ("updated_at", "Updated"),
             ]),
             "",
             "## Retrieval lag buckets",

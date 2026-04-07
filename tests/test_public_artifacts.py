@@ -163,13 +163,19 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     acme_text = acme_doc.read_text()
     assert "Retrieval health" in acme_text
     assert "Log Coverage" in acme_text
+    assert "Vector Ready Coverage" in acme_text
+    assert "Current Materialization" in acme_text
+    assert "Chunk Hash Coverage" in acme_text
     assert "Participant Domain Coverage" in acme_text
+    assert "Retrieval gap tickets" in acme_text
     assert "Retrieval lag buckets" in acme_text
     assert "Retrieval metadata coverage" in acme_text
     assert "Participant Email Domains" in acme_text
     tech_one_text = tech_one_doc.read_text()
     assert "Category breakdown" in tech_one_text
     assert "Retrieval health" in tech_one_text
+    assert "Vector Ready Coverage" in tech_one_text
+    assert "Retrieval gap tickets" in tech_one_text
     assert "Attachment Meta Coverage" in tech_one_text
     ticket_text = ticket_101_doc.read_text()
     assert "Artifact stats" in ticket_text

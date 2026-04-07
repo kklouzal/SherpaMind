@@ -297,8 +297,8 @@ Current public artifact surface includes:
 - `recent-account-activity.md`
 - `recent-technician-load.md`
 - `runtime/status.md`
-- per-account docs under `accounts/`, including entity-level retrieval health, lag buckets, and retrieval-metadata coverage
-- per-technician docs under `technicians/`, including entity-level retrieval health, lag buckets, and retrieval-metadata coverage
+- per-account docs under `accounts/`, including entity-level retrieval health, vector/materialization/hash readiness, explicit retrieval-gap ticket tables, lag buckets, and retrieval-metadata coverage
+- per-technician docs under `technicians/`, including entity-level retrieval health, vector/materialization/hash readiness, explicit retrieval-gap ticket tables, lag buckets, and retrieval-metadata coverage
 - per-ticket docs under `tickets/` for open and artifact-bearing/enriched tickets, including ticket-level retrieval health, chunk inventory, and vector-readiness cues
 
 Snapshot generation also prunes stale per-account/per-technician/per-ticket Markdown files that no longer match the current dataset-derived entity set, so old fallback-label artifacts do not linger beside newer readable-name docs.

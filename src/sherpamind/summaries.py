@@ -58,8 +58,18 @@ def _entity_retrieval_health(conn, where_clause: str, params: tuple[object, ...]
             SELECT DISTINCT ticket_id FROM ticket_attachments
         ),
         chunk_counts AS (
-            SELECT ticket_id, COUNT(*) AS chunk_count
+            SELECT ticket_id,
+                   COUNT(*) AS chunk_count,
+                   SUM(CASE WHEN content_hash IS NOT NULL AND content_hash != '' THEN 1 ELSE 0 END) AS chunk_content_hash_count
             FROM ticket_document_chunks
+            GROUP BY ticket_id
+        ),
+        vector_counts AS (
+            SELECT ticket_id,
+                   COUNT(*) AS indexed_chunk_count,
+                   MIN(dims) AS min_dims,
+                   MAX(dims) AS max_dims
+            FROM vector_chunk_index
             GROUP BY ticket_id
         ),
         ticket_core AS (
@@ -70,13 +80,18 @@ def _entity_retrieval_health(conn, where_clause: str, params: tuple[object, ...]
                    CASE WHEN td.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS detail_available,
                    CASE WHEN lt.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS log_available,
                    CASE WHEN at.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS attachment_available,
-                   COALESCE(cc.chunk_count, 0) AS chunk_count
+                   COALESCE(cc.chunk_count, 0) AS chunk_count,
+                   COALESCE(cc.chunk_content_hash_count, 0) AS chunk_content_hash_count,
+                   COALESCE(vc.indexed_chunk_count, 0) AS indexed_chunk_count,
+                   vc.min_dims AS vector_min_dims,
+                   vc.max_dims AS vector_max_dims
             FROM tickets t
             LEFT JOIN ticket_details td ON td.ticket_id = t.id
             LEFT JOIN ticket_documents doc ON doc.ticket_id = t.id
             LEFT JOIN log_tickets lt ON lt.ticket_id = t.id
             LEFT JOIN attachment_tickets at ON at.ticket_id = t.id
             LEFT JOIN chunk_counts cc ON cc.ticket_id = t.id
+            LEFT JOIN vector_counts vc ON vc.ticket_id = t.id
             WHERE {where_clause}
         )
         SELECT COUNT(*) AS total_tickets,
@@ -87,6 +102,20 @@ def _entity_retrieval_health(conn, where_clause: str, params: tuple[object, ...]
                SUM(CASE WHEN document_raw_json IS NULL THEN 1 ELSE 0 END) AS missing_document_tickets,
                SUM(CASE WHEN chunk_count > 1 THEN 1 ELSE 0 END) AS multi_chunk_tickets,
                SUM(CASE WHEN document_raw_json IS NOT NULL AND chunk_count = 0 THEN 1 ELSE 0 END) AS chunkless_document_tickets,
+               SUM(CASE WHEN document_raw_json IS NOT NULL
+                         AND chunk_count > 0
+                         AND indexed_chunk_count = chunk_count
+                         AND vector_min_dims IS NOT NULL
+                         AND vector_min_dims > 0
+                         AND vector_min_dims = vector_max_dims
+                        THEN 1 ELSE 0 END) AS vector_ready_tickets,
+               SUM(CASE WHEN document_raw_json IS NOT NULL
+                         AND COALESCE(json_extract(document_raw_json, '$.metadata.materialization_version'), 0) = {DOCUMENT_MATERIALIZATION_VERSION}
+                        THEN 1 ELSE 0 END) AS current_materialization_tickets,
+               SUM(CASE WHEN document_raw_json IS NOT NULL
+                         AND chunk_count > 0
+                         AND chunk_content_hash_count = chunk_count
+                        THEN 1 ELSE 0 END) AS chunk_hash_complete_tickets,
                SUM(CASE WHEN updated_at IS NULL THEN 1 ELSE 0 END) AS missing_updated_at_tickets,
                SUM(CASE WHEN chunk_synced_at IS NULL THEN 1 ELSE 0 END) AS missing_chunk_synced_at_tickets,
                SUM(CASE WHEN updated_at IS NOT NULL AND chunk_synced_at IS NOT NULL AND chunk_synced_at < updated_at THEN 1 ELSE 0 END) AS lagging_tickets,
@@ -152,6 +181,9 @@ def _entity_retrieval_health(conn, where_clause: str, params: tuple[object, ...]
     ).fetchone()
     lag_buckets = {key: int((lag_bucket_row[key] or 0)) for key in lag_bucket_row.keys()}
     metadata_coverage = _entity_metadata_coverage(stats, total_tickets)
+    vector_ready_tickets = int(stats.get("vector_ready_tickets") or 0)
+    current_materialization_tickets = int(stats.get("current_materialization_tickets") or 0)
+    chunk_hash_complete_tickets = int(stats.get("chunk_hash_complete_tickets") or 0)
     return {
         "detail_tickets": int(stats.get("detail_tickets") or 0),
         "detail_coverage_ratio": _ratio(int(stats.get("detail_tickets") or 0), total_tickets),
@@ -167,6 +199,12 @@ def _entity_retrieval_health(conn, where_clause: str, params: tuple[object, ...]
         "multi_chunk_ratio": _ratio(int(stats.get("multi_chunk_tickets") or 0), total_tickets),
         "chunkless_document_tickets": int(stats.get("chunkless_document_tickets") or 0),
         "chunkless_document_ratio": _ratio(int(stats.get("chunkless_document_tickets") or 0), total_tickets),
+        "vector_ready_tickets": vector_ready_tickets,
+        "vector_ready_ratio": _ratio(vector_ready_tickets, total_tickets),
+        "current_materialization_tickets": current_materialization_tickets,
+        "current_materialization_ratio": _ratio(current_materialization_tickets, total_tickets),
+        "chunk_hash_complete_tickets": chunk_hash_complete_tickets,
+        "chunk_hash_complete_ratio": _ratio(chunk_hash_complete_tickets, total_tickets),
         "action_cue_tickets": int(stats.get("action_cue_tickets") or 0),
         "action_cue_ratio": _ratio(int(stats.get("action_cue_tickets") or 0), total_tickets),
         "resolution_summary_tickets": int(stats.get("resolution_summary_tickets") or 0),
@@ -183,6 +221,118 @@ def _entity_retrieval_health(conn, where_clause: str, params: tuple[object, ...]
         "lag_buckets": lag_buckets,
         "metadata_coverage": metadata_coverage,
     }
+
+
+def _entity_retrieval_gap_tickets(conn, where_clause: str, params: tuple[object, ...], limit: int = 10) -> list[dict]:
+    rows = conn.execute(
+        f"""
+        WITH chunk_counts AS (
+            SELECT ticket_id,
+                   COUNT(*) AS chunk_count,
+                   SUM(CASE WHEN content_hash IS NOT NULL AND content_hash != '' THEN 1 ELSE 0 END) AS chunk_content_hash_count
+            FROM ticket_document_chunks
+            GROUP BY ticket_id
+        ),
+        vector_counts AS (
+            SELECT ticket_id,
+                   COUNT(*) AS indexed_chunk_count,
+                   MIN(dims) AS min_dims,
+                   MAX(dims) AS max_dims
+            FROM vector_chunk_index
+            GROUP BY ticket_id
+        )
+        SELECT t.id,
+               t.subject,
+               t.status,
+               t.priority,
+               t.category,
+               COALESCE(t.updated_at, t.created_at) AS updated_at,
+               CASE WHEN doc.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS document_available,
+               CASE WHEN doc.ticket_id IS NOT NULL
+                         AND COALESCE(json_extract(doc.raw_json, '$.metadata.materialization_version'), 0) = ?
+                        THEN 1 ELSE 0 END AS current_materialization,
+               COALESCE(cc.chunk_count, 0) AS chunk_count,
+               COALESCE(vc.indexed_chunk_count, 0) AS indexed_chunk_count,
+               CASE WHEN COALESCE(cc.chunk_count, 0) > 0
+                         AND COALESCE(vc.indexed_chunk_count, 0) = COALESCE(cc.chunk_count, 0)
+                         AND vc.min_dims IS NOT NULL
+                         AND vc.min_dims > 0
+                         AND vc.min_dims = vc.max_dims
+                        THEN 1 ELSE 0 END AS vector_ready,
+               CASE WHEN COALESCE(cc.chunk_count, 0) > 0
+                         AND COALESCE(cc.chunk_content_hash_count, 0) = COALESCE(cc.chunk_count, 0)
+                        THEN 1 ELSE 0 END AS all_chunk_hashes_present,
+               CASE WHEN doc.synced_at IS NOT NULL AND COALESCE(t.updated_at, t.created_at) IS NOT NULL AND doc.synced_at < COALESCE(t.updated_at, t.created_at)
+                    THEN ROUND((julianday(COALESCE(t.updated_at, t.created_at)) - julianday(doc.synced_at)) * 1440.0, 2)
+                    ELSE 0 END AS lag_minutes,
+               CASE WHEN doc.synced_at IS NULL THEN 'missing_document'
+                    WHEN COALESCE(json_extract(doc.raw_json, '$.metadata.materialization_version'), 0) != ? THEN 'stale_materialization'
+                    WHEN COALESCE(cc.chunk_count, 0) = 0 THEN 'missing_chunks'
+                    WHEN COALESCE(vc.indexed_chunk_count, 0) != COALESCE(cc.chunk_count, 0)
+                      OR vc.min_dims IS NULL
+                      OR vc.min_dims <= 0
+                      OR vc.min_dims != vc.max_dims THEN 'vector_gap'
+                    WHEN COALESCE(cc.chunk_content_hash_count, 0) != COALESCE(cc.chunk_count, 0) THEN 'missing_chunk_hashes'
+                    WHEN doc.synced_at < COALESCE(t.updated_at, t.created_at) THEN 'lagging_materialization'
+                    ELSE 'healthy'
+               END AS retrieval_gap
+        FROM tickets t
+        LEFT JOIN ticket_documents doc ON doc.ticket_id = t.id
+        LEFT JOIN chunk_counts cc ON cc.ticket_id = t.id
+        LEFT JOIN vector_counts vc ON vc.ticket_id = t.id
+        WHERE {where_clause}
+          AND (
+                doc.ticket_id IS NULL
+             OR COALESCE(json_extract(doc.raw_json, '$.metadata.materialization_version'), 0) != ?
+             OR COALESCE(cc.chunk_count, 0) = 0
+             OR COALESCE(vc.indexed_chunk_count, 0) != COALESCE(cc.chunk_count, 0)
+             OR vc.min_dims IS NULL
+             OR vc.min_dims <= 0
+             OR vc.min_dims != vc.max_dims
+             OR COALESCE(cc.chunk_content_hash_count, 0) != COALESCE(cc.chunk_count, 0)
+             OR (doc.synced_at IS NOT NULL AND COALESCE(t.updated_at, t.created_at) IS NOT NULL AND doc.synced_at < COALESCE(t.updated_at, t.created_at))
+          )
+        ORDER BY CASE WHEN doc.ticket_id IS NULL THEN 0 ELSE 1 END,
+                 CASE WHEN COALESCE(json_extract(doc.raw_json, '$.metadata.materialization_version'), 0) != ? THEN 0 ELSE 1 END,
+                 CASE WHEN COALESCE(cc.chunk_count, 0) = 0 THEN 0 ELSE 1 END,
+                 CASE WHEN COALESCE(vc.indexed_chunk_count, 0) != COALESCE(cc.chunk_count, 0)
+                           OR vc.min_dims IS NULL
+                           OR vc.min_dims <= 0
+                           OR vc.min_dims != vc.max_dims THEN 0 ELSE 1 END,
+                 CASE WHEN COALESCE(cc.chunk_content_hash_count, 0) != COALESCE(cc.chunk_count, 0) THEN 0 ELSE 1 END,
+                 lag_minutes DESC,
+                 updated_at DESC,
+                 t.id DESC
+        LIMIT ?
+        """,
+        (
+            DOCUMENT_MATERIALIZATION_VERSION,
+            DOCUMENT_MATERIALIZATION_VERSION,
+            *params,
+            DOCUMENT_MATERIALIZATION_VERSION,
+            DOCUMENT_MATERIALIZATION_VERSION,
+            limit,
+        ),
+    ).fetchall()
+    return [
+        {
+            "id": str(row["id"]),
+            "subject": row["subject"],
+            "status": row["status"],
+            "priority": row["priority"],
+            "category": row["category"],
+            "updated_at": row["updated_at"],
+            "document_available": bool(row["document_available"]),
+            "current_materialization": bool(row["current_materialization"]),
+            "chunk_count": int(row["chunk_count"] or 0),
+            "indexed_chunk_count": int(row["indexed_chunk_count"] or 0),
+            "vector_ready": bool(row["vector_ready"]),
+            "all_chunk_hashes_present": bool(row["all_chunk_hashes_present"]),
+            "lag_minutes": float(row["lag_minutes"] or 0.0),
+            "retrieval_gap": row["retrieval_gap"],
+        }
+        for row in rows
+    ]
 
 
 def list_account_artifact_summaries(db_path: Path) -> list[dict]:
@@ -881,11 +1031,13 @@ def get_account_summary(db_path: Path, account_query: str, limit_open: int = 10,
     })
     with connect(db_path) as conn:
         retrieval_health = _entity_retrieval_health(conn, "t.account_id = ?", (account["id"],))
+        retrieval_gap_tickets = _entity_retrieval_gap_tickets(conn, "t.account_id = ?", (account["id"],))
     return {
         "status": "ok",
         "account": {"id": account["id"], "name": account["name"]},
         "stats": stats_dict,
         "retrieval_health": retrieval_health,
+        "retrieval_gap_tickets": retrieval_gap_tickets,
         "open_tickets": [dict(row) for row in open_tickets],
         "recent_tickets": [dict(row) for row in recent_tickets],
         "recent_log_types": [dict(row) for row in recent_log_types],
@@ -1030,11 +1182,13 @@ def get_technician_summary(db_path: Path, technician_query: str, limit_open: int
     })
     with connect(db_path) as conn:
         retrieval_health = _entity_retrieval_health(conn, "t.assigned_technician_id = ?", (technician["id"],))
+        retrieval_gap_tickets = _entity_retrieval_gap_tickets(conn, "t.assigned_technician_id = ?", (technician["id"],))
     return {
         "status": "ok",
         "technician": {"id": technician["id"], "display_name": technician["display_name"], "email": technician["email"]},
         "stats": stats_dict,
         "retrieval_health": retrieval_health,
+        "retrieval_gap_tickets": retrieval_gap_tickets,
         "open_tickets": [dict(row) for row in open_tickets],
         "recent_tickets": [dict(row) for row in recent_tickets],
         "recent_log_types": [dict(row) for row in recent_log_types],

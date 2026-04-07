@@ -26,11 +26,16 @@ def test_account_summary(tmp_path: Path) -> None:
     assert summary["stats"]["total_tickets"] == 2
     assert summary["retrieval_health"]["document_tickets"] == 2
     assert summary["retrieval_health"]["detail_tickets"] == 1
+    assert summary["retrieval_health"]["vector_ready_tickets"] == 0
+    assert summary["retrieval_health"]["current_materialization_tickets"] == 2
+    assert summary["retrieval_health"]["chunk_hash_complete_tickets"] == 2
     assert summary["retrieval_health"]["metadata_coverage"]["cleaned_subject"]["tickets"] == 2
     assert summary["retrieval_health"]["metadata_coverage"]["user_email_domain"]["tickets"] == 2
     assert summary["retrieval_health"]["metadata_coverage"]["technician_email_domain"]["tickets"] == 2
     assert summary["retrieval_health"]["metadata_coverage"]["participant_email_domains"]["tickets"] == 2
     assert summary["retrieval_health"]["metadata_coverage"]["public_participant_email_domains"]["tickets"] == 2
+    assert summary["retrieval_gap_tickets"]
+    assert summary["retrieval_gap_tickets"][0]["retrieval_gap"] == "vector_gap"
     assert len(summary["open_tickets"]) == 1
 
 
@@ -42,9 +47,13 @@ def test_technician_summary(tmp_path: Path) -> None:
     assert summary["stats"]["total_tickets"] == 2
     assert summary["retrieval_health"]["document_tickets"] == 2
     assert summary["retrieval_health"]["detail_tickets"] == 1
+    assert summary["retrieval_health"]["vector_ready_tickets"] == 0
+    assert summary["retrieval_health"]["current_materialization_tickets"] == 2
     assert summary["retrieval_health"]["metadata_coverage"]["technician_email_domain"]["tickets"] == 2
     assert summary["retrieval_health"]["metadata_coverage"]["participant_email_domains"]["tickets"] == 2
     assert summary["retrieval_health"]["lag_buckets"]["current_or_ahead"] == 2
+    assert summary["retrieval_gap_tickets"]
+    assert summary["retrieval_gap_tickets"][0]["vector_ready"] is False
     assert len(summary["open_tickets"]) == 1
 
 
