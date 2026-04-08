@@ -119,7 +119,7 @@ SherpaMind currently covers five major areas:
    - reports dataset counts and sync freshness health, including per-lane staleness/missing/error state
    - reports enrichment coverage and retrieval coverage
    - reports tracked detail-fetch failure state (temporary vs permanent, cooldown pressure, and common HTTP status classes) so enrichment gaps can be distinguished from unreachable-ticket/API problems
-   - surfaces detail-gap pressure across under-covered accounts, categories, and technicians so enrichment breadth can be steered deliberately instead of guessed
+   - surfaces detail-gap pressure across under-covered accounts, categories, and technicians, including actionable-vs-blocked backlog splits (tracked failure, permanent failure, cooling-down, actionable) so enrichment breadth can be steered deliberately instead of guessed
    - reports retrieval-metadata readiness across the materialized document layer
    - reports source-vs-materialized coverage for source-backed metadata so thin fields can be distinguished as upstream absence vs backend promotion drift, with transformed-field hygiene that treats malformed upstream email strings as source-quality issues instead of false promotion gaps
    - reports action-cue provenance so operators can see whether ticket guidance came from literal next-step text, explicit follow-up notes, request-completion notes, or waiting-log fallback

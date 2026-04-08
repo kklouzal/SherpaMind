@@ -359,9 +359,19 @@ def _list_detail_gap_groups(conn, label_sql: str, *, min_tickets: int, limit: in
                             AND julianday(REPLACE(substr(t.closed_at, 1, 19), 'T', ' ')) >= julianday('now', '-7 days') THEN 1
                        ELSE 0
                    END AS is_warm_closed,
+                   CASE WHEN tf.ticket_id IS NULL THEN 0 ELSE 1 END AS has_tracked_failure,
+                   CASE WHEN COALESCE(tf.permanent_failure, 0) = 1 THEN 1 ELSE 0 END AS has_permanent_failure,
+                   CASE
+                       WHEN tf.ticket_id IS NOT NULL
+                            AND COALESCE(tf.permanent_failure, 0) = 0
+                            AND tf.next_retry_at IS NOT NULL
+                            AND julianday(tf.next_retry_at) > julianday('now') THEN 1
+                       ELSE 0
+                   END AS cooling_down_failure,
                    COALESCE(t.updated_at, t.created_at) AS activity_at
             FROM tickets t
             LEFT JOIN ticket_details td ON td.ticket_id = t.id
+            LEFT JOIN ticket_detail_failures tf ON tf.ticket_id = t.id
             LEFT JOIN accounts a ON a.id = t.account_id
             LEFT JOIN technicians te ON te.id = t.assigned_technician_id
         )
@@ -370,6 +380,17 @@ def _list_detail_gap_groups(conn, label_sql: str, *, min_tickets: int, limit: in
                SUM(has_detail) AS detail_tickets,
                SUM(CASE WHEN has_detail = 0 THEN 1 ELSE 0 END) AS detail_backlog,
                ROUND(CAST(SUM(has_detail) AS FLOAT) / COUNT(*), 4) AS detail_ratio,
+               SUM(CASE WHEN has_detail = 0 AND has_tracked_failure = 1 THEN 1 ELSE 0 END) AS tracked_failure_backlog,
+               SUM(CASE WHEN has_detail = 0 AND has_permanent_failure = 1 THEN 1 ELSE 0 END) AS permanent_failure_backlog,
+               SUM(CASE WHEN has_detail = 0 AND cooling_down_failure = 1 THEN 1 ELSE 0 END) AS cooling_down_backlog,
+               SUM(
+                   CASE
+                       WHEN has_detail = 0
+                            AND has_permanent_failure = 0
+                            AND cooling_down_failure = 0 THEN 1
+                       ELSE 0
+                   END
+               ) AS actionable_backlog,
                SUM(CASE WHEN status = 'Open' THEN 1 ELSE 0 END) AS open_tickets,
                SUM(CASE WHEN status = 'Open' AND has_detail = 1 THEN 1 ELSE 0 END) AS open_detail_tickets,
                SUM(CASE WHEN status = 'Open' AND has_detail = 0 THEN 1 ELSE 0 END) AS open_without_detail,
@@ -395,6 +416,10 @@ def _summarize_detail_gap_groups(rows: list[dict], *, min_tickets: int) -> dict:
         "zero_detail_groups": sum(1 for row in rows if int(row.get("detail_tickets") or 0) == 0),
         "low_coverage_groups": sum(1 for row in rows if float(row.get("detail_ratio") or 0.0) < 0.25),
         "backlog_tickets": sum(int(row.get("detail_backlog") or 0) for row in rows),
+        "tracked_failure_backlog_tickets": sum(int(row.get("tracked_failure_backlog") or 0) for row in rows),
+        "permanent_failure_backlog_tickets": sum(int(row.get("permanent_failure_backlog") or 0) for row in rows),
+        "cooling_down_backlog_tickets": sum(int(row.get("cooling_down_backlog") or 0) for row in rows),
+        "actionable_backlog_tickets": sum(int(row.get("actionable_backlog") or 0) for row in rows),
         "open_backlog_tickets": sum(int(row.get("open_without_detail") or 0) for row in rows),
         "warm_closed_backlog_tickets": sum(int(row.get("warm_closed_without_detail") or 0) for row in rows),
     }

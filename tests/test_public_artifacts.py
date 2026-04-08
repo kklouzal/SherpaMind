@@ -106,6 +106,10 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Enrichment pressure — under-covered accounts" in text
     assert "Enrichment pressure — under-covered categories" in text
     assert "Enrichment pressure — under-covered technicians" in text
+    assert '"actionable_backlog_tickets"' in text
+    assert '"permanent_failure_backlog_tickets"' in text
+    assert '"cooling_down_backlog_tickets"' in text
+    assert '"tracked_failure_backlog_tickets"' in text
     assert "Sync freshness summary" in text
     assert "Sync freshness lanes" in text
     assert "Sync freshness" in text

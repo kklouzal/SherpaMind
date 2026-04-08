@@ -117,7 +117,7 @@ Possible future exception:
 
 ### Structured insight commands
 - `python3 scripts/run.py insight-snapshot`
-- `python3 scripts/run.py report-enrichment-coverage` (now includes detail-gap pressure across under-covered accounts/categories/technicians so enrichment breadth can be inspected directly)
+- `python3 scripts/run.py report-enrichment-coverage` (now includes detail-gap pressure across under-covered accounts/categories/technicians plus actionable-vs-blocked backlog splits so enrichment breadth can be inspected directly)
 - `python3 scripts/run.py report-ticket-counts`
 - `python3 scripts/run.py report-status-counts`
 - `python3 scripts/run.py report-priority-counts`

@@ -21,6 +21,7 @@ from sherpamind.analysis import (
 from sherpamind.db import (
     initialize_db,
     record_api_request_event,
+    record_ticket_detail_failure,
     replace_ticket_document_chunks,
     replace_ticket_documents,
     upsert_accounts,
@@ -289,6 +290,29 @@ def test_enrichment_coverage_surfaces_detail_gap_pressure(tmp_path: Path) -> Non
         ],
         synced_at="2026-03-19T01:00:00Z",
     )
+    record_ticket_detail_failure(
+        db,
+        ticket_id="201",
+        status_code=404,
+        error_kind="http_error",
+        error_message="missing",
+        last_path="tickets/201",
+        last_failure_at="2026-03-19T02:00:00Z",
+        permanent_failure=True,
+        extra={"status_code": 404},
+    )
+    record_ticket_detail_failure(
+        db,
+        ticket_id="202",
+        status_code=503,
+        error_kind="http_error",
+        error_message="cooldown",
+        last_path="tickets/202",
+        last_failure_at="2026-03-19T02:05:00Z",
+        next_retry_at="2099-03-20T01:00:00Z",
+        permanent_failure=False,
+        extra={"status_code": 503},
+    )
 
     coverage = get_enrichment_coverage(db)
 
@@ -297,15 +321,29 @@ def test_enrichment_coverage_surfaces_detail_gap_pressure(tmp_path: Path) -> Non
     assert account_rows[0]["total_tickets"] == 10
     assert account_rows[0]["detail_tickets"] == 1
     assert account_rows[0]["detail_backlog"] == 9
+    assert account_rows[0]["tracked_failure_backlog"] == 2
+    assert account_rows[0]["permanent_failure_backlog"] == 1
+    assert account_rows[0]["cooling_down_backlog"] == 1
+    assert account_rows[0]["actionable_backlog"] == 7
     assert account_rows[0]["open_without_detail"] == 1
     assert account_rows[0]["warm_closed_without_detail"] == 8
     assert account_rows[0]["detail_ratio"] == 0.1
+    assert coverage["detail_gap_pressure"]["accounts"]["summary"]["tracked_failure_backlog_tickets"] >= 2
+    assert coverage["detail_gap_pressure"]["accounts"]["summary"]["permanent_failure_backlog_tickets"] >= 1
+    assert coverage["detail_gap_pressure"]["accounts"]["summary"]["cooling_down_backlog_tickets"] >= 1
+    assert coverage["detail_gap_pressure"]["accounts"]["summary"]["actionable_backlog_tickets"] >= 7
 
     category_rows = coverage["detail_gap_pressure"]["categories"]["rows"]
     assert category_rows[0]["label"] == "Networking"
     assert category_rows[0]["detail_backlog"] == 9
+    assert category_rows[0]["tracked_failure_backlog"] == 2
+    assert category_rows[0]["actionable_backlog"] == 7
 
     technician_rows = coverage["detail_gap_pressure"]["technicians"]["rows"]
     assert technician_rows[0]["label"] == "Tech One"
     assert technician_rows[0]["detail_ratio"] == 0.1
+    assert technician_rows[0]["tracked_failure_backlog"] == 2
+    assert technician_rows[0]["permanent_failure_backlog"] == 1
+    assert technician_rows[0]["cooling_down_backlog"] == 1
+    assert technician_rows[0]["actionable_backlog"] == 7
     assert coverage["detail_gap_pressure"]["technicians"]["summary"]["low_coverage_groups"] >= 1
