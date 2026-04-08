@@ -56,6 +56,7 @@ The priority enrichment loop should stay retrieval-oriented rather than purely r
 These run from internal Python timers, not OpenClaw cron.
 
 The service also tracks real SherpaDesk request usage in SQLite and should use that to reserve the forecast hot/warm budget first, then spend spare hourly headroom opportunistically on cold audit and enrichment work instead of throttling cold depth with only a static conservative cadence.
+When last-hour API traffic is dominated by auth/config failure storms (for example repeated invalid-token 404s), the runtime should temporarily suppress remote sync/enrichment lanes instead of continuing to burn budget on doomed requests, while still running local observability/artifact refresh work so the failure stays visible.
 Client retry behavior should stay selective: retry transient transport/server pressure, not persistent/non-retriable 4xx responses.
 Old request-event rows are pruned automatically by retention policy so the request log remains bounded.
 

@@ -200,10 +200,16 @@ def test_analysis_reports(tmp_path: Path) -> None:
     assert usage["likely_authentication_issue_last_hour"] is True
     assert usage["likely_configuration_issue_last_hour"] is False
     assert usage["likely_rate_limit_issue_last_hour"] is False
+    assert usage["remote_ingest_cooldown_recommended_last_hour"] is False
+    assert usage["remote_ingest_cooldown_reason_last_hour"] is None
     assert usage["failure_family_counts_last_hour"] == {"auth": 1}
     assert usage["dominant_failure_signature_last_hour"]["signature"] == "invalid_api_token"
     assert usage["failure_signatures_last_hour"][0]["label"] == "Invalid or unknown API token"
     assert usage["failure_signatures_last_hour"][0]["sample_response_body_preview"] == "User with this token was not found."
+    assert usage["remote_ingest_cooldown_thresholds"] == {
+        "min_requests_last_hour": 20,
+        "min_error_ratio": 0.8,
+    }
     assert coverage["ticket_details_covered"] == 1
     assert coverage["open_detail_coverage"] == 1
     assert coverage["detail_gap_pressure"]["accounts"]["summary"]["min_tickets"] == 10

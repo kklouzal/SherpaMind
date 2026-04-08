@@ -125,6 +125,7 @@ SherpaMind currently covers five major areas:
    - reports action-cue provenance so operators can see whether ticket guidance came from literal next-step text, explicit follow-up notes, request-completion notes, or waiting-log fallback
    - reports API usage and hourly budget pressure
    - classifies repeated API failure signatures from captured HTTP error detail/body previews so auth/config breakage is obvious instead of hiding inside undifferentiated 4xx counts
+   - recommends remote-ingest cooldown when last-hour traffic is dominated by auth/config failure storms, so operators can see when the runtime is intentionally protecting request budget instead of continuing futile sync/enrichment churn
    - reports vector index readiness and drift
    - generates public Markdown artifacts for lightweight inspection
 
@@ -133,6 +134,7 @@ SherpaMind currently covers five major areas:
    - keeps latency-sensitive alert detection separate from heavier maintenance work
    - uses a durable SQLite-backed alert queue for webhook dispatch retries/dedupe
    - performs periodic sync/enrichment/artifact-refresh work without burning OpenClaw tokens
+   - self-protects against repeated auth/config failure storms by temporarily skipping remote API lanes while still refreshing local observability/artifact tasks
    - keeps worker state, logs, queue state, request-usage history, and ingest-mode single-flight leases locally
 
 ## Proven capability

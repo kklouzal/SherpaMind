@@ -31,6 +31,7 @@ class TaskSpec:
     every_seconds: int
     runner: Callable[[Settings], Any]
     budget_class: str = "core"
+    requires_remote_api: bool = False
 
 
 @dataclass(frozen=True)
@@ -279,10 +280,10 @@ def _effective_settings(settings: Settings, plan: BudgetPlan) -> Settings:
 
 def _task_specs(settings: Settings) -> list[TaskSpec]:
     return [
-        TaskSpec("hot_open", settings.service_hot_open_every_seconds, lambda s: (watch_new_tickets(s), sync_hot_open_tickets(s)), budget_class="core"),
-        TaskSpec("warm_closed", settings.service_warm_closed_every_seconds, sync_warm_closed_tickets, budget_class="important"),
-        TaskSpec("cold_closed", settings.service_cold_closed_every_seconds, lambda s: sync_cold_closed_audit(s, pages_per_run=s.cold_closed_pages_per_run), budget_class="deferrable"),
-        TaskSpec("enrichment", settings.service_enrichment_every_seconds, lambda s: enrich_priority_ticket_details(s, limit=s.service_enrichment_limit, materialize_docs=True), budget_class="deferrable"),
+        TaskSpec("hot_open", settings.service_hot_open_every_seconds, lambda s: (watch_new_tickets(s), sync_hot_open_tickets(s)), budget_class="core", requires_remote_api=True),
+        TaskSpec("warm_closed", settings.service_warm_closed_every_seconds, sync_warm_closed_tickets, budget_class="important", requires_remote_api=True),
+        TaskSpec("cold_closed", settings.service_cold_closed_every_seconds, lambda s: sync_cold_closed_audit(s, pages_per_run=s.cold_closed_pages_per_run), budget_class="deferrable", requires_remote_api=True),
+        TaskSpec("enrichment", settings.service_enrichment_every_seconds, lambda s: enrich_priority_ticket_details(s, limit=s.service_enrichment_limit, materialize_docs=True), budget_class="deferrable", requires_remote_api=True),
         TaskSpec("retrieval_artifacts", settings.service_public_snapshot_every_seconds, lambda s: ensure_current_ticket_materialization(s.db_path), budget_class="lightweight"),
         TaskSpec("public_snapshot", settings.service_public_snapshot_every_seconds, lambda s: generate_public_snapshot(s.db_path), budget_class="lightweight"),
         TaskSpec("vector_refresh", settings.service_vector_refresh_every_seconds, lambda s: build_vector_index(s.db_path), budget_class="lightweight"),
@@ -297,6 +298,21 @@ def _budget_gate(plan: BudgetPlan, spec: TaskSpec) -> tuple[bool, str | None]:
     if spec.budget_class == "deferrable" and not plan.allow_deferrable:
         return False, f"budget_protected mode={plan.mode} reserve={plan.reserve_requests} spare={plan.spare_requests}"
     return True, None
+
+
+def _remote_api_gate(usage: dict[str, Any], spec: TaskSpec) -> tuple[bool, str | None]:
+    if not spec.requires_remote_api:
+        return True, None
+    if not usage.get("remote_ingest_cooldown_recommended_last_hour"):
+        return True, None
+    reason = usage.get("remote_ingest_cooldown_reason_last_hour") or "recent_auth_or_config_failure_storm"
+    return (
+        False,
+        "remote_api_cooldown "
+        f"cause={reason} "
+        f"requests_last_hour={int(usage.get('requests_last_hour') or 0)} "
+        f"error_ratio={float(usage.get('error_ratio') or 0.0):.4f}",
+    )
 
 
 def _detect_immediate_local_repair_needs(settings: Settings) -> dict[str, str]:
@@ -354,6 +370,10 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
             state["api_usage_last_seen"] = usage
             state["budget_plan_last_seen"] = plan.__dict__
             state["cold_bootstrap_last_seen"] = bootstrap.__dict__
+            state["remote_api_guard_last_seen"] = {
+                "active": bool(usage.get("remote_ingest_cooldown_recommended_last_hour")),
+                "reason": usage.get("remote_ingest_cooldown_reason_last_hour"),
+            }
             forced_tasks = _detect_immediate_local_repair_needs(settings)
 
             for spec in _task_specs(effective_settings):
@@ -362,7 +382,9 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
                 force_reason = forced_tasks.get(spec.name)
                 if force_reason is None and now - last_run < spec.every_seconds:
                     continue
-                allowed, reason = _budget_gate(plan, spec)
+                allowed, reason = _remote_api_gate(usage, spec)
+                if allowed:
+                    allowed, reason = _budget_gate(plan, spec)
                 if not allowed:
                     task_state.update({
                         "last_skipped_at": _now_iso(),
@@ -404,6 +426,10 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
                     state["api_usage_last_seen"] = usage
                     state["budget_plan_last_seen"] = plan.__dict__
                     state["cold_bootstrap_last_seen"] = bootstrap.__dict__
+                    state["remote_api_guard_last_seen"] = {
+                        "active": bool(usage.get("remote_ingest_cooldown_recommended_last_hour")),
+                        "reason": usage.get("remote_ingest_cooldown_reason_last_hour"),
+                    }
                 except Exception as exc:
                     task_state.update({
                         "last_run_epoch": now,
@@ -420,6 +446,10 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
                     state["api_usage_last_seen"] = usage
                     state["budget_plan_last_seen"] = plan.__dict__
                     state["cold_bootstrap_last_seen"] = bootstrap.__dict__
+                    state["remote_api_guard_last_seen"] = {
+                        "active": bool(usage.get("remote_ingest_cooldown_recommended_last_hour")),
+                        "reason": usage.get("remote_ingest_cooldown_reason_last_hour"),
+                    }
 
             state["last_loop_at"] = _now_iso()
             state["loop_status"] = "idle"
@@ -431,6 +461,7 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
                 "api_usage": usage,
                 "budget_plan": plan.__dict__,
                 "cold_bootstrap": bootstrap.__dict__,
+                "remote_api_guard": state.get("remote_api_guard_last_seen", {}),
                 "retention_days": settings.api_request_log_retention_days,
                 "pruned_request_events": pruned,
                 "cleaned_stale_ingest_runs": cleaned_stale_runs,

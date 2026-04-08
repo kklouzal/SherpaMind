@@ -627,6 +627,9 @@ _AUTH_FAILURE_SIGNATURES: tuple[tuple[str, str, str], ...] = (
     ("rate_limited", "rate_limit", "rate limit"),
 )
 
+_REMOTE_INGEST_COOLDOWN_MIN_REQUESTS = 20
+_REMOTE_INGEST_COOLDOWN_MIN_ERROR_RATIO = 0.8
+
 
 def _load_api_event_extra(raw_json: str | None) -> dict:
     if not raw_json:
@@ -805,13 +808,23 @@ def get_api_usage_summary(db_path: Path, hourly_limit: int = 600) -> dict:
     transport_error_count = int(last_hour["transport_error_count"] or 0)
     total_error_count = http_error_response_count + transport_error_count
     failure_signatures = _summarize_api_failure_signatures([dict(row) for row in recent_error_events], request_count)
+    error_ratio = round((total_error_count / request_count), 4) if request_count else 0.0
+    remote_ingest_cooldown_recommended = (
+        request_count >= _REMOTE_INGEST_COOLDOWN_MIN_REQUESTS
+        and error_ratio >= _REMOTE_INGEST_COOLDOWN_MIN_ERROR_RATIO
+        and (
+            failure_signatures["likely_authentication_issue"]
+            or failure_signatures["likely_configuration_issue"]
+        )
+    )
+    remote_ingest_cooldown_reason = failure_signatures["likely_root_cause"] if remote_ingest_cooldown_recommended else None
     return {
         "requests_last_hour": request_count,
         "errors_last_hour": total_error_count,
         "http_success_responses_last_hour": int(last_hour["http_success_response_count"] or 0),
         "http_error_responses_last_hour": http_error_response_count,
         "transport_errors_last_hour": transport_error_count,
-        "error_ratio": round((total_error_count / request_count), 4) if request_count else 0.0,
+        "error_ratio": error_ratio,
         "remaining_hourly_budget": max(0, hourly_limit - request_count),
         "budget_utilization_ratio": round(request_count / hourly_limit, 4),
         "earliest_request_at": last_hour["earliest_at"],
@@ -840,6 +853,12 @@ def get_api_usage_summary(db_path: Path, hourly_limit: int = 600) -> dict:
         "likely_authentication_issue_last_hour": failure_signatures["likely_authentication_issue"],
         "likely_configuration_issue_last_hour": failure_signatures["likely_configuration_issue"],
         "likely_rate_limit_issue_last_hour": failure_signatures["likely_rate_limit_issue"],
+        "remote_ingest_cooldown_recommended_last_hour": remote_ingest_cooldown_recommended,
+        "remote_ingest_cooldown_reason_last_hour": remote_ingest_cooldown_reason,
+        "remote_ingest_cooldown_thresholds": {
+            "min_requests_last_hour": _REMOTE_INGEST_COOLDOWN_MIN_REQUESTS,
+            "min_error_ratio": _REMOTE_INGEST_COOLDOWN_MIN_ERROR_RATIO,
+        },
     }
 
 

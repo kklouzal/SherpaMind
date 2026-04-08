@@ -146,6 +146,41 @@ def test_run_pending_tasks_marks_cold_bootstrap_complete_when_closed_detail_catc
     assert bootstrap_state['bootstrap_completed_at']
 
 
+def test_run_pending_tasks_skips_remote_api_tasks_during_auth_failure_cooldown(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
+    settings = make_settings(tmp_path)
+    settings = Settings(
+        **{
+            **settings.__dict__,
+            'service_hot_open_every_seconds': 0,
+        }
+    )
+    initialize_db(settings.db_path)
+    for _ in range(20):
+        record_api_request_event(
+            settings.db_path,
+            method='GET',
+            path='tickets',
+            status_code=404,
+            outcome='http_response',
+            extra={
+                'detail': "Client error '404 User with this token was not found.' for url 'https://api.sherpadesk.com/tickets'",
+                'response_body_preview': 'User with this token was not found.',
+            },
+        )
+
+    result = run_pending_tasks(settings)
+    assert result['status'] == 'ok'
+    assert result['remote_api_guard']['active'] is True
+    assert result['remote_api_guard']['reason'] == 'Invalid or unknown API token'
+    by_task = {item['task']: item for item in result['results']}
+    assert by_task['hot_open']['status'] == 'skipped'
+    assert by_task['hot_open']['reason'].startswith('remote_api_cooldown cause=Invalid or unknown API token')
+    assert by_task['vector_refresh']['status'] == 'ok'
+    assert by_task['runtime_status']['status'] == 'ok'
+
+
+
 def test_run_pending_tasks_builds_vector_index(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
     settings = make_settings(tmp_path)
