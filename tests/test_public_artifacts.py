@@ -105,6 +105,7 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Enrichment coverage" in text
     assert "Enrichment pressure — under-covered accounts" in text
     assert "Enrichment pressure — under-covered categories" in text
+    assert "Enrichment pressure — under-covered departments" in text
     assert "Enrichment pressure — under-covered technicians" in text
     assert '"actionable_backlog_tickets"' in text
     assert '"permanent_failure_backlog_tickets"' in text
@@ -161,6 +162,7 @@ def test_generate_public_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert "Entity label quality" in retrieval_text
     assert "Retrieval signal pressure — under-covered accounts" in retrieval_text
     assert "Retrieval signal pressure — under-covered categories" in retrieval_text
+    assert "Retrieval signal pressure — under-covered departments" in retrieval_text
     assert "Retrieval signal pressure — under-covered technicians" in retrieval_text
 
     assert "Total account docs: `2`" in account_index.read_text()

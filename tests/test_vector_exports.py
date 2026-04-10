@@ -733,6 +733,7 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["entity_label_quality"]["department"]["readable_chunks"] == 2
     assert summary["retrieval_signal_pressure"]["accounts"]["summary"]["group_count"] == 0
     assert summary["retrieval_signal_pressure"]["categories"]["summary"]["group_count"] == 0
+    assert summary["retrieval_signal_pressure"]["departments"]["summary"]["group_count"] == 0
     assert summary["retrieval_signal_pressure"]["technicians"]["summary"]["group_count"] == 0
     assert summary["metadata_coverage"]["has_attachments"]["ratio"] == 0.5
     assert summary["materialization"]["current_version"] >= 1
@@ -876,6 +877,7 @@ def test_retrieval_signal_pressure_surfaces_low_coverage_groups(tmp_path: Path) 
                 "recent_log_types_csv": "Response" if idx == 0 else None,
                 "resolution_summary": "resolved" if idx == 9 else None,
                 "attachments_count": 1 if idx == 0 else 0,
+                "department_label": "Managed Services",
                 "materialization_version": DOCUMENT_MATERIALIZATION_VERSION,
             },
             "content_hash": f"doc-{ticket_id}",
@@ -895,19 +897,24 @@ def test_retrieval_signal_pressure_surfaces_low_coverage_groups(tmp_path: Path) 
     summary = get_retrieval_readiness_summary(db)
     account_row = summary["retrieval_signal_pressure"]["accounts"]["rows"][0]
     category_row = summary["retrieval_signal_pressure"]["categories"]["rows"][0]
+    department_row = summary["retrieval_signal_pressure"]["departments"]["rows"][0]
     technician_row = summary["retrieval_signal_pressure"]["technicians"]["rows"][0]
 
     assert summary["retrieval_signal_pressure"]["accounts"]["summary"]["group_count"] == 1
     assert summary["retrieval_signal_pressure"]["categories"]["summary"]["group_count"] == 1
+    assert summary["retrieval_signal_pressure"]["departments"]["summary"]["group_count"] == 1
     assert summary["retrieval_signal_pressure"]["technicians"]["summary"]["group_count"] == 2
     assert summary["retrieval_signal_pressure"]["accounts"]["summary"]["low_richness_groups"] == 1
     assert account_row["label"] == "Acme"
     assert account_row["total_documents"] == 10
     assert account_row["detail_documents"] == 2
+    assert account_row["issue_ratio"] == 0.1
     assert account_row["low_richness_backlog"] == 8
     assert account_row["lagging_documents"] == 0
     assert account_row["richness_ratio"] == 0.1167
     assert category_row["label"] == "Hardware"
+    assert department_row["label"] == "Managed Services"
+    assert department_row["total_documents"] == 10
     assert technician_row["label"] == "Tech Two"
     assert technician_row["low_richness_backlog"] == 8 - 1
 

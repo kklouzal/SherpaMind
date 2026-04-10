@@ -215,8 +215,10 @@ def test_analysis_reports(tmp_path: Path) -> None:
     assert coverage["open_detail_coverage"] == 1
     assert coverage["detail_gap_pressure"]["accounts"]["summary"]["min_tickets"] == 10
     assert coverage["detail_gap_pressure"]["categories"]["summary"]["min_tickets"] == 10
+    assert coverage["detail_gap_pressure"]["departments"]["summary"]["min_tickets"] == 10
     assert coverage["detail_gap_pressure"]["technicians"]["summary"]["min_tickets"] == 3
     assert coverage["detail_gap_pressure"]["accounts"]["rows"] == []
+    assert coverage["enrichment"]["detail_gap_pressure"]["departments"]["rows"] == []
     assert coverage["enrichment"]["detail_gap_pressure"]["technicians"]["rows"] == []
     assert coverage["retrieval"]["ticket_documents"] == 1
     assert coverage["retrieval"]["ticket_document_chunks"] == 1
@@ -261,6 +263,7 @@ def test_enrichment_coverage_surfaces_detail_gap_pressure(tmp_path: Path) -> Non
                 "closed_time": "2099-03-18T01:00:00Z" if offset >= 2 else None,
                 "priority_name": "High",
                 "creation_category_name": "Networking",
+                "submission_category": "Managed Services",
                 "created_time": "2026-03-18T01:00:00Z",
                 "updated_time": f"2026-03-19T0{(offset % 9) + 1}:00:00Z",
             }
@@ -276,6 +279,7 @@ def test_enrichment_coverage_surfaces_detail_gap_pressure(tmp_path: Path) -> Non
                 "closed_time": "2026-02-01T01:00:00Z",
                 "priority_name": "Low",
                 "creation_category_name": "Printer",
+                "submission_category": "Dispatch",
                 "created_time": "2026-01-01T01:00:00Z",
                 "updated_time": f"2026-02-01T0{offset + 1}:00:00Z",
             }
@@ -338,6 +342,12 @@ def test_enrichment_coverage_surfaces_detail_gap_pressure(tmp_path: Path) -> Non
     assert category_rows[0]["detail_backlog"] == 9
     assert category_rows[0]["tracked_failure_backlog"] == 2
     assert category_rows[0]["actionable_backlog"] == 7
+
+    department_rows = coverage["detail_gap_pressure"]["departments"]["rows"]
+    assert department_rows[0]["label"] == "Managed Services"
+    assert department_rows[0]["detail_backlog"] == 9
+    assert department_rows[0]["tracked_failure_backlog"] == 2
+    assert department_rows[0]["actionable_backlog"] == 7
 
     technician_rows = coverage["detail_gap_pressure"]["technicians"]["rows"]
     assert technician_rows[0]["label"] == "Tech One"

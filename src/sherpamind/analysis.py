@@ -14,6 +14,11 @@ _DETAIL_PRESSURE_DIMENSIONS: tuple[tuple[str, str, int], ...] = (
         "COALESCE(NULLIF(t.category, ''), NULLIF(json_extract(t.raw_json, '$.creation_category_name'), ''), NULLIF(json_extract(t.raw_json, '$.class_name'), ''), NULLIF(json_extract(t.raw_json, '$.submission_category'), ''), 'unknown')",
         10,
     ),
+    (
+        "departments",
+        "COALESCE(NULLIF(json_extract(t.raw_json, '$.support_group_name'), ''), NULLIF(json_extract(t.raw_json, '$.class_name'), ''), NULLIF(json_extract(t.raw_json, '$.submission_category'), ''), NULLIF(json_extract(t.raw_json, '$.department_key'), ''), 'unknown')",
+        10,
+    ),
     ("technicians", "COALESCE(NULLIF(te.display_name, ''), NULLIF(t.assigned_technician_id, ''), 'unassigned')", 3),
 )
 

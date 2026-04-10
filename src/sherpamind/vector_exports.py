@@ -1167,6 +1167,7 @@ def _build_retrieval_signal_pressure(rows: list[dict[str, Any]]) -> dict[str, An
     group_specs = {
         "accounts": {"field": "account", "fallback_prefix": "Account", "min_documents": 10},
         "categories": {"field": "category", "fallback_prefix": "Category", "min_documents": 10},
+        "departments": {"field": "department_label", "fallback_prefix": "Department", "min_documents": 10},
         "technicians": {"field": "technician", "fallback_prefix": "Technician", "min_documents": 3},
     }
 
@@ -1275,6 +1276,7 @@ def _build_retrieval_signal_pressure(rows: list[dict[str, Any]]) -> dict[str, An
                 "attachment_documents": counts["attachment_documents"],
                 "lagging_documents": counts["lagging_documents"],
                 "detail_ratio": round((counts["detail_documents"] / total_documents), 4) if total_documents else 0.0,
+                "issue_ratio": round((counts["issue_documents"] / total_documents), 4) if total_documents else 0.0,
                 "action_ratio": round((counts["action_documents"] / total_documents), 4) if total_documents else 0.0,
                 "activity_ratio": round((counts["activity_documents"] / total_documents), 4) if total_documents else 0.0,
                 "resolution_ratio": round((counts["resolution_documents"] / total_documents), 4) if total_documents else 0.0,

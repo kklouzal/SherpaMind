@@ -119,9 +119,11 @@ def _cold_candidate_sort_key(
     category_stats: dict[str, tuple[int, int]],
     account_stats: dict[str, tuple[int, int]],
     technician_stats: dict[str, tuple[int, int]],
+    department_stats: dict[str, tuple[int, int]],
     category_signal_stats: dict[str, tuple[int, int]],
     account_signal_stats: dict[str, tuple[int, int]],
     technician_signal_stats: dict[str, tuple[int, int]],
+    department_signal_stats: dict[str, tuple[int, int]],
 ) -> tuple:
     return (
         _retrieval_richness_ratio(category_signal_stats, row.get("category")),
@@ -130,8 +132,11 @@ def _cold_candidate_sort_key(
         _coverage_ratio(account_stats, row.get("account_key")),
         _retrieval_richness_ratio(technician_signal_stats, row.get("technician_key")),
         _coverage_ratio(technician_stats, row.get("technician_key")),
+        _retrieval_richness_ratio(department_signal_stats, row.get("department_key")),
+        _coverage_ratio(department_stats, row.get("department_key")),
         _priority_rank(row.get("priority")),
         -len(str(row.get("category") or "")),
+        -len(str(row.get("department_key") or "")),
     )
 
 
@@ -147,9 +152,11 @@ def _prioritize_cold_candidates(
     category_stats = _coverage_stats(coverage_rows, "category")
     account_stats = _coverage_stats(coverage_rows, "account_key")
     technician_stats = _coverage_stats(coverage_rows, "technician_key")
+    department_stats = _coverage_stats(coverage_rows, "department_key")
     category_signal_stats = _retrieval_signal_stats(coverage_rows, "category")
     account_signal_stats = _retrieval_signal_stats(coverage_rows, "account_key")
     technician_signal_stats = _retrieval_signal_stats(coverage_rows, "technician_key")
+    department_signal_stats = _retrieval_signal_stats(coverage_rows, "department_key")
     ordered = list(rows)
     ordered.sort(key=lambda row: str(row.get("id") or ""), reverse=True)
     ordered.sort(key=lambda row: str(row.get("activity_at") or ""), reverse=True)
@@ -159,9 +166,11 @@ def _prioritize_cold_candidates(
             category_stats,
             account_stats,
             technician_stats,
+            department_stats,
             category_signal_stats,
             account_signal_stats,
             technician_signal_stats,
+            department_signal_stats,
         )
     )
 
@@ -170,6 +179,7 @@ def _prioritize_cold_candidates(
     seen_categories: set[str] = set()
     seen_accounts: set[str] = set()
     seen_technicians: set[str] = set()
+    seen_departments: set[str] = set()
 
     for row in ordered:
         if len(selected) >= remaining:
@@ -177,13 +187,20 @@ def _prioritize_cold_candidates(
         category = str(row.get("category") or "").strip() or "unknown"
         account = str(row.get("account_key") or "").strip() or "unknown"
         technician = str(row.get("technician_key") or "").strip() or "unknown"
-        if category in seen_categories and account in seen_accounts and technician in seen_technicians:
+        department = str(row.get("department_key") or "").strip() or "unknown"
+        if (
+            category in seen_categories
+            and account in seen_accounts
+            and technician in seen_technicians
+            and department in seen_departments
+        ):
             continue
         selected.append(row)
         seen_ids.add(str(row["id"]))
         seen_categories.add(category)
         seen_accounts.add(account)
         seen_technicians.add(technician)
+        seen_departments.add(department)
 
     for row in ordered:
         if len(selected) >= remaining:
@@ -224,6 +241,14 @@ def _candidate_ticket_rows(db_path, limit: int) -> list[dict]:
                        ) AS category,
                        COALESCE(NULLIF(t.account_id, ''), 'unknown') AS account_key,
                        COALESCE(NULLIF(t.assigned_technician_id, ''), 'unknown') AS technician_key,
+                       COALESCE(
+                           NULLIF(json_extract(doc.raw_json, '$.metadata.department_label'), ''),
+                           NULLIF(json_extract(t.raw_json, '$.support_group_name'), ''),
+                           NULLIF(json_extract(t.raw_json, '$.class_name'), ''),
+                           NULLIF(json_extract(t.raw_json, '$.submission_category'), ''),
+                           NULLIF(json_extract(t.raw_json, '$.department_key'), ''),
+                           'unknown'
+                       ) AS department_key,
                        CASE
                            WHEN COALESCE(
                                json_extract(doc.raw_json, '$.metadata.cleaned_initial_post'),
@@ -288,6 +313,7 @@ def _candidate_ticket_rows(db_path, limit: int) -> list[dict]:
                    category,
                    account_key,
                    technician_key,
+                   department_key,
                    has_issue_context,
                    has_action_context,
                    has_activity_context,
@@ -405,6 +431,7 @@ def enrich_priority_ticket_details(settings: Settings, limit: int = 50, material
             'selected_category_count': len({str(row.get('category') or '').strip() or 'unknown' for row in candidates}),
             'selected_account_count': len({str(row.get('account_key') or '').strip() or 'unknown' for row in candidates}),
             'selected_technician_count': len({str(row.get('technician_key') or '').strip() or 'unknown' for row in candidates}),
+            'selected_department_count': len({str(row.get('department_key') or '').strip() or 'unknown' for row in candidates}),
             'synced_at': synced_at,
             'materialized_documents': doc_stats['document_count'] if doc_stats else None,
             'failed_ticket_count': len(failures),

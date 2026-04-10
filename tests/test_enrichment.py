@@ -240,6 +240,117 @@ def test_candidate_selection_skips_cooling_down_detail_failures_until_ticket_cha
     assert [row['id'] for row in candidates_after_update] == ['401', '402']
 
 
+def test_candidate_selection_spreads_cold_coverage_to_undercovered_departments(tmp_path: Path) -> None:
+    db = tmp_path / 'sherpamind.sqlite3'
+    initialize_db(db)
+    upsert_tickets(db, [
+        {
+            'id': 501,
+            'subject': 'Managed services seed',
+            'status': 'Closed',
+            'priority_name': 'Normal',
+            'class_name': 'Infrastructure',
+            'submission_category': 'Managed Services',
+            'account_id': 1,
+            'tech_id': 11,
+            'created_time': '2025-02-01T01:00:00Z',
+            'updated_time': '2025-02-01T02:00:00Z',
+            'closed_time': '2025-02-01T03:00:00Z',
+        },
+        {
+            'id': 502,
+            'subject': 'Managed services follow-up',
+            'status': 'Closed',
+            'priority_name': 'Normal',
+            'class_name': 'Infrastructure',
+            'submission_category': 'Managed Services',
+            'account_id': 1,
+            'tech_id': 11,
+            'created_time': '2025-02-02T01:00:00Z',
+            'updated_time': '2025-02-02T02:00:00Z',
+            'closed_time': '2025-02-02T03:00:00Z',
+        },
+        {
+            'id': 503,
+            'subject': 'Dispatch undercovered',
+            'status': 'Closed',
+            'priority_name': 'Normal',
+            'class_name': 'Infrastructure',
+            'submission_category': 'Dispatch',
+            'account_id': 1,
+            'tech_id': 11,
+            'created_time': '2025-02-03T01:00:00Z',
+            'updated_time': '2025-02-03T02:00:00Z',
+            'closed_time': '2025-02-03T03:00:00Z',
+        },
+    ])
+    replace_ticket_documents(
+        db,
+        [
+            {
+                'doc_id': 'ticket:501',
+                'ticket_id': 501,
+                'status': 'Closed',
+                'account': 'Acme',
+                'user_name': 'User One',
+                'technician': 'Tech One',
+                'updated_at': '2025-02-01T02:00:00Z',
+                'text': 'managed services ticket 501',
+                'metadata': {
+                    'category': 'Infrastructure',
+                    'department_label': 'Managed Services',
+                    'cleaned_initial_post': 'monitoring alert',
+                    'cleaned_action_cue': 'check host',
+                    'recent_log_types_csv': 'Response',
+                    'resolution_summary': 'resolved',
+                    'attachments_count': 1,
+                },
+                'content_hash': 'doc-501',
+            },
+            {
+                'doc_id': 'ticket:502',
+                'ticket_id': 502,
+                'status': 'Closed',
+                'account': 'Acme',
+                'user_name': 'User Two',
+                'technician': 'Tech One',
+                'updated_at': '2025-02-02T02:00:00Z',
+                'text': 'managed services ticket 502',
+                'metadata': {
+                    'category': 'Infrastructure',
+                    'department_label': 'Managed Services',
+                    'cleaned_initial_post': 'disk alert',
+                    'cleaned_action_cue': 'clear space',
+                    'recent_log_types_csv': 'Response',
+                    'resolution_summary': 'resolved',
+                    'attachments_count': 1,
+                },
+                'content_hash': 'doc-502',
+            },
+            {
+                'doc_id': 'ticket:503',
+                'ticket_id': 503,
+                'status': 'Closed',
+                'account': 'Acme',
+                'user_name': 'User Three',
+                'technician': 'Tech One',
+                'updated_at': '2025-02-03T02:00:00Z',
+                'text': 'dispatch ticket 503',
+                'metadata': {
+                    'category': 'Infrastructure',
+                    'department_label': 'Dispatch',
+                },
+                'content_hash': 'doc-503',
+            },
+        ],
+        synced_at='2025-02-04T01:00:00Z',
+    )
+    upsert_ticket_details(db, [{'id': 501, 'ticketlogs': [], 'timelogs': [], 'attachments': []}])
+
+    candidates = _candidate_ticket_rows(db, limit=1)
+    assert [row['id'] for row in candidates] == ['503']
+
+
 def test_candidate_selection_prefers_retrieval_poor_cold_groups_when_detail_coverage_ties(tmp_path: Path) -> None:
     db = tmp_path / 'sherpamind.sqlite3'
     initialize_db(db)
