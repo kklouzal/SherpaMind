@@ -239,6 +239,10 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert "Follow-up note: Waiting on user approval" in primary["text"]
     assert "Latest response date: 2026-03-19T05:30:00Z" in primary["text"]
     assert "Latest response note: printer broken" in primary["text"]
+    assert "Latest public note date: 2026-03-19T06:00:00Z" in primary["text"]
+    assert "Latest public note: Waiting on user approval" in primary["text"]
+    assert "Latest internal note date: 2026-03-19T06:30:00Z" in primary["text"]
+    assert "Latest internal note: Closed after printer service restored" in primary["text"]
     assert "Resolution log date: 2026-03-19T06:30:00Z" in primary["text"]
     assert "Resolution log note: Closed after printer service restored" in primary["text"]
     assert "Resolution category: Completed Successfully" in primary["text"]
@@ -300,6 +304,10 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert primary["metadata"]["action_cue_source"] == "next_step"
     assert primary["metadata"]["cleaned_latest_response_note"] == "printer broken"
     assert primary["metadata"]["latest_response_date"] == "2026-03-19T05:30:00Z"
+    assert primary["metadata"]["cleaned_latest_public_note"] == "Waiting on user approval"
+    assert primary["metadata"]["latest_public_note_date"] == "2026-03-19T06:00:00Z"
+    assert primary["metadata"]["cleaned_latest_internal_note"] == "Closed after printer service restored"
+    assert primary["metadata"]["latest_internal_note_date"] == "2026-03-19T06:30:00Z"
     assert primary["metadata"]["cleaned_resolution_log_note"] == "Closed after printer service restored"
     assert primary["metadata"]["resolution_log_date"] == "2026-03-19T06:30:00Z"
     assert primary["metadata"]["followup_date"] == "2026-03-20T10:00:00Z"
@@ -393,6 +401,10 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert fallback["metadata"]["total_actor_count"] == 1
     assert fallback["metadata"]["latest_public_actor_label"] == "Bob Jones"
     assert fallback["metadata"]["recent_public_actor_labels"] == ["Bob Jones"]
+    assert fallback["metadata"]["cleaned_latest_public_note"] == "Waiting for branch manager approval"
+    assert fallback["metadata"]["latest_public_note_date"] == "2026-03-19T07:00:00Z"
+    assert fallback["metadata"]["cleaned_latest_internal_note"] is None
+    assert fallback["metadata"]["latest_internal_note_date"] is None
     assert fallback["metadata"]["participant_email_domains"] == []
     assert fallback["metadata"]["participant_email_domains_csv"] is None
     assert fallback["metadata"]["public_participant_email_domains"] == []

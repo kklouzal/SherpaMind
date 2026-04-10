@@ -351,6 +351,8 @@ _ENTITY_METADATA_LABELS: dict[str, str] = {
     "action_cue": "Action Cue",
     "resolution_summary": "Resolution Summary",
     "recent_log_types": "Recent Log Types",
+    "cleaned_latest_public_note": "Latest Public Note",
+    "cleaned_latest_internal_note": "Latest Internal Note",
     "attachment_metadata": "Attachment Kinds",
     "attachment_names": "Attachment Names",
     "attachment_name_tokens": "Attachment Name Tokens",

@@ -147,6 +147,10 @@ def seed(db: Path) -> None:
                     "action_cue_source": "next_step",
                     "cleaned_latest_response_note": "We are checking now",
                     "latest_response_date": "2026-03-19T09:15:00Z",
+                    "cleaned_latest_public_note": "Waiting on customer reply",
+                    "latest_public_note_date": "2026-03-19T10:00:00Z",
+                    "cleaned_latest_internal_note": "Investigated spooler state internally",
+                    "latest_internal_note_date": "2026-03-19T09:45:00Z",
                     "cleaned_resolution_log_note": "Closed after maintenance",
                     "resolution_log_date": "2026-03-19T10:00:00Z",
                     "followup_date": "2026-03-20T10:00:00Z",
@@ -349,6 +353,10 @@ def test_export_embedding_ready_chunks(tmp_path: Path) -> None:
     assert row["metadata"]["action_cue_source"] == "next_step"
     assert row["metadata"]["cleaned_latest_response_note"] == "We are checking now"
     assert row["metadata"]["latest_response_date"] == "2026-03-19T09:15:00Z"
+    assert row["metadata"]["cleaned_latest_public_note"] == "Waiting on customer reply"
+    assert row["metadata"]["latest_public_note_date"] == "2026-03-19T10:00:00Z"
+    assert row["metadata"]["cleaned_latest_internal_note"] == "Investigated spooler state internally"
+    assert row["metadata"]["latest_internal_note_date"] == "2026-03-19T09:45:00Z"
     assert row["metadata"]["cleaned_resolution_log_note"] == "Closed after maintenance"
     assert row["metadata"]["resolution_log_date"] == "2026-03-19T10:00:00Z"
     assert row["metadata"]["followup_date"] == "2026-03-20T10:00:00Z"
@@ -605,6 +613,10 @@ def test_get_retrieval_readiness_summary(tmp_path: Path) -> None:
     assert summary["metadata_coverage"]["cleaned_waiting_log_note"]["chunks"] == 0
     assert summary["metadata_coverage"]["cleaned_action_cue"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_latest_response_note"]["chunks"] == 1
+    assert summary["metadata_coverage"]["cleaned_latest_public_note"]["chunks"] == 1
+    assert summary["metadata_coverage"]["latest_public_note_date"]["chunks"] == 1
+    assert summary["metadata_coverage"]["cleaned_latest_internal_note"]["chunks"] == 1
+    assert summary["metadata_coverage"]["latest_internal_note_date"]["chunks"] == 1
     assert summary["metadata_coverage"]["cleaned_resolution_log_note"]["chunks"] == 1
     assert summary["metadata_coverage"]["class_name"]["chunks"] == 1
     assert summary["metadata_coverage"]["submission_category"]["chunks"] == 1

@@ -10,7 +10,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_metadata_label, normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 17
+DOCUMENT_MATERIALIZATION_VERSION = 18
 
 
 def _content_hash(text: str) -> str:
@@ -652,6 +652,8 @@ def _derive_recent_log_cues(logs: list[dict[str, Any]]) -> dict[str, Any]:
     waiting_log = None
     response_log = None
     resolution_log = None
+    latest_public_note = None
+    latest_internal_note = None
     for log in logs:
         cleaned_note = normalize_ticket_text(log.get("plain_note") or log.get("note"))
         log_type = _normalize_log_type(log.get("log_type"))
@@ -660,6 +662,10 @@ def _derive_recent_log_cues(logs: list[dict[str, Any]]) -> dict[str, Any]:
             "record_date": log.get("record_date"),
             "cleaned_note": cleaned_note,
         }
+        if cleaned_note and latest_internal_note is None and bool(log.get("is_tech_only")):
+            latest_internal_note = log_record
+        if cleaned_note and latest_public_note is None and not bool(log.get("is_tech_only")):
+            latest_public_note = log_record
         if waiting_log is None and cleaned_note and (bool(log.get("is_waiting")) or log_type == "waiting on response"):
             waiting_log = log_record
         if response_log is None and cleaned_note and log_type in _RESPONSE_LOG_TYPES:
@@ -670,6 +676,8 @@ def _derive_recent_log_cues(logs: list[dict[str, Any]]) -> dict[str, Any]:
         "waiting_log": waiting_log,
         "response_log": response_log,
         "resolution_log": resolution_log,
+        "latest_public_note": latest_public_note,
+        "latest_internal_note": latest_internal_note,
     }
 
 
@@ -943,6 +951,8 @@ def build_ticket_documents(
         waiting_log = log_cues["waiting_log"]
         response_log = log_cues["response_log"]
         resolution_log = log_cues["resolution_log"]
+        latest_public_note = log_cues["latest_public_note"]
+        latest_internal_note = log_cues["latest_internal_note"]
         explicit_followup_note = normalize_ticket_text(record.get("followup_note"))
         waiting_log_note = waiting_log["cleaned_note"] if waiting_log else None
         cleaned_followup_note, followup_note_source = _resolve_followup_cue(explicit_followup_note, waiting_log_note)
@@ -951,6 +961,10 @@ def build_ticket_documents(
         cleaned_recent_logs = normalize_ticket_text(record.get("recent_log_text"))
         cleaned_latest_response_note = normalize_ticket_text(response_log["cleaned_note"] if response_log else None)
         latest_response_date = response_log["record_date"] if response_log else None
+        cleaned_latest_public_note = normalize_ticket_text(latest_public_note["cleaned_note"] if latest_public_note else None)
+        latest_public_note_date = latest_public_note["record_date"] if latest_public_note else None
+        cleaned_latest_internal_note = normalize_ticket_text(latest_internal_note["cleaned_note"] if latest_internal_note else None)
+        latest_internal_note_date = latest_internal_note["record_date"] if latest_internal_note else None
         cleaned_resolution_log_note = normalize_ticket_text(resolution_log["cleaned_note"] if resolution_log else None)
         resolution_log_date = resolution_log["record_date"] if resolution_log else None
         resolution_summary = cleaned_resolution_log_note[:600] if cleaned_resolution_log_note else summarize_resolution_from_logs(record.get("recent_log_text"))
@@ -1198,6 +1212,14 @@ def build_ticket_documents(
             text_parts.append(f"Latest response date: {latest_response_date}")
         if cleaned_latest_response_note:
             text_parts.append(f"Latest response note: {cleaned_latest_response_note[:1600]}")
+        if latest_public_note_date:
+            text_parts.append(f"Latest public note date: {latest_public_note_date}")
+        if cleaned_latest_public_note:
+            text_parts.append(f"Latest public note: {cleaned_latest_public_note[:1600]}")
+        if latest_internal_note_date:
+            text_parts.append(f"Latest internal note date: {latest_internal_note_date}")
+        if cleaned_latest_internal_note:
+            text_parts.append(f"Latest internal note: {cleaned_latest_internal_note[:1600]}")
         if record.get("recent_log_types"):
             text_parts.append(f"Recent log types: {record['recent_log_types']}")
         if cleaned_recent_logs:
@@ -1339,6 +1361,10 @@ def build_ticket_documents(
                     "action_cue_source": action_cue_source,
                     "cleaned_latest_response_note": cleaned_latest_response_note[:400] if cleaned_latest_response_note else None,
                     "latest_response_date": latest_response_date,
+                    "cleaned_latest_public_note": cleaned_latest_public_note[:400] if cleaned_latest_public_note else None,
+                    "latest_public_note_date": latest_public_note_date,
+                    "cleaned_latest_internal_note": cleaned_latest_internal_note[:400] if cleaned_latest_internal_note else None,
+                    "latest_internal_note_date": latest_internal_note_date,
                     "cleaned_resolution_log_note": cleaned_resolution_log_note[:400] if cleaned_resolution_log_note else None,
                     "resolution_log_date": resolution_log_date,
                     "next_step_date": record.get("next_step_date"),
