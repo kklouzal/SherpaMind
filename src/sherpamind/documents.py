@@ -10,7 +10,7 @@ from .db import connect, now_iso, replace_ticket_document_chunks, replace_ticket
 from .text_cleanup import normalize_metadata_label, normalize_ticket_text, summarize_resolution_from_logs
 
 
-DOCUMENT_MATERIALIZATION_VERSION = 18
+DOCUMENT_MATERIALIZATION_VERSION = 19
 
 
 def _content_hash(text: str) -> str:
@@ -912,7 +912,8 @@ def build_ticket_documents(
                    ))
                    FROM ticket_attachments ta
                    WHERE ta.ticket_id = t.id
-               ) AS attachment_metadata_json
+               ) AS attachment_metadata_json,
+               CASE WHEN td.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS detail_row_present
         FROM tickets t
         LEFT JOIN accounts a ON a.id = t.account_id
         LEFT JOIN users u ON u.id = t.user_id
@@ -1306,47 +1307,7 @@ def build_ticket_documents(
                     "attachments": attachment_metadata,
                     **attachment_summary,
                     "has_attachments": bool(attachment_metadata),
-                    "detail_available": bool(
-                        record.get("detail_note")
-                        or record.get("workpad")
-                        or record.get("initial_response")
-                        or record.get("ticketlogs_count")
-                        or record.get("attachments_count")
-                        or record.get("detail_initial_post")
-                        or record.get("detail_plain_initial_post")
-                        or record.get("followup_note")
-                        or record.get("request_completion_note")
-                        or record.get("support_group_name")
-                        or record.get("class_name")
-                        or record.get("resolution_category_name")
-                        or record.get("default_contract_name")
-                        or record.get("account_location_name")
-                        or record.get("department_key")
-                        or record.get("confirmed_by_name")
-                        or record.get("confirmed_date")
-                        or cleaned_confirmed_note
-                        or record.get("ticket_key")
-                        or record.get("ticket_number")
-                        or record.get("technician_email")
-                        or record.get("user_phone")
-                        or created_by_name
-                        or record.get("user_created_email")
-                        or record.get("technician_type")
-                        or record.get("project_id")
-                        or record.get("project_name")
-                        or _present_metric(record.get("scheduled_ticket_id"))
-                        or _present_metric(record.get("related_tickets_count"))
-                        or _present_metric(record.get("estimated_time"))
-                        or _present_metric(record.get("remaining_hours"))
-                        or _present_metric(record.get("total_hours"))
-                        or _present_metric(record.get("total_time_in_minutes"))
-                        or _present_metric(record.get("labor_cost"))
-                        or _present_metric(record.get("percentage_complete"))
-                        or record.get("days_old_in_minutes") not in (None, "")
-                        or record.get("waiting_minutes") not in (None, "")
-                        or is_via_email_parser is not None
-                        or is_handle_by_callcentre is not None
-                    ),
+                    "detail_available": bool(record.get("detail_row_present")),
                     "cleaned_subject": cleaned_subject[:300] if cleaned_subject else None,
                     "cleaned_initial_post": cleaned_initial_post[:400] if cleaned_initial_post else None,
                     "cleaned_detail_note": cleaned_detail_note[:400] if cleaned_detail_note else None,

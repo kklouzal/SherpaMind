@@ -631,6 +631,7 @@ Vector and retrieval readiness reporting includes:
 - when readiness is run with a row limit for fast inspection, source-backed coverage is scoped to the sampled ticket set so limited runs do not misreport full-corpus promotion gaps
 - entity-label quality summaries for account/user/technician/department facets so operators can see readable-vs-identifier-like label ratios and fallback-source pressure before trusting filters heavily
 - retrieval signal pressure summaries for accounts/categories/departments/technicians so operators can see where detail/issue/action/activity/resolution/attachment metadata is still too thin for confident retrieval and steer enrichment breadth deliberately
+- detail-oriented retrieval coverage is keyed to actual `ticket_details` row presence so observability reflects real enrichment depth instead of baseline ticket fields
 - chunk-topology readiness signals such as chunks-per-document and multi-chunk-document ratio so vector-sidecar consumers can reason about chunk fanout cleanly
 - embedding-ready exports carry chunk-order/position fields (`chunk_start_char`, `chunk_end_char`, `previous_chunk_id`, `next_chunk_id`) plus inferred chunk semantic section cues (`chunk_primary_section`, `chunk_section_labels`, semantic-context booleans) so downstream vector sidecars can reconstruct both nearby context and chunk intent without guessing
 - freshness windows for materialized chunks vs ticket update timestamps, including per-document lag counts, status splits, lag buckets, and top lagging-document samples

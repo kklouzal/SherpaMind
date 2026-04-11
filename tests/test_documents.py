@@ -132,6 +132,36 @@ def seed_fixture(db: Path) -> None:
     )
 
 
+def test_ticket_documents_only_mark_detail_available_when_detail_row_exists(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+    upsert_tickets(
+        db,
+        [{
+            "id": 201,
+            "account_name": "Acme",
+            "subject": "Baseline ticket only",
+            "status": "Open",
+            "priority_name": "Low",
+            "number": "T-201",
+            "key": "abc-201",
+            "created_time": "2026-03-18T01:00:00Z",
+            "updated_time": "2026-03-19T03:00:00Z",
+            "user_phone": "520-555-0101",
+            "technician_email": "tech@example.com",
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+
+    doc = build_ticket_documents(db)[0]
+
+    assert doc["metadata"]["ticket_number"] == "T-201"
+    assert doc["metadata"]["user_phone"] == "520-555-0101"
+    assert doc["metadata"]["technician_email"] == "tech@example.com"
+    assert doc["metadata"]["detail_available"] is False
+
+
+
 def test_chunk_text_splits_large_single_paragraphs_for_vector_readiness() -> None:
     sentence = "This is a long sentence about printer troubleshooting and follow-up actions."
     text = " ".join([sentence] * 80)
@@ -416,6 +446,7 @@ def test_build_materialize_and_export_ticket_documents(tmp_path: Path) -> None:
     assert fallback["metadata"]["account_label_source"] == "joined"
     assert fallback["metadata"]["user_label_source"] == "joined"
     assert fallback["metadata"]["technician_label_source"] == "joined"
+    assert fallback["metadata"]["detail_available"] is True
 
     chunks = build_ticket_document_chunks(docs)
     chunks_by_ticket = {chunk["ticket_id"]: chunk for chunk in chunks}
