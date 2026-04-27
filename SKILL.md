@@ -235,7 +235,7 @@ Manual commands remain available:
 - Do not auto-download attachment bodies by default.
 - Treat docs, chunks, vector rows, and public Markdown artifacts as replaceable derived caches.
 - Let SherpaMind prepare and expose data; let OpenClaw interpret it at answer time.
-- For automatic LLM-backed work, keep the accuracy-to-token contract tight: event-triggered only, compact bounded payloads, locally retrieved evidence when useful, and no hidden broad searches from alert/classification prompts.
+- For automatic LLM-backed work, keep the accuracy-to-token contract tight: event-triggered only, compact bounded payloads, locally retrieved evidence when useful, no broad searches from alert/classification prompts, and only narrow extra SherpaMind retrieval for alerts when it materially improves accuracy.
 
 ## References
 

@@ -174,7 +174,7 @@ SherpaMind should spend cheap local computation before model tokens. Any system 
 - trigger only from real events or explicit user queries, never broad periodic model sweeps
 - precompute/cache local evidence first, then pass only the bounded fields needed for the decision
 - prefer compact JSON (`id:path` taxonomy candidates, selected ticket fields, clipped notes) over raw SherpaDesk payloads
-- forbid hidden tool/retrieval turns inside event alert/classification prompts unless the payload is malformed
+- default alert prompts to provided compact evidence, allowing at most narrow SherpaMind retrieval when it would materially improve alert accuracy; keep classification prompts no-retrieval
 - preserve accuracy by including high-signal context and locally retrieved evidence, not by shipping every available log/blob to the model
 
-Current LLM-backed automatic paths are: new-ticket alert synthesis, requester-side update alert synthesis, and event-scoped ticket classification. Alert synthesis receives a tiny locally retrieved `similar_ticket_evidence` list so it can mention prior patterns without asking the agent to run extra searches.
+Current LLM-backed automatic paths are: new-ticket alert synthesis, requester-side update alert synthesis, and event-scoped ticket classification. Alert synthesis receives a tiny locally retrieved `similar_ticket_evidence` list so it can mention prior patterns cheaply; the alert agent may still perform one narrow SherpaMind lookup when that would materially improve accuracy. Classification stays strict: use the supplied event context and taxonomy only.
