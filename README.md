@@ -424,6 +424,13 @@ python3 scripts/run.py <command> [args...]
 - `python3 scripts/run.py enrich-priority-ticket-details`
 - `python3 scripts/run.py materialize-ticket-docs`
 
+### Guarded SherpaDesk write-backs
+
+- `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets` *(dry-run; lists closed tickets at least 365 days old whose local `is_confirmed` field is still false)*
+- `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets --apply` *(live write-back; sends `is_confirmed=true` to `PUT /tickets/{id}` for the listed candidates, then refreshes/materializes those tickets locally)*
+
+Keep this lane deliberately narrow: the first supported write-back is only for long-closed unconfirmed tickets. Run the dry-run first, inspect the candidate count/examples, then use `--apply` only when the candidate set looks right.
+
 ### Reporting and analysis
 
 - `python3 scripts/run.py dataset-summary`

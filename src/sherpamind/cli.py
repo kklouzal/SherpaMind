@@ -56,6 +56,7 @@ from .summaries import get_account_summary, get_technician_summary, get_ticket_s
 from .vector_exports import export_embedding_manifest, export_embedding_ready_chunks, get_retrieval_readiness_summary
 from .vector_index import build_vector_index, get_vector_index_status, search_vector_index
 from .watch import watch_new_tickets
+from .writebacks import confirm_stale_unconfirmed_closed_tickets
 from .db import backfill_ticket_core_fields, backfill_ticket_entity_stubs, backfill_ticket_technician_stubs, initialize_db
 
 app = typer.Typer(help="SherpaMind CLI")
@@ -526,6 +527,22 @@ def enrich_priority_details(limit: int = 50, materialize_docs: bool = True) -> N
     settings = load_settings()
     result = enrich_priority_ticket_details(settings, limit=limit, materialize_docs=materialize_docs)
     print(json.dumps(result.__dict__, indent=2))
+
+
+@app.command("confirm-stale-unconfirmed-closed-tickets")
+def confirm_stale_unconfirmed_closed_tickets_command(
+    apply: bool = typer.Option(False, "--apply", help="Actually write is_confirmed=true back to SherpaDesk. Omit for dry-run."),
+    min_closed_days: int = typer.Option(365, help="Minimum age since closed_at before a closed unconfirmed ticket is eligible."),
+    limit: int = typer.Option(25, help="Maximum candidate tickets to inspect/apply in this run."),
+) -> None:
+    settings = load_settings()
+    result = confirm_stale_unconfirmed_closed_tickets(
+        settings,
+        apply=apply,
+        min_closed_days=min_closed_days,
+        limit=limit,
+    )
+    print(json.dumps(_json_ready(result), indent=2))
 
 
 @app.command("materialize-ticket-docs")

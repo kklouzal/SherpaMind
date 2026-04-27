@@ -129,6 +129,63 @@ class SherpaDeskClient:
                 )
             raise
 
+    @retry(
+        stop=stop_after_attempt(4),
+        wait=wait_exponential(multiplier=1, min=1, max=16),
+        retry=retry_if_exception(is_retryable_http_error),
+        reraise=True,
+    )
+    def put(self, path: str, data: dict[str, Any] | None = None) -> Any:
+        self.pacer.wait()
+        fields = sorted((data or {}).keys())
+        try:
+            with httpx.Client(timeout=self.timeout_seconds, headers=self._build_headers()) as client:
+                response = client.put(self._build_url(path), data=data or {})
+                if self.request_tracking_db_path is not None:
+                    record_api_request_event(
+                        self.request_tracking_db_path,
+                        method="PUT",
+                        path=path,
+                        status_code=response.status_code,
+                        outcome="http_response",
+                        attempt_kind="put",
+                        extra={"fields": fields},
+                    )
+                response.raise_for_status()
+                content_type = response.headers.get("content-type", "")
+                if "json" in content_type.lower() and response.text.strip():
+                    return response.json()
+                return response.text
+        except httpx.HTTPStatusError as exc:
+            if self.request_tracking_db_path is not None:
+                response = exc.response
+                record_api_request_event(
+                    self.request_tracking_db_path,
+                    method="PUT",
+                    path=path,
+                    status_code=response.status_code,
+                    outcome="http_response",
+                    attempt_kind="put",
+                    extra={
+                        "fields": fields,
+                        "detail": str(exc),
+                        "response_body_preview": _sanitize_http_error_body(response.text),
+                    },
+                )
+            raise
+        except httpx.HTTPError as exc:
+            if self.request_tracking_db_path is not None:
+                record_api_request_event(
+                    self.request_tracking_db_path,
+                    method="PUT",
+                    path=path,
+                    status_code=None,
+                    outcome="http_error",
+                    attempt_kind=type(exc).__name__,
+                    extra={"fields": fields, "detail": str(exc)},
+                )
+            raise
+
     def discover_organizations(self) -> Any:
         return self.get("organizations/")
 

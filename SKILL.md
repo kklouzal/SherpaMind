@@ -203,9 +203,18 @@ Use these for setup/maintenance, not routine user queries:
 - `python3 scripts/run.py generate-public-snapshot`
 - `python3 scripts/run.py generate-runtime-status`
 
+### Guarded write-backs
+
+SherpaMind now has one deliberately narrow SherpaDesk write-back lane:
+
+- `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets` — dry-run only; lists closed tickets at least 365 days old whose local `is_confirmed` field is still false
+- `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets --apply` — live write-back; sends `is_confirmed=true` to `PUT /tickets/{id}` for those candidates, then refreshes/materializes the touched tickets locally
+
+Do not run the `--apply` form unless the user explicitly asks for live write-back or approves the dry-run candidate set.
+
 ## Boundaries
 
-- Treat SherpaMind as read-only unless the project explicitly grows write behavior later.
+- Treat SherpaMind as read-only except for explicitly supported guarded write-back commands, and require explicit approval before live `--apply` runs.
 - Keep attachment handling metadata-only by default.
 - Do not auto-download attachment bodies by default.
 - Treat docs, chunks, vector rows, and public Markdown artifacts as replaceable derived caches.
