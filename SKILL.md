@@ -46,11 +46,13 @@ When installed and configured for live use, it can:
 - require the SherpaDesk API key to be provided via the OpenClaw-managed `SHERPADESK_API_KEY` environment surface (the daemon mirrors this from the OpenClaw skill config into its own service env)
 - optionally store a SherpaDesk API user hint in `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
 - store non-secret connection/runtime settings in `.SherpaMind/private/config/settings.env`
+- read alert enablement and alert destinations from first-class OpenClaw `sherpamind` skill fields
 - optionally install and run a **user-level** `systemd` background service
 
 Required live staged credentials/config for real SherpaDesk use:
 - OpenClaw-managed `SHERPADESK_API_KEY` configured for the `sherpamind` skill
 - staged org/instance settings in `.SherpaMind/private/config/settings.env`
+- OpenClaw `skills.entries.sherpamind.config` alert fields when chat alerting is wanted
 
 If the user only wants query guidance or offline inspection of an existing local dataset, do not imply that fresh credentials or service installation are unnecessary for live sync.
 
@@ -154,7 +156,12 @@ Then use this flow from the installed skill bundle root:
    - `python3 scripts/run.py setup`
 4. verify runtime state
    - `python3 scripts/run.py doctor`
-5. ensure the SherpaDesk API key is configured for the OpenClaw `sherpamind` skill so runtime surfaces receive `SHERPADESK_API_KEY`
+5. ensure the OpenClaw `sherpamind` skill entry has the SherpaDesk API key and any wanted alert fields:
+   - `apiKey`
+   - `config.newTicketAlertsEnabled`
+   - `config.ticketUpdateAlertsEnabled`
+   - `config.newTicketAlertChannel`
+   - `config.ticketUpdateAlertChannel`
 6. discover organizations/instances
    - `python3 scripts/run.py discover-orgs`
 7. write the chosen org/instance into non-secret settings

@@ -50,7 +50,7 @@ Use `--summary` for terse line-oriented output.
    python3 scripts/run.py setup
    python3 scripts/run.py doctor
    ```
-3. Ensure the OpenClaw `sherpamind` skill is configured with the SherpaDesk API key so runtime surfaces receive `SHERPADESK_API_KEY`.
+3. Ensure the OpenClaw `sherpamind` skill entry is configured with the SherpaDesk API key and any wanted alert fields (`config.newTicketAlertsEnabled`, `config.ticketUpdateAlertsEnabled`, `config.newTicketAlertChannel`, `config.ticketUpdateAlertChannel`).
 4. Discover organizations/instances, then stage the chosen org/instance:
    ```bash
    cd {baseDir}

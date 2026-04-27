@@ -20,11 +20,13 @@ For live use it can:
 - require the SherpaDesk API key to be configured through the OpenClaw `sherpamind` skill so runtime receives `SHERPADESK_API_KEY`
 - optionally store a SherpaDesk API user hint in `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
 - store non-secret connection/runtime settings in `.SherpaMind/private/config/settings.env`
+- read alert enablement and destination from first-class OpenClaw `sherpamind` skill fields
 - optionally install and run a **user-level** `systemd` background service for ongoing sync/enrichment
 
 Primary live credentials/config required:
 - OpenClaw-managed `SHERPADESK_API_KEY` configured for the `sherpamind` skill
 - org/instance settings: `.SherpaMind/private/config/settings.env`
+- alert fields under `skills.entries.sherpamind.config` when chat alerting is wanted
 
 Persistent behavior is intentionally workspace-local and user-scoped; SherpaMind does not require system-wide privilege for its normal service model.
 
@@ -585,9 +587,29 @@ python3 scripts/run.py install-service
 python3 scripts/run.py service-status
 ```
 
-Runtime control/environment overrides are documented in `.env.example`, but the normal live API-key path is OpenClaw skill configuration feeding `SHERPADESK_API_KEY`, while `.SherpaMind/` continues to hold non-secret runtime settings and local derived state. Use `SHERPAMIND_WORKSPACE_ROOT` to choose the parent workspace for a normal install, or `SHERPAMIND_ROOT` to point directly at an existing `.SherpaMind` runtime directory.
+Runtime control/environment overrides are documented in `.env.example`; `.SherpaMind/` holds non-secret runtime settings and local derived state. Use `SHERPAMIND_WORKSPACE_ROOT` to choose the parent workspace for a normal install, or `SHERPAMIND_ROOT` to point directly at an existing `.SherpaMind` runtime directory.
 
-For OpenClaw alert delivery, SherpaMind uses the current hooks API: authenticated `POST /hooks/agent` with `Authorization: Bearer <hooks.token>` / `x-openclaw-token` and a payload containing `message`, `name`, `agentId`, `wakeMode`, `deliver`, `channel`, optional `to`, and `timeoutSeconds`. If SherpaMind runs on the same host as OpenClaw, the backend auto-defaults `SHERPAMIND_OPENCLAW_WEBHOOK_URL` and `SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN` from local `~/.openclaw/openclaw.json` hooks settings when they are not staged manually. Use `python3 scripts/run.py doctor` or `bootstrap-audit` to verify the alert hook shape before starting the alert-dispatch worker.
+For OpenClaw alert delivery, SherpaMind uses authenticated `POST /hooks/agent` with `Authorization: Bearer <hooks.token>` / `x-openclaw-token` and a payload containing `message`, `name`, `agentId`, `wakeMode`, `deliver`, `channel`, optional `to`, and `timeoutSeconds`. On the same host as OpenClaw, hook URL/token default from local `~/.openclaw/openclaw.json` hooks settings. Enablement and destinations are first-class OpenClaw skill fields:
+
+```json
+{
+  "skills": {
+    "entries": {
+      "sherpamind": {
+        "apiKey": "...",
+        "config": {
+          "newTicketAlertsEnabled": true,
+          "ticketUpdateAlertsEnabled": true,
+          "newTicketAlertChannel": "channel:<discord-channel-id>",
+          "ticketUpdateAlertChannel": "channel:<discord-channel-id>"
+        }
+      }
+    }
+  }
+}
+```
+
+Use `python3 scripts/run.py doctor` or `bootstrap-audit` to verify the alert hook shape and configured destination before starting the alert-dispatch worker.
 
 Important controls include:
 
@@ -598,12 +620,8 @@ Important controls include:
 - `SHERPAMIND_SEED_PAGE_SIZE`
 - `SHERPAMIND_SEED_MAX_PAGES`
 - `SHERPAMIND_SERVICE_*`
-- `SHERPAMIND_NEW_TICKET_ALERTS_ENABLED`
-- `SHERPAMIND_TICKET_UPDATE_ALERTS_ENABLED`
 - `SHERPAMIND_OPENCLAW_WEBHOOK_URL`
 - `SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN`
-- `SHERPAMIND_NEW_TICKET_ALERT_CHANNEL`
-- `SHERPAMIND_TICKET_UPDATE_ALERT_CHANNEL`
 - `SHERPAMIND_API_HOURLY_LIMIT`
 - `SHERPAMIND_API_BUDGET_WARN_RATIO`
 - `SHERPAMIND_API_BUDGET_CRITICAL_RATIO`

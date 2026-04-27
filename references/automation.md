@@ -77,7 +77,7 @@ Individual ingest lanes should also be **single-flight**. If `sync_hot_open`, `s
 - bootstrap the skill-local runtime
 - migrate legacy state if needed
 - initialize the DB
-- stage the API key and connection settings
+- configure the OpenClaw `sherpamind` skill entry and stage connection settings
 - validate discovery/seed behavior
 - optionally generate initial public docs
 - only then install/start the user service if unattended mode is actually wanted

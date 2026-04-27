@@ -31,7 +31,6 @@ def make_settings(tmp_path: Path) -> Settings:
         instance_key='inst',
         db_path=tmp_path / 'sherpamind.sqlite3',
         watch_state_path=tmp_path / 'watch_state.json',
-        notify_channel=None,
         new_ticket_alerts_enabled=False,
         ticket_update_alerts_enabled=False,
         openclaw_webhook_url=None,
