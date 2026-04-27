@@ -696,12 +696,12 @@ def get_ticket_summary(db_path: Path, ticket_query: str, limit_logs: int = 10, l
                 GROUP BY ticket_id
             ) vector_counts ON vector_counts.ticket_id = t.id
             WHERE CAST(t.id AS TEXT) = ?
-               OR json_extract(t.raw_json, '$.number') = ?
+               OR CAST(json_extract(t.raw_json, '$.number') AS TEXT) = ?
                OR json_extract(t.raw_json, '$.key') = ?
                OR t.subject = ? COLLATE NOCASE
             ORDER BY CASE
                        WHEN CAST(t.id AS TEXT) = ? THEN 0
-                       WHEN json_extract(t.raw_json, '$.number') = ? THEN 1
+                       WHEN CAST(json_extract(t.raw_json, '$.number') AS TEXT) = ? THEN 1
                        WHEN json_extract(t.raw_json, '$.key') = ? THEN 2
                        WHEN t.subject = ? COLLATE NOCASE THEN 3
                        ELSE 4

@@ -11,7 +11,7 @@ def seed_fixture(db: Path) -> None:
     upsert_users(db, [{"id": 11, "account_id": 1, "FullName": "Alice User", "email": "alice@example.com"}], synced_at="2026-03-19T01:00:00Z")
     upsert_technicians(db, [{"id": 21, "FullName": "Tech One", "email": "tech@example.com"}], synced_at="2026-03-19T01:00:00Z")
     upsert_tickets(db, [
-        {"id": 101, "account_id": 1, "user_id": 11, "tech_id": 21, "subject": "Issue A", "status": "Open", "updated_time": "2026-03-19T03:00:00Z", "created_time": "2026-03-18T01:00:00Z"},
+        {"id": 101, "number": 12234, "key": "abc123", "account_id": 1, "user_id": 11, "tech_id": 21, "subject": "Issue A", "status": "Open", "updated_time": "2026-03-19T03:00:00Z", "created_time": "2026-03-18T01:00:00Z"},
         {"id": 102, "account_id": 1, "user_id": 11, "tech_id": 21, "subject": "Issue B", "status": "Closed", "updated_time": "2026-03-19T02:00:00Z", "created_time": "2026-03-18T01:00:00Z"},
     ], synced_at="2026-03-19T01:00:00Z")
     upsert_ticket_details(db, [{"id": 101, "ticketlogs": [{"id": 5001, "log_type": "Response", "plain_note": "done", "record_date": "2026-03-18T01:00:00Z"}], "timelogs": [], "attachments": []}], synced_at="2026-03-19T01:00:00Z")
@@ -75,6 +75,11 @@ def test_ticket_summary_and_artifact_listing(tmp_path: Path) -> None:
     summary = get_ticket_summary(db, "101")
     assert summary["status"] == "ok"
     assert summary["ticket"]["id"] == "101"
+
+    number_summary = get_ticket_summary(db, "12234")
+    assert number_summary["status"] == "ok"
+    assert number_summary["ticket"]["id"] == "101"
+    assert number_summary["ticket"]["ticket_number"] == 12234
     assert summary["artifact_stats"]["detail_available"] is True
     assert summary["artifact_stats"]["log_count"] == 1
     assert summary["artifact_stats"]["attachment_count"] == 0

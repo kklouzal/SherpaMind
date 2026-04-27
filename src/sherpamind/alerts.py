@@ -7,7 +7,8 @@ from urllib import request, error
 
 from .analysis import search_ticket_document_chunks
 from .client import SherpaDeskClient
-from .db import enqueue_derived_refresh, mark_alert_failed, mark_alert_sent, mark_ticket_update_alert_sent, now_iso, upsert_ticket_details
+from .db import enqueue_derived_refresh, mark_alert_failed, mark_alert_sent, mark_ticket_update_alert_sent, now_iso, upsert_ticket_details, upsert_tickets
+from .documents import materialize_ticket_documents
 from .settings import Settings
 from .summaries import get_ticket_summary
 
@@ -218,7 +219,16 @@ def _build_client(settings: Settings) -> SherpaDeskClient:
 def _refresh_ticket_context(settings: Settings, ticket_id: str) -> None:
     client = _build_client(settings)
     detail = client.get(f"tickets/{ticket_id}")
-    upsert_ticket_details(settings.db_path, [detail], synced_at=now_iso())
+    if not isinstance(detail, dict):
+        return
+    synced_at = now_iso()
+    # New-ticket watch payloads are intentionally tiny and may only contain the
+    # subject. Fetching detail is not enough by itself: alert summaries read the
+    # materialized ticket document, so materialize immediately before composing
+    # the alert instead of waiting for the slower derived-refresh worker.
+    upsert_tickets(settings.db_path, [detail], synced_at=synced_at)
+    upsert_ticket_details(settings.db_path, [detail], synced_at=synced_at)
+    materialize_ticket_documents(settings.db_path, ticket_ids=[str(ticket_id)])
     enqueue_derived_refresh(settings.db_path, ticket_id=str(ticket_id), source="alert_context", priority=20)
 
 

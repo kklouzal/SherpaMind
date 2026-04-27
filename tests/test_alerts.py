@@ -158,3 +158,56 @@ def test_build_ticket_update_payload_allows_broader_history_context(tmp_path: Pa
     assert "OpenClaw hook delivery will send it" in message
     assert "recent_logs" in message
     assert "retrieval_metadata" not in message
+
+
+def test_dispatch_new_ticket_alert_materializes_fresh_detail_before_prompt(monkeypatch, tmp_path: Path) -> None:
+    from sherpamind import alerts
+    from sherpamind.alerts import dispatch_new_ticket_alert
+
+    settings = make_settings(tmp_path)
+    initialize_db(settings.db_path)
+    upsert_tickets(settings.db_path, [{
+        "id": 202,
+        "account_name": "Acme Co",
+        "subject": "ERROR",
+        "status": "Open",
+        "priority_name": "Normal",
+        "updated_time": "2026-03-19T03:00:00Z",
+        "created_time": "2026-03-19T03:00:00Z",
+    }], synced_at="2026-03-19T03:00:00Z")
+
+    class FakeClient:
+        def get(self, path: str):
+            assert path == "tickets/202"
+            return {
+                "id": 202,
+                "account_name": "Acme Co",
+                "subject": "ERROR",
+                "status": "Open",
+                "priority_name": "Normal",
+                "updated_time": "2026-03-19T03:00:00Z",
+                "created_time": "2026-03-19T03:00:00Z",
+                "plain_initial_post": "The application crashes whenever I add a new customer record. The vendor checked the data and found no errors.",
+                "ticketlogs": [{
+                    "id": 9001,
+                    "log_type": "Initial Post",
+                    "plain_note": "The application crashes whenever I add a new customer record. The vendor checked the data and found no errors.",
+                    "record_date": "2026-03-19T03:00:00Z",
+                }],
+                "attachments": [],
+            }
+
+    captured = {}
+
+    def fake_post(settings_arg, ticket_id, payload):
+        captured["message"] = payload["message"]
+        return alerts.AlertDispatchResult(status="ok", ticket_id=ticket_id, message="hook_dispatched")
+
+    monkeypatch.setattr(alerts, "_build_client", lambda settings_arg: FakeClient())
+    monkeypatch.setattr(alerts, "_post_hook_payload", fake_post)
+
+    result = dispatch_new_ticket_alert(settings, "202")
+
+    assert result.status == "ok"
+    assert "The application crashes whenever I add a new customer record" in captured["message"]
+    assert '"initial_post_context":"ERROR"' not in captured["message"]
