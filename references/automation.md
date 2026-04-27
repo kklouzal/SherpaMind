@@ -165,7 +165,9 @@ Current intended flow:
    - an explicit instruction not to do broad retrieval or unrelated ticket searches
 5. The OpenClaw classification agent records the result with `record-ticket-classification`, which validates the class id against cached taxonomy and stores confidence/rationale locally.
 
-This keeps LLM work to at most two intended invocations per observed ticket: once for initial intake and once at final closure. Result capture is local-first; SherpaDesk write-back should remain a separate guarded step after the PUT field contract is explicitly verified.
+This keeps LLM work to at most two intended invocations per observed ticket: once for initial intake and once at final closure. Result capture remains local-first, and SherpaDesk write-back is a separate guarded production lane: only completed results at/above the configured confidence threshold are eligible; the class must be active, leaf/sub-class, and present in a fresh taxonomy cache; the remote ticket is read before write; same-class results are skipped; writes use minimal form data `class_id=<id>`; and the ticket is fetched/materialized after success to confirm the class changed.
+
+Ticket class taxonomy is refreshed every 24 hours by maintenance, and classification record/write-back paths can force an immediate refresh when a class id looks invalid or stale.
 
 ## LLM accuracy-to-token policy
 

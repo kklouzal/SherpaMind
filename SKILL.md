@@ -75,6 +75,8 @@ Start with structured commands:
 - `python3 scripts/run.py report-ticket-classes`
 - `python3 scripts/run.py report-ticket-class-coverage`
 - `python3 scripts/run.py dispatch-ticket-classifications`
+- `python3 scripts/run.py refresh-ticket-class-taxonomy --force`
+- `python3 scripts/run.py writeback-ticket-classifications --limit 1`
 - `python3 scripts/run.py report-ticket-classifications`
 - `python3 scripts/run.py recent-tickets`
 - `python3 scripts/run.py open-ticket-ages`
@@ -217,6 +219,8 @@ Use these for setup/maintenance, not routine user queries:
 - `python3 scripts/run.py report-ticket-classes`
 - `python3 scripts/run.py report-ticket-class-coverage`
 - `python3 scripts/run.py dispatch-ticket-classifications`
+- `python3 scripts/run.py refresh-ticket-class-taxonomy --force`
+- `python3 scripts/run.py writeback-ticket-classifications --limit 1`
 - `python3 scripts/run.py report-ticket-classifications`
 
 ### Guarded write-backs
@@ -230,7 +234,7 @@ Manual commands remain available:
 
 ## Boundaries
 
-- Treat SherpaMind as read-only except for explicitly supported guarded write-back behavior: automatic 365-day stale confirmation during normal daemon processing, plus the manual stale-confirmation command surface.
+- Treat SherpaMind as read-only except for explicitly supported guarded write-back behavior: automatic 365-day stale confirmation during normal daemon processing; active-leaf ticket classification write-back after local event classification; plus the manual stale-confirmation and classification write-back command surfaces.
 - Keep attachment handling metadata-only by default.
 - Do not auto-download attachment bodies by default.
 - Treat docs, chunks, vector rows, and public Markdown artifacts as replaceable derived caches.

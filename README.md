@@ -428,7 +428,10 @@ python3 scripts/run.py <command> [args...]
 
 ### Guarded SherpaDesk write-backs
 
-The backend daemons now have one deliberately narrow automatic write-back: when warm/cold closed-ticket sync or priority detail enrichment already observes a ticket that is `Closed`, at least 365 days past `closed_time`, and still `is_confirmed=false`, SherpaMind immediately sends `is_confirmed=true` to `PUT /tickets/{id}` and records the result in run stats. This does not launch a separate aggressive scan; it rides the normal slow rolling update cadence.
+The backend daemons now have two deliberately narrow automatic write-back lanes:
+
+1. when warm/cold closed-ticket sync or priority detail enrichment already observes a ticket that is `Closed`, at least 365 days past `closed_time`, and still `is_confirmed=false`, SherpaMind sends `is_confirmed=true` to `PUT /tickets/{id}` and records the result in run stats. This does not launch a separate aggressive scan; it rides the normal slow rolling update cadence.
+2. when an event-scoped classification result is completed with sufficient confidence, SherpaMind validates that the target class is an active leaf/sub-class from a fresh taxonomy cache, confirms the current remote ticket class differs, sends minimal form data `class_id=<id>` to `PUT /tickets/{id}`, refreshes the ticket detail locally, and records durable write-back status on the classification event.
 
 Manual sweep commands remain available when useful:
 
@@ -450,6 +453,8 @@ Manual sweep commands remain available when useful:
 - `python3 scripts/run.py report-ticket-classes`
 - `python3 scripts/run.py report-ticket-class-coverage`
 - `python3 scripts/run.py dispatch-ticket-classifications`
+- `python3 scripts/run.py refresh-ticket-class-taxonomy --force`
+- `python3 scripts/run.py writeback-ticket-classifications --limit 1` — dry-run by default; add `--apply` for guarded production write-back
 - `python3 scripts/run.py report-ticket-classifications`
 - `python3 scripts/run.py recent-tickets`
 - `python3 scripts/run.py open-ticket-ages`

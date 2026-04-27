@@ -97,3 +97,85 @@ def test_record_classification_validates_taxonomy_class(tmp_path: Path) -> None:
     assert row["status"] == "completed"
     assert row["result_class_id"] == "11"
     assert row["confidence"] == "high"
+
+
+def test_record_classification_rejects_non_leaf_taxonomy_class(tmp_path: Path) -> None:
+    base = make_settings(tmp_path)
+    settings = Settings(**{**base.__dict__, "api_key": None})
+    initialize_db(settings.db_path)
+    seed_taxonomy(settings.db_path)
+    enqueue = enqueue_initial_ticket_classification(settings, {"id": 1, "subject": "Printer jam", "status": "Open", "updated_time": "2026-03-19T00:10:00Z"}, trigger_source="watch.last_state")
+
+    try:
+        record_classification(settings, event_id=enqueue["id"], class_id="10", confidence="high", rationale="Parent class should not write back.")
+    except ValueError as exc:
+        assert "not a leaf" in str(exc)
+    else:  # pragma: no cover - assertion clarity
+        raise AssertionError("expected non-leaf class rejection")
+
+
+def test_writeback_completed_ticket_classification_updates_changed_leaf_class(tmp_path: Path) -> None:
+    from sherpamind.classification import write_back_completed_ticket_classifications
+
+    settings = Settings(**{**make_settings(tmp_path).__dict__, "ticket_class_taxonomy_max_age_seconds": 999999999})
+    initialize_db(settings.db_path)
+    seed_taxonomy(settings.db_path)
+    upsert_tickets(settings.db_path, [{"id": 1, "subject": "Printer jam", "status": "Open", "class_id": 12, "class_name": "Hardware / Desktop", "updated_time": "2026-03-19T00:10:00Z"}])
+    enqueue = enqueue_initial_ticket_classification(settings, {"id": 1, "subject": "Printer jam", "status": "Open", "class_id": 12, "class_name": "Hardware / Desktop", "updated_time": "2026-03-19T00:10:00Z"}, trigger_source="watch.last_state")
+    record_classification(settings, event_id=enqueue["id"], class_id="11", confidence="high", rationale="Printer issue maps to printer subclass.")
+
+    class FakeClient:
+        def __init__(self):
+            self.class_id = "12"
+            self.puts = []
+
+        def list_ticket_classes(self):
+            raise AssertionError("taxonomy is fresh; should not refresh")
+
+        def get(self, path):
+            assert path == "tickets/1"
+            return {"id": 1, "subject": "Printer jam", "status": "Open", "class_id": self.class_id, "class_name": "Hardware / Desktop" if self.class_id == "12" else "Hardware / Printer"}
+
+        def put(self, path, data=None):
+            assert path == "tickets/1"
+            self.puts.append(dict(data or {}))
+            self.class_id = str(data["class_id"])
+            return ""
+
+    fake = FakeClient()
+    result = write_back_completed_ticket_classifications(settings, client=fake, limit=1, apply=True)
+
+    assert result["updated"] == 1
+    assert fake.puts == [{"class_id": "11"}]
+    with connect(settings.db_path) as conn:
+        row = conn.execute("SELECT writeback_status, writeback_attempt_count FROM ticket_classification_events WHERE id = ?", (enqueue["id"],)).fetchone()
+    assert row["writeback_status"] == "succeeded"
+    assert row["writeback_attempt_count"] == 1
+
+
+def test_writeback_completed_ticket_classification_skips_same_class(tmp_path: Path) -> None:
+    from sherpamind.classification import write_back_completed_ticket_classifications
+
+    settings = Settings(**{**make_settings(tmp_path).__dict__, "ticket_class_taxonomy_max_age_seconds": 999999999})
+    initialize_db(settings.db_path)
+    seed_taxonomy(settings.db_path)
+    enqueue = enqueue_initial_ticket_classification(settings, {"id": 1, "subject": "Printer jam", "status": "Open", "class_id": 11, "class_name": "Hardware / Printer", "updated_time": "2026-03-19T00:10:00Z"}, trigger_source="watch.last_state")
+    record_classification(settings, event_id=enqueue["id"], class_id="11", confidence="high", rationale="Already correct.")
+
+    class FakeClient:
+        def list_ticket_classes(self):
+            raise AssertionError("taxonomy is fresh; should not refresh")
+
+        def get(self, path):
+            return {"id": 1, "subject": "Printer jam", "status": "Open", "class_id": 11, "class_name": "Hardware / Printer"}
+
+        def put(self, path, data=None):
+            raise AssertionError("same class should not be written")
+
+    result = write_back_completed_ticket_classifications(settings, client=FakeClient(), limit=1, apply=True)
+
+    assert result["updated"] == 0
+    assert result["skipped"] == 1
+    with connect(settings.db_path) as conn:
+        row = conn.execute("SELECT writeback_status FROM ticket_classification_events WHERE id = ?", (enqueue["id"],)).fetchone()
+    assert row["writeback_status"] == "skipped_same_class"

@@ -12,7 +12,7 @@ import traceback
 from typing import Any, Callable
 
 from .analysis import get_api_usage_summary
-from .classification import dispatch_ticket_classification_events
+from .classification import dispatch_ticket_classification_events, refresh_ticket_class_taxonomy, write_back_completed_ticket_classifications
 from .db import cleanup_stale_ingest_runs, connect, prune_api_request_events, run_with_db_lock_retries
 from .documents import ensure_current_ticket_materialization, get_ticket_document_materialization_status
 from .enrichment import enrich_priority_ticket_details
@@ -289,7 +289,9 @@ def _task_specs(settings: Settings) -> list[TaskSpec]:
         TaskSpec("public_snapshot", settings.service_public_snapshot_every_seconds, lambda s: generate_public_snapshot(s.db_path), budget_class="lightweight"),
         TaskSpec("vector_refresh", settings.service_vector_refresh_every_seconds, lambda s: build_vector_index(s.db_path), budget_class="lightweight"),
         TaskSpec("runtime_status", settings.service_doctor_every_seconds, lambda s: generate_runtime_status_artifacts(s.db_path), budget_class="lightweight"),
+        TaskSpec("ticket_class_taxonomy_refresh", settings.service_ticket_class_taxonomy_refresh_every_seconds, lambda s: refresh_ticket_class_taxonomy(s), budget_class="important", requires_remote_api=True),
         TaskSpec("classification_dispatch", settings.service_classification_dispatch_every_seconds, lambda s: dispatch_ticket_classification_events(s, limit=2), budget_class="lightweight"),
+        TaskSpec("classification_writeback", settings.service_classification_writeback_every_seconds, lambda s: write_back_completed_ticket_classifications(s, limit=1, apply=True), budget_class="important", requires_remote_api=True),
         TaskSpec("doctor_marker", settings.service_doctor_every_seconds, lambda s: {"status": "ok", "checked_at": _now_iso()}, budget_class="lightweight"),
     ]
 

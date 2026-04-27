@@ -227,6 +227,11 @@ CREATE TABLE IF NOT EXISTS alert_queue (
     lease_expires_at TEXT,
     attempt_count INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
+    writeback_status TEXT,
+    writeback_attempt_count INTEGER NOT NULL DEFAULT 0,
+    writeback_at TEXT,
+    writeback_last_error TEXT,
+    writeback_response_json TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     sent_at TEXT
@@ -315,6 +320,11 @@ CREATE TABLE IF NOT EXISTS ticket_classification_events (
     dispatched_at TEXT,
     completed_at TEXT,
     last_error TEXT,
+    writeback_status TEXT,
+    writeback_attempt_count INTEGER NOT NULL DEFAULT 0,
+    writeback_at TEXT,
+    writeback_last_error TEXT,
+    writeback_response_json TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY(ticket_id) REFERENCES tickets(id)
@@ -390,6 +400,18 @@ def initialize_db(db_path: Path) -> None:
                 conn.execute("ALTER TABLE ticket_detail_failures ADD COLUMN last_path TEXT")
             if 'raw_json' not in failure_cols:
                 conn.execute("ALTER TABLE ticket_detail_failures ADD COLUMN raw_json TEXT NOT NULL DEFAULT '{}' ")
+        if 'ticket_classification_events' in table_names:
+            class_event_cols = _table_columns(conn, 'ticket_classification_events')
+            if 'writeback_status' not in class_event_cols:
+                conn.execute("ALTER TABLE ticket_classification_events ADD COLUMN writeback_status TEXT")
+            if 'writeback_attempt_count' not in class_event_cols:
+                conn.execute("ALTER TABLE ticket_classification_events ADD COLUMN writeback_attempt_count INTEGER NOT NULL DEFAULT 0")
+            if 'writeback_at' not in class_event_cols:
+                conn.execute("ALTER TABLE ticket_classification_events ADD COLUMN writeback_at TEXT")
+            if 'writeback_last_error' not in class_event_cols:
+                conn.execute("ALTER TABLE ticket_classification_events ADD COLUMN writeback_last_error TEXT")
+            if 'writeback_response_json' not in class_event_cols:
+                conn.execute("ALTER TABLE ticket_classification_events ADD COLUMN writeback_response_json TEXT")
         conn.commit()
 
 
@@ -709,6 +731,34 @@ def list_ticket_taxonomy_classes(db_path: Path, *, active_only: bool = False, le
         ).fetchall()
     return [dict(row) for row in rows]
 
+
+
+def get_ticket_taxonomy_freshness(db_path: Path) -> dict[str, Any]:
+    with connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS class_count,
+                   MIN(synced_at) AS oldest_synced_at,
+                   MAX(synced_at) AS newest_synced_at,
+                   SUM(CASE WHEN COALESCE(is_active, 1) = 1 THEN 1 ELSE 0 END) AS active_count,
+                   SUM(CASE WHEN COALESCE(is_active, 1) = 1 AND COALESCE(is_lastchild, 0) = 1 THEN 1 ELSE 0 END) AS active_leaf_count
+            FROM ticket_taxonomy_classes
+            """
+        ).fetchone()
+    return dict(row)
+
+
+def get_ticket_taxonomy_class(db_path: Path, class_id: str) -> dict[str, Any] | None:
+    with connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT id, parent_id, name, path, hierarchy_level, is_lastchild, is_active, synced_at
+            FROM ticket_taxonomy_classes
+            WHERE id = ?
+            """,
+            (str(class_id),),
+        ).fetchone()
+    return dict(row) if row else None
 
 def upsert_tickets(db_path: Path, tickets: list[dict[str, Any]], synced_at: str | None = None) -> int:
     synced_at = synced_at or now_iso()
@@ -1549,9 +1599,13 @@ def record_ticket_classification_result(
 ) -> dict[str, Any]:
     now = now_iso()
     with connect(db_path) as conn:
-        taxonomy = conn.execute("SELECT id, path FROM ticket_taxonomy_classes WHERE id = ?", (str(class_id),)).fetchone()
+        taxonomy = conn.execute("SELECT id, path, is_active, is_lastchild FROM ticket_taxonomy_classes WHERE id = ?", (str(class_id),)).fetchone()
         if taxonomy is None:
             raise ValueError(f"Unknown ticket class id: {class_id}")
+        if int(taxonomy["is_active"] if taxonomy["is_active"] is not None else 1) != 1:
+            raise ValueError(f"Inactive ticket class id: {class_id}")
+        if int(taxonomy["is_lastchild"] if taxonomy["is_lastchild"] is not None else 0) != 1:
+            raise ValueError(f"Ticket class id is not a leaf/sub-class: {class_id}")
         event = conn.execute("SELECT id FROM ticket_classification_events WHERE id = ?", (event_id,)).fetchone()
         if event is None:
             raise ValueError(f"Unknown classification event id: {event_id}")
@@ -1573,7 +1627,7 @@ def get_ticket_classification_summary(db_path: Path) -> dict[str, Any]:
         by_type = [dict(row) for row in conn.execute("SELECT event_type, status, COUNT(*) AS count FROM ticket_classification_events GROUP BY event_type, status ORDER BY event_type, status").fetchall()]
         recent = [dict(row) for row in conn.execute(
             """
-            SELECT id, ticket_id, event_type, status, result_class_id, result_class_path, confidence, updated_at, last_error
+            SELECT id, ticket_id, event_type, status, result_class_id, result_class_path, confidence, updated_at, last_error, writeback_status, writeback_last_error
             FROM ticket_classification_events
             ORDER BY id DESC
             LIMIT 10

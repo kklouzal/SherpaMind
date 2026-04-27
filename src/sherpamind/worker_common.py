@@ -54,7 +54,7 @@ def aggregate_service_state() -> dict[str, Any]:
     hot_tasks = hot.get("tasks") or {}
     aggregate["tasks"]["hot_open"] = hot_tasks.get("hot_open", aggregate["tasks"].get("hot_open", {}))
     aggregate["tasks"]["warm_watch"] = hot_tasks.get("warm_watch", aggregate["tasks"].get("warm_watch", {}))
-    for key in ("warm_closed", "cold_closed", "enrichment", "retrieval_artifacts", "public_snapshot", "vector_refresh", "runtime_status", "classification_dispatch", "doctor_marker"):
+    for key in ("warm_closed", "cold_closed", "enrichment", "retrieval_artifacts", "public_snapshot", "vector_refresh", "runtime_status", "ticket_class_taxonomy_refresh", "classification_dispatch", "classification_writeback", "doctor_marker"):
         if key in maintenance_tasks:
             aggregate["tasks"][key] = maintenance_tasks[key]
     aggregate["loop_status"] = {

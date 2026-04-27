@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .client import SherpaDeskClient
-from .db import connect, list_ticket_taxonomy_classes, now_iso, replace_ticket_taxonomy_classes
+from .db import connect, get_ticket_taxonomy_freshness, list_ticket_taxonomy_classes, now_iso, replace_ticket_taxonomy_classes
 from .text_cleanup import normalize_metadata_label
 
 
@@ -49,6 +50,41 @@ def sync_ticket_classes(client: SherpaDeskClient, db_path: Path) -> dict[str, An
         "class_count": count,
         "leaf_count": leaf_count,
         "active_count": active_count,
+    }
+
+
+def _parse_iso(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def ensure_ticket_classes_fresh(client: SherpaDeskClient, db_path: Path, *, max_age_seconds: int = 86400, force: bool = False) -> dict[str, Any]:
+    freshness = get_ticket_taxonomy_freshness(db_path)
+    newest = _parse_iso(freshness.get("newest_synced_at"))
+    age_seconds = None
+    if newest is not None:
+        age_seconds = max((datetime.now(timezone.utc) - newest).total_seconds(), 0.0)
+    stale = force or not freshness.get("class_count") or newest is None or age_seconds is None or age_seconds > max_age_seconds
+    if not stale:
+        return {
+            "status": "fresh",
+            "refreshed": False,
+            "max_age_seconds": max_age_seconds,
+            "age_seconds": round(age_seconds, 3) if age_seconds is not None else None,
+            "freshness": freshness,
+        }
+    result = sync_ticket_classes(client, db_path)
+    return {
+        "status": "refreshed",
+        "refreshed": True,
+        "max_age_seconds": max_age_seconds,
+        "age_seconds": round(age_seconds, 3) if age_seconds is not None else None,
+        "before": freshness,
+        "sync": result,
     }
 
 

@@ -57,7 +57,12 @@ class Settings:
     api_request_log_retention_days: int = 14
     classification_enabled: bool = True
     classification_model: str | None = None
+    classification_writeback_enabled: bool = True
+    classification_writeback_min_confidence: str = "high"
+    ticket_class_taxonomy_max_age_seconds: int = 86400
+    service_ticket_class_taxonomy_refresh_every_seconds: int = 86400
     service_classification_dispatch_every_seconds: int = 120
+    service_classification_writeback_every_seconds: int = 300
 
 
 def _read_key_value_file(path: Path) -> dict[str, str]:
@@ -159,6 +164,12 @@ def _read_openclaw_skill_entry() -> dict[str, str]:
     classification_model = entry_value("classificationModel")
     if isinstance(classification_model, str) and classification_model.strip():
         values["SHERPAMIND_CLASSIFICATION_MODEL"] = classification_model.strip()
+    classification_writeback_enabled = entry_value("classificationWritebackEnabled")
+    if isinstance(classification_writeback_enabled, bool):
+        values["SHERPAMIND_CLASSIFICATION_WRITEBACK_ENABLED"] = "true" if classification_writeback_enabled else "false"
+    classification_writeback_min_confidence = entry_value("classificationWritebackMinConfidence")
+    if isinstance(classification_writeback_min_confidence, str) and classification_writeback_min_confidence.strip():
+        values["SHERPAMIND_CLASSIFICATION_WRITEBACK_MIN_CONFIDENCE"] = classification_writeback_min_confidence.strip()
     return values
 
 
@@ -264,5 +275,10 @@ def load_settings() -> Settings:
         api_request_log_retention_days=int(_env_or_file("SHERPAMIND_API_REQUEST_LOG_RETENTION_DAYS", file_values, "14") or "14"),
         classification_enabled=str(_env_or_file("SHERPAMIND_CLASSIFICATION_ENABLED", file_values, openclaw_skill_values.get("SHERPAMIND_CLASSIFICATION_ENABLED") or "true") or "true").strip().lower() in {"1", "true", "yes", "on"},
         classification_model=_env_or_file("SHERPAMIND_CLASSIFICATION_MODEL", file_values, openclaw_skill_values.get("SHERPAMIND_CLASSIFICATION_MODEL")),
+        classification_writeback_enabled=str(_env_or_file("SHERPAMIND_CLASSIFICATION_WRITEBACK_ENABLED", file_values, openclaw_skill_values.get("SHERPAMIND_CLASSIFICATION_WRITEBACK_ENABLED") or "true") or "true").strip().lower() in {"1", "true", "yes", "on"},
+        classification_writeback_min_confidence=str(_env_or_file("SHERPAMIND_CLASSIFICATION_WRITEBACK_MIN_CONFIDENCE", file_values, openclaw_skill_values.get("SHERPAMIND_CLASSIFICATION_WRITEBACK_MIN_CONFIDENCE") or "high") or "high").strip().lower(),
+        ticket_class_taxonomy_max_age_seconds=int(_env_or_file("SHERPAMIND_TICKET_CLASS_TAXONOMY_MAX_AGE_SECONDS", file_values, "86400") or "86400"),
+        service_ticket_class_taxonomy_refresh_every_seconds=int(_env_or_file("SHERPAMIND_SERVICE_TICKET_CLASS_TAXONOMY_REFRESH_EVERY_SECONDS", file_values, "86400") or "86400"),
         service_classification_dispatch_every_seconds=int(_env_or_file("SHERPAMIND_SERVICE_CLASSIFICATION_DISPATCH_EVERY_SECONDS", file_values, "120") or "120"),
+        service_classification_writeback_every_seconds=int(_env_or_file("SHERPAMIND_SERVICE_CLASSIFICATION_WRITEBACK_EVERY_SECONDS", file_values, "300") or "300"),
     )

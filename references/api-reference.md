@@ -41,7 +41,10 @@ We also have negative findings that matter:
 
 ## Write-back notes
 
-The public wiki documents normal update operations as `PUT /tickets/{id}` with form-style fields and shows examples updating ticket status with a request body such as `status=closed`. SherpaMind's first guarded write-back uses that same endpoint pattern for a deliberately narrow remediation: when normal daemon processing already observes a closed ticket at least 365 days old whose `is_confirmed` field is false, it sends `is_confirmed=true` on the spot.
+The public wiki documents normal update operations as `PUT /tickets/{id}` with form-style fields and shows examples updating ticket status with a request body such as `status=closed`. SherpaMind uses that same endpoint pattern for deliberately narrow write-backs:
+
+- stale closed-ticket confirmation sends `is_confirmed=true` when normal daemon processing already observes a closed ticket at least 365 days old whose `is_confirmed` field is false.
+- ticket classification write-back sends minimal form data `class_id=<active_leaf_class_id>`. A live no-op PUT with the ticket's current `class_id` succeeded, and a live change/revert test confirmed `class_id` updates via this field while preserving the ticket's `updated_time` in the observed response.
 
 This specific `is_confirmed=true` write field is based on the field name present in live ticket/detail payloads and should be treated as empirically verified only after the first live daemon write succeeds. The write-back is intentionally tied to slow warm/cold/enrichment processing rather than a separate aggressive scan.
 

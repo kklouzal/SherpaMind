@@ -26,7 +26,7 @@ from .analysis import (
     search_ticket_documents,
 )
 from .automation import doctor_automation, remove_managed_cron_jobs
-from .classification import dispatch_ticket_classification_events, record_classification
+from .classification import dispatch_ticket_classification_events, record_classification, refresh_ticket_class_taxonomy, write_back_completed_ticket_classifications
 from .client import SherpaDeskClient
 from .documents import export_ticket_chunks, export_ticket_documents, materialize_ticket_documents
 from .enrichment import enrich_priority_ticket_details
@@ -143,6 +143,20 @@ def dispatch_ticket_classifications(limit: int = 2) -> None:
     settings = load_settings()
     initialize_db(settings.db_path)
     print(json.dumps(dispatch_ticket_classification_events(settings, limit=limit), indent=2))
+
+
+@app.command("refresh-ticket-class-taxonomy")
+def refresh_ticket_class_taxonomy_command(force: bool = False) -> None:
+    settings = load_settings()
+    initialize_db(settings.db_path)
+    print(json.dumps(refresh_ticket_class_taxonomy(settings, force=force), indent=2))
+
+
+@app.command("writeback-ticket-classifications")
+def writeback_ticket_classifications(limit: int = 1, apply: bool = False) -> None:
+    settings = load_settings()
+    initialize_db(settings.db_path)
+    print(json.dumps(write_back_completed_ticket_classifications(settings, limit=limit, apply=apply), indent=2))
 
 
 @app.command("record-ticket-classification")
