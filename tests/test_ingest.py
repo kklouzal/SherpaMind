@@ -12,6 +12,11 @@ class FakeClient:
         self.open_rows = open_rows or []
         self.closed_rows = closed_rows or []
         self.closed_pages = closed_pages or {}
+        self.put_calls = []
+
+    def put(self, path, data=None):
+        self.put_calls.append((path, data or {}))
+        return {"status": "ok"}
 
     def list_paginated(self, path, *, page_size=100, max_pages=None, extra_params=None):
         extra_params = extra_params or {}
@@ -103,6 +108,21 @@ def test_sync_cold_closed_audit_advances_page_pointer(tmp_path: Path, monkeypatc
     with connect(settings.db_path) as conn:
         chunk_count = conn.execute("SELECT COUNT(*) AS c FROM ticket_document_chunks").fetchone()["c"]
     assert chunk_count == 3
+
+
+def test_sync_cold_closed_audit_auto_confirms_stale_unconfirmed_rows(tmp_path: Path, monkeypatch) -> None:
+    settings = make_settings(tmp_path)
+    fake = FakeClient(closed_pages={0: [{"id": 41, "subject": "Old unconfirmed", "status": "Closed", "closed_time": "2000-03-01T10:00:00Z", "is_confirmed": False}]})
+    monkeypatch.setattr("sherpamind.ingest._build_client", lambda settings: fake)
+
+    result = sync_cold_closed_audit(settings)
+
+    assert result.status == "ok"
+    assert fake.put_calls == [("tickets/41", {"is_confirmed": "true"})]
+    assert result.stats["stale_unconfirmed_writeback"]["updated_count"] == 1
+    with connect(settings.db_path) as conn:
+        confirmed = conn.execute("SELECT json_extract(raw_json, '$.is_confirmed') AS c FROM tickets WHERE id = '41'").fetchone()["c"]
+    assert confirmed == 1
 
 
 def test_sync_hot_open_skips_when_single_flight_lease_is_active(tmp_path: Path, monkeypatch) -> None:

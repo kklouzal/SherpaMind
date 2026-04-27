@@ -25,6 +25,7 @@ from .documents import materialize_ticket_documents
 from .settings import Settings
 from .sync_state import get_json_state, set_json_state, set_sync_state
 from .time_utils import parse_sherpadesk_timestamp
+from .writebacks import confirm_observed_stale_unconfirmed_tickets
 
 
 @dataclass
@@ -245,6 +246,7 @@ def sync_warm_closed_tickets(settings: Settings) -> DeltaSyncResult:
                 continue
             if dt >= cutoff:
                 warm_tickets.append(ticket)
+        writeback = confirm_observed_stale_unconfirmed_tickets(client, warm_tickets, source="sync_warm_closed")
         upsert_tickets(settings.db_path, warm_tickets, synced_at=synced_at)
         renew_ingest_mode_lease(settings.db_path, "sync_warm_closed", owner_id, lease_seconds=DEFAULT_INGEST_MODE_LEASE_SECONDS, notes="sync_warm_closed materialization")
         materialization = _materialize_touched_tickets(settings, warm_tickets, source="sync_warm_closed", priority=40)
@@ -256,6 +258,7 @@ def sync_warm_closed_tickets(settings: Settings) -> DeltaSyncResult:
             "warm_ticket_count": len(warm_tickets),
             "materialized_documents": materialization.get("document_count", 0),
             "materialized_chunks": materialization.get("chunk_count", 0),
+            "stale_unconfirmed_writeback": writeback,
             "lease": active_lease,
         }
         set_json_state(settings.db_path, "sync.warm_closed.last_state", stats)
@@ -309,6 +312,7 @@ def sync_cold_closed_audit(settings: Settings, *, pages_per_run: int | None = No
             next_page = start_page + pages_per_run
         if cycle_completed:
             completed_cycles += 1
+        writeback = confirm_observed_stale_unconfirmed_tickets(client, closed_pages, source="sync_cold_closed_audit")
         upsert_tickets(settings.db_path, closed_pages, synced_at=synced_at)
         renew_ingest_mode_lease(settings.db_path, "sync_cold_closed_audit", owner_id, lease_seconds=DEFAULT_INGEST_MODE_LEASE_SECONDS, notes=f"sync_cold_closed_audit materialization pages={pages_per_run}")
         materialization = _materialize_touched_tickets(settings, closed_pages, source="sync_cold_closed_audit", priority=80)
@@ -322,6 +326,7 @@ def sync_cold_closed_audit(settings: Settings, *, pages_per_run: int | None = No
             "completed_cycles": completed_cycles,
             "materialized_documents": materialization.get("document_count", 0),
             "materialized_chunks": materialization.get("chunk_count", 0),
+            "stale_unconfirmed_writeback": writeback,
             "lease": active_lease,
         }
         set_json_state(settings.db_path, "sync.cold_closed.last_state", stats)

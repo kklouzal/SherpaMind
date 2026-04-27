@@ -11,6 +11,9 @@ from .documents import materialize_ticket_documents
 from .settings import Settings
 from .time_utils import parse_sherpadesk_timestamp
 
+STALE_UNCONFIRMED_MIN_CLOSED_DAYS = 365
+CONFIRM_TICKET_PAYLOAD = {"is_confirmed": "true"}
+
 
 @dataclass(frozen=True)
 class StaleUnconfirmedCandidate:
@@ -48,10 +51,48 @@ def _closed_days(closed_at: str, *, now: datetime) -> int:
     return max((now - closed_dt).days, 0)
 
 
+def _is_false_confirmation(value: Any) -> bool:
+    if value is False:
+        return True
+    if isinstance(value, int | float):
+        return value == 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"0", "false", "no", "unconfirmed"}
+    return False
+
+
+def _observed_ticket_candidate(ticket: dict[str, Any], *, min_closed_days: int, now: datetime) -> StaleUnconfirmedCandidate | None:
+    ticket_id = ticket.get("id")
+    if ticket_id is None:
+        return None
+    if str(ticket.get("status") or "").strip().lower() != "closed":
+        return None
+    closed_at = ticket.get("closed_time") or ticket.get("closed_at")
+    if not closed_at:
+        return None
+    closed_dt = parse_sherpadesk_timestamp(str(closed_at))
+    if closed_dt is None:
+        return None
+    closed_days = max((now - closed_dt).days, 0)
+    if closed_days < min_closed_days:
+        return None
+    if not _is_false_confirmation(ticket.get("is_confirmed")):
+        return None
+    return StaleUnconfirmedCandidate(
+        ticket_id=str(ticket_id),
+        ticket_number=str(ticket.get("ticket_number")) if ticket.get("ticket_number") is not None else None,
+        subject=ticket.get("subject"),
+        status=ticket.get("status"),
+        closed_at=str(closed_at),
+        closed_days=closed_days,
+        is_confirmed=ticket.get("is_confirmed"),
+    )
+
+
 def list_stale_unconfirmed_closed_tickets(
     db_path: Path,
     *,
-    min_closed_days: int = 365,
+    min_closed_days: int = STALE_UNCONFIRMED_MIN_CLOSED_DAYS,
     limit: int = 100,
     now: datetime | None = None,
 ) -> list[StaleUnconfirmedCandidate]:
@@ -105,6 +146,66 @@ def _candidate_to_dict(candidate: StaleUnconfirmedCandidate) -> dict[str, Any]:
     }
 
 
+def confirm_observed_stale_unconfirmed_tickets(
+    client: SherpaDeskClient,
+    tickets: list[dict[str, Any]],
+    *,
+    min_closed_days: int = STALE_UNCONFIRMED_MIN_CLOSED_DAYS,
+    source: str,
+) -> dict[str, Any]:
+    """Auto-confirm eligible tickets already observed by normal daemon work.
+
+    This intentionally does not scan for more tickets. It only mutates tickets
+    already returned by the slow rolling ingest/enrichment paths, keeping the
+    write-back cadence tied to normal SherpaDesk reads and pacing.
+    """
+    now = datetime.now(timezone.utc)
+    candidates: list[StaleUnconfirmedCandidate] = []
+    seen_ids: set[str] = set()
+    for ticket in tickets:
+        candidate = _observed_ticket_candidate(ticket, min_closed_days=min_closed_days, now=now)
+        if candidate is None or candidate.ticket_id in seen_ids:
+            continue
+        candidates.append(candidate)
+        seen_ids.add(candidate.ticket_id)
+
+    updates: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+    by_id = {str(ticket.get("id")): ticket for ticket in tickets if ticket.get("id") is not None}
+    for candidate in candidates:
+        try:
+            response = client.put(f"tickets/{candidate.ticket_id}", data=CONFIRM_TICKET_PAYLOAD)
+            if candidate.ticket_id in by_id:
+                by_id[candidate.ticket_id]["is_confirmed"] = True
+            updates.append(
+                {
+                    "ticket_id": candidate.ticket_id,
+                    "ticket_number": candidate.ticket_number,
+                    "closed_days": candidate.closed_days,
+                    "response_type": type(response).__name__,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - keep normal daemon processing moving and report the failed ticket.
+            failures.append(
+                {
+                    "ticket_id": candidate.ticket_id,
+                    "ticket_number": candidate.ticket_number,
+                    "closed_days": candidate.closed_days,
+                    "error": type(exc).__name__,
+                    "message": str(exc),
+                }
+            )
+    return {
+        "source": source,
+        "min_closed_days": min_closed_days,
+        "candidate_count": len(candidates),
+        "updated_count": len(updates),
+        "failed_count": len(failures),
+        "updates": updates,
+        "failures": failures,
+    }
+
+
 def _refresh_ticket_after_write(settings: Settings, client: SherpaDeskClient, ticket_id: str) -> dict[str, Any]:
     detail = client.get(f"tickets/{ticket_id}")
     if isinstance(detail, dict):
@@ -121,7 +222,7 @@ def confirm_stale_unconfirmed_closed_tickets(
     *,
     client: SherpaDeskClient | None = None,
     apply: bool = False,
-    min_closed_days: int = 365,
+    min_closed_days: int = STALE_UNCONFIRMED_MIN_CLOSED_DAYS,
     limit: int = 25,
 ) -> StaleUnconfirmedResult:
     initialize_db(settings.db_path)
@@ -176,14 +277,14 @@ def confirm_stale_unconfirmed_closed_tickets(
     failures: list[dict[str, Any]] = []
     for candidate in candidates:
         try:
-            response = client.put(f"tickets/{candidate.ticket_id}", data={"is_confirmed": "true"})
+            response = client.put(f"tickets/{candidate.ticket_id}", data=CONFIRM_TICKET_PAYLOAD)
             refresh = _refresh_ticket_after_write(settings, client, candidate.ticket_id)
             updates.append(
                 {
                     "ticket_id": candidate.ticket_id,
                     "ticket_number": candidate.ticket_number,
                     "closed_days": candidate.closed_days,
-                    "write_payload": {"is_confirmed": "true"},
+                    "write_payload": CONFIRM_TICKET_PAYLOAD,
                     "response_type": type(response).__name__,
                     "refresh": refresh,
                 }

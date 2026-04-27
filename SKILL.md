@@ -205,16 +205,16 @@ Use these for setup/maintenance, not routine user queries:
 
 ### Guarded write-backs
 
-SherpaMind now has one deliberately narrow SherpaDesk write-back lane:
+SherpaMind now has one deliberately narrow SherpaDesk write-back lane: while normal backend daemon work is already touching old closed tickets, any observed ticket with `status=Closed`, `closed_time` at least 365 days old, and `is_confirmed=false` is automatically updated with `PUT /tickets/{id}` and `is_confirmed=true`. This rides the slow rolling warm/cold/enrichment cadence rather than scanning aggressively.
 
-- `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets` — dry-run only; lists closed tickets at least 365 days old whose local `is_confirmed` field is still false
-- `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets --apply` — live write-back; sends `is_confirmed=true` to `PUT /tickets/{id}` for those candidates, then refreshes/materializes the touched tickets locally
+Manual commands remain available:
 
-Do not run the `--apply` form unless the user explicitly asks for live write-back or approves the dry-run candidate set.
+- `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets` — dry-run list from the local DB
+- `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets --apply` — live write-back for local DB candidates, then refreshes/materializes touched tickets
 
 ## Boundaries
 
-- Treat SherpaMind as read-only except for explicitly supported guarded write-back commands, and require explicit approval before live `--apply` runs.
+- Treat SherpaMind as read-only except for explicitly supported guarded write-back behavior: automatic 365-day stale confirmation during normal daemon processing, plus the manual stale-confirmation command surface.
 - Keep attachment handling metadata-only by default.
 - Do not auto-download attachment bodies by default.
 - Treat docs, chunks, vector rows, and public Markdown artifacts as replaceable derived caches.

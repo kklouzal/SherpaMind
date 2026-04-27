@@ -41,9 +41,9 @@ We also have negative findings that matter:
 
 ## Write-back notes
 
-The public wiki documents normal update operations as `PUT /tickets/{id}` with form-style fields and shows examples updating ticket status with a request body such as `status=closed`. SherpaMind's first guarded write-back uses that same endpoint pattern for a deliberately narrow remediation: closed tickets at least 365 days old whose local `is_confirmed` field is still false can be updated with `is_confirmed=true`.
+The public wiki documents normal update operations as `PUT /tickets/{id}` with form-style fields and shows examples updating ticket status with a request body such as `status=closed`. SherpaMind's first guarded write-back uses that same endpoint pattern for a deliberately narrow remediation: when normal daemon processing already observes a closed ticket at least 365 days old whose `is_confirmed` field is false, it sends `is_confirmed=true` on the spot.
 
-This specific `is_confirmed=true` write field is based on the field name present in live ticket/detail payloads and should be treated as empirically verified only after the first approved live apply succeeds. Until then, operators should run `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets` as a dry-run and use `--apply` only with explicit approval.
+This specific `is_confirmed=true` write field is based on the field name present in live ticket/detail payloads and should be treated as empirically verified only after the first live daemon write succeeds. The write-back is intentionally tied to slow warm/cold/enrichment processing rather than a separate aggressive scan.
 
 Account-specific identifiers and secrets should remain local-only and should not be committed to this public repo.
 Examples and verification notes in this repository should stay anonymized unless identity is absolutely necessary.

@@ -426,10 +426,12 @@ python3 scripts/run.py <command> [args...]
 
 ### Guarded SherpaDesk write-backs
 
-- `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets` *(dry-run; lists closed tickets at least 365 days old whose local `is_confirmed` field is still false)*
-- `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets --apply` *(live write-back; sends `is_confirmed=true` to `PUT /tickets/{id}` for the listed candidates, then refreshes/materializes those tickets locally)*
+The backend daemons now have one deliberately narrow automatic write-back: when warm/cold closed-ticket sync or priority detail enrichment already observes a ticket that is `Closed`, at least 365 days past `closed_time`, and still `is_confirmed=false`, SherpaMind immediately sends `is_confirmed=true` to `PUT /tickets/{id}` and records the result in run stats. This does not launch a separate aggressive scan; it rides the normal slow rolling update cadence.
 
-Keep this lane deliberately narrow: the first supported write-back is only for long-closed unconfirmed tickets. Run the dry-run first, inspect the candidate count/examples, then use `--apply` only when the candidate set looks right.
+Manual sweep commands remain available when useful:
+
+- `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets` *(dry-run list from local DB)*
+- `python3 scripts/run.py confirm-stale-unconfirmed-closed-tickets --apply` *(live write-back for local DB candidates, then refresh/materialize touched tickets)*
 
 ### Reporting and analysis
 

@@ -22,6 +22,7 @@ from .db import (
 from .documents import materialize_ticket_documents
 from .settings import Settings
 from .sync_state import set_json_state
+from .writebacks import confirm_observed_stale_unconfirmed_tickets
 
 
 @dataclass
@@ -418,6 +419,7 @@ def enrich_priority_ticket_details(settings: Settings, limit: int = 50, material
             if isinstance(detail, dict):
                 details.append(detail)
                 clear_ticket_detail_failure(settings.db_path, ticket_id)
+        writeback = confirm_observed_stale_unconfirmed_tickets(client, details, source="enrich_priority_ticket_details")
         upsert_tickets(settings.db_path, details, synced_at=synced_at)
         upsert_ticket_details(settings.db_path, details, synced_at=synced_at)
         doc_stats = materialize_ticket_documents(settings.db_path, limit=None) if materialize_docs else None
@@ -436,6 +438,7 @@ def enrich_priority_ticket_details(settings: Settings, limit: int = 50, material
             'materialized_documents': doc_stats['document_count'] if doc_stats else None,
             'failed_ticket_count': len(failures),
             'failed_ticket_ids': [failure['ticket_id'] for failure in failures],
+            'stale_unconfirmed_writeback': writeback,
             'permanent_failure_count': sum(1 for failure in failures if failure['permanent_failure']),
             'temporary_failure_count': sum(1 for failure in failures if not failure['permanent_failure']),
         }
