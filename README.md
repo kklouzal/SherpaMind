@@ -256,7 +256,7 @@ The live runtime is split into three worker classes:
    - marks events sent / failed / retrying with dedupe-safe queue semantics
 
 3. **Maintenance worker**
-   - owns warm closed reconciliation, cold audit, enrichment, retrieval artifact refresh, public snapshot generation, vector refresh, and runtime-status generation
+   - owns warm closed reconciliation, cold audit, enrichment, retrieval artifact refresh, public snapshot generation, vector refresh, runtime-status generation, and tiny-batch classification dispatch
    - keeps heavy maintenance work isolated so it cannot block the hot alert detection lane
 
 This split exists specifically to avoid the old failure mode where latency-sensitive ticket alerts waited behind cold audit, enrichment, or corpus-wide artifact work.

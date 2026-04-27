@@ -166,3 +166,15 @@ Current intended flow:
 5. The OpenClaw classification agent records the result with `record-ticket-classification`, which validates the class id against cached taxonomy and stores confidence/rationale locally.
 
 This keeps LLM work to at most two intended invocations per observed ticket: once for initial intake and once at final closure. Result capture is local-first; SherpaDesk write-back should remain a separate guarded step after the PUT field contract is explicitly verified.
+
+## LLM accuracy-to-token policy
+
+SherpaMind should spend cheap local computation before model tokens. Any system that invokes OpenClaw/LLM work should follow this shape:
+
+- trigger only from real events or explicit user queries, never broad periodic model sweeps
+- precompute/cache local evidence first, then pass only the bounded fields needed for the decision
+- prefer compact JSON (`id:path` taxonomy candidates, selected ticket fields, clipped notes) over raw SherpaDesk payloads
+- forbid hidden tool/retrieval turns inside event alert/classification prompts unless the payload is malformed
+- preserve accuracy by including high-signal context and locally retrieved evidence, not by shipping every available log/blob to the model
+
+Current LLM-backed automatic paths are: new-ticket alert synthesis, requester-side update alert synthesis, and event-scoped ticket classification. Alert synthesis receives a tiny locally retrieved `similar_ticket_evidence` list so it can mention prior patterns without asking the agent to run extra searches.

@@ -76,7 +76,7 @@ def test_build_hook_payload_contains_ticket_triage_context(tmp_path: Path) -> No
     message = payload["message"]
     assert "new SherpaDesk ticket" in message
     assert "INITIAL POST / original user-submitted issue only" in message
-    assert "Use the SherpaMind skill/query surface" in message
+    assert "Use only the provided similar_ticket_evidence" in message
     assert "Seen before:" in message
     assert "3-5 short sentences or bullet-style lines" in message
     assert "Issue synopsis:" in message
@@ -150,11 +150,11 @@ def test_build_ticket_update_payload_allows_broader_history_context(tmp_path: Pa
     message = payload["message"]
     assert "new NON-TECH update" in message
     assert "broader ticket history" in message
-    assert "Use the SherpaMind skill/query surface" in message
+    assert "Use only the provided similar_ticket_evidence" in message
     assert "Seen before:" in message
     assert "3-5 short sentences or bullet-style lines" in message
     assert "Update synopsis:" in message
     assert "Recommended follow-up / next steps:" in message
     assert "OpenClaw hook delivery will send it" in message
     assert "recent_logs" in message
-    assert "retrieval_metadata" in message
+    assert "retrieval_metadata" not in message

@@ -19,6 +19,7 @@ DEFAULT_TIMEOUT_SECONDS = 30
 MAX_CONTEXT_CHARS_INITIAL = 1200
 MAX_CONTEXT_CHARS_FINAL = 2200
 MAX_RATIONALE_CHARS = 240
+MAX_CLASS_CANDIDATES = 140
 
 
 def _compact_text(value: Any, limit: int) -> str | None:
@@ -30,11 +31,29 @@ def _compact_text(value: Any, limit: int) -> str | None:
     return text[:limit]
 
 
-def _class_candidates(settings: Settings) -> list[dict[str, str]]:
+def _class_candidate_lines(settings: Settings) -> list[str]:
     rows = list_ticket_taxonomy_classes(settings.db_path, active_only=True, leaves_only=True)
     if not rows:
         rows = list_ticket_taxonomy_classes(settings.db_path, active_only=True, leaves_only=False)
-    return [{"id": str(row["id"]), "path": str(row["path"])} for row in rows]
+    return [f"{row['id']}:{row['path']}" for row in rows[:MAX_CLASS_CANDIDATES]]
+
+
+def _ticket_brief(ticket: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": ticket.get("id"),
+        "ticket_number": ticket.get("ticket_number"),
+        "ticket_key": ticket.get("ticket_key"),
+        "subject": ticket.get("subject"),
+        "status": ticket.get("status"),
+        "priority": ticket.get("priority"),
+        "category": ticket.get("category"),
+        "account": ticket.get("account"),
+        "requester": ticket.get("user_name") or ticket.get("user_email"),
+        "technician": ticket.get("technician"),
+        "created_at": ticket.get("created_at"),
+        "updated_at": ticket.get("updated_at"),
+        "closed_at": ticket.get("closed_at"),
+    }
 
 
 def _event_payload(ticket: dict[str, Any], event_type: str, trigger_source: str) -> dict[str, Any]:
@@ -110,7 +129,7 @@ def _build_context(settings: Settings, event: dict[str, Any]) -> dict[str, Any]:
     if event_type == "initial":
         return {
             "event": payload,
-            "ticket": ticket,
+            "ticket": _ticket_brief(ticket),
             "initial_issue_text": _compact_text(metadata.get("cleaned_initial_post") or metadata.get("cleaned_subject") or ticket.get("subject"), MAX_CONTEXT_CHARS_INITIAL),
             "metadata": {
                 "department_label": metadata.get("department_label"),
@@ -120,7 +139,7 @@ def _build_context(settings: Settings, event: dict[str, Any]) -> dict[str, Any]:
         }
     return {
         "event": payload,
-        "ticket": ticket,
+        "ticket": _ticket_brief(ticket),
         "final_context": {
             "initial_issue_text": _compact_text(metadata.get("cleaned_initial_post") or metadata.get("cleaned_subject") or ticket.get("subject"), 700),
             "resolution_summary": _compact_text(metadata.get("resolution_summary"), MAX_CONTEXT_CHARS_FINAL),
@@ -138,7 +157,7 @@ def _build_context(settings: Settings, event: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_classification_prompt(settings: Settings, event: dict[str, Any]) -> dict[str, Any]:
-    candidates = _class_candidates(settings)
+    candidate_lines = _class_candidate_lines(settings)
     context = _build_context(settings, event)
     event_id = int(event["id"])
     payload = {
@@ -146,10 +165,11 @@ def build_classification_prompt(settings: Settings, event: dict[str, Any]) -> di
         "event_type": event.get("event_type"),
         "ticket_id": event.get("ticket_id"),
         "task": "Choose exactly one class_id from candidate_classes. Prefer leaf/sub-class ids. Use only the provided ticket context and taxonomy.",
+        "candidate_format": "Each candidate is class_id:path.",
         "accuracy_policy": "High accuracy first, but no chain-of-thought output. If uncertain, choose the closest allowed class and mark confidence low.",
         "token_policy": "Do not do retrieval or broad ticket searches. Do not inspect unrelated tickets. This classification is event-scoped and should use the compact context below.",
         "record_command": f"cd /home/kklouzal/SherpaMind && python3 scripts/run.py record-ticket-classification --event-id {event_id} --class-id <CLASS_ID> --confidence <high|medium|low> --rationale '<240-char reason>'",
-        "candidate_classes": candidates,
+        "candidate_classes": candidate_lines,
         "ticket_context": context,
     }
     message = (
@@ -157,7 +177,7 @@ def build_classification_prompt(settings: Settings, event: dict[str, Any]) -> di
         "Use the JSON payload below only; do not perform extra searches unless the payload is malformed.\n"
         "Pick exactly one candidate class id. Then run the record_command with your chosen class id, confidence, and a concise reason.\n"
         "Do not send chat output to the user.\n\n"
-        f"CLASSIFICATION_PAYLOAD_JSON:\n{json.dumps(payload, ensure_ascii=False, indent=2)}"
+        f"CLASSIFICATION_PAYLOAD_JSON:\n{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}"
     )
     hook_payload: dict[str, Any] = {
         "agentId": "main",
