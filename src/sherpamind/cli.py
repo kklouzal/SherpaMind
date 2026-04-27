@@ -136,7 +136,6 @@ def workspace_layout() -> None:
         "exports_root": str(paths.exports_root),
         "docs_root": str(paths.docs_root),
         "settings_file": str(paths.settings_file),
-        "api_key_file": str(paths.api_key_file),
         "api_user_file": str(paths.api_user_file),
         "service_log": str(paths.service_log),
         "service_state_file": str(paths.service_state_file),
@@ -197,7 +196,6 @@ def doctor() -> None:
     legacy_watch = paths.workspace_root / "state" / "watch_state.json"
     checks = {
         "settings_file_exists": paths.settings_file.exists(),
-        "api_key_file_exists": paths.api_key_file.exists(),
         "api_user_file_exists": paths.api_user_file.exists(),
         "runtime_venv_exists": paths.runtime_venv.exists(),
         "db_exists": settings.db_path.exists(),
@@ -222,7 +220,6 @@ def doctor() -> None:
             "logs_root": str(paths.logs_root),
             "public_root": str(paths.public_root),
             "settings_file": str(paths.settings_file),
-            "api_key_file": str(paths.api_key_file),
             "api_user_file": str(paths.api_user_file),
             "runtime_venv": str(paths.runtime_venv),
             "db_path": str(settings.db_path),
@@ -364,7 +361,6 @@ def bootstrap_audit(summary: bool = False) -> None:
             "runtime_root": str(paths.runtime_root),
             "public_root": str(paths.public_root),
             "settings_file": str(paths.settings_file),
-            "api_key_file": str(paths.api_key_file),
             "api_user_file": str(paths.api_user_file),
             "db_path": str(paths.db_path),
         },

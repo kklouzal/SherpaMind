@@ -127,9 +127,6 @@ def _read_openclaw_skill_entry() -> dict[str, str]:
     if not isinstance(entry, dict):
         return {}
     values: dict[str, str] = {}
-    api_key = entry.get("apiKey")
-    if isinstance(api_key, str) and api_key.strip():
-        values["SHERPADESK_API_KEY"] = api_key.strip()
     api_user = entry.get("apiUser")
     if isinstance(api_user, str) and api_user.strip():
         values["SHERPADESK_API_USER"] = api_user.strip()

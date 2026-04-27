@@ -50,7 +50,6 @@ class SherpaMindPaths:
     exports_root: Path
     docs_root: Path
     settings_file: Path
-    api_key_file: Path
     api_user_file: Path
     db_path: Path
     watch_state_path: Path
@@ -101,7 +100,6 @@ def resolve_paths() -> SherpaMindPaths:
         exports_root=exports_root,
         docs_root=docs_root,
         settings_file=config_root / "settings.env",
-        api_key_file=secrets_root / "sherpadesk_api_key.txt",
         api_user_file=secrets_root / "sherpadesk_api_user.txt",
         db_path=data_root / "sherpamind.sqlite3",
         watch_state_path=state_root / "watch_state.json",
