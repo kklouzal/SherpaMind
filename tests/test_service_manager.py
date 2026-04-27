@@ -5,6 +5,7 @@ from sherpamind.service_manager import unit_contents
 
 
 def test_unit_contents_contains_worker_run(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv('SHERPAMIND_ROOT', raising=False)
     monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
     home = tmp_path / 'home'
     monkeypatch.setenv('HOME', str(home))
@@ -24,3 +25,16 @@ def test_unit_contents_contains_worker_run(monkeypatch, tmp_path: Path) -> None:
     assert 'SHERPAMIND_WORKSPACE_ROOT=' in text
     assert 'EnvironmentFile=' not in text
     assert 'Environment=SHERPADESK_API_KEY=ui-secret-key' in text
+
+
+def test_unit_contents_preserves_direct_sherpamind_root(monkeypatch, tmp_path: Path) -> None:
+    workspace_root = tmp_path / 'workspace'
+    runtime_root = tmp_path / 'persistent' / '.SherpaMind'
+    monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(workspace_root))
+    monkeypatch.setenv('SHERPAMIND_ROOT', str(runtime_root))
+    monkeypatch.setenv('HOME', str(tmp_path / 'home'))
+
+    text = unit_contents('alert_dispatch')
+
+    assert f'Environment=SHERPAMIND_WORKSPACE_ROOT={workspace_root}' in text
+    assert f'Environment=SHERPAMIND_ROOT={runtime_root}' in text

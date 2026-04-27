@@ -41,7 +41,7 @@ Use for natural-language recall and fuzzy investigation:
 These are derived from canonical tables and are **replaceable caches**, not source-of-truth memory.
 
 ### 3. Public markdown artifacts
-Use for quick human/agent inspection under `.SherpaMind/public/docs/`, including:
+Use for quick human/agent inspection under the `docs_root` reported by `python3 scripts/run.py workspace-layout` (normally `.SherpaMind/public/docs/` under the resolved runtime root), including:
 - `index.md`
 - `insight-snapshot.md`
 - `retrieval-readiness.md`

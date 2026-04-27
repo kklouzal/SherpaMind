@@ -12,17 +12,35 @@ def repo_root() -> Path:
 
 
 def workspace_root() -> Path:
-    explicit = os.getenv("SHERPAMIND_WORKSPACE_ROOT")
-    if explicit:
-        return Path(explicit).resolve()
+    explicit_workspace = os.getenv("SHERPAMIND_WORKSPACE_ROOT")
+    if explicit_workspace:
+        return Path(explicit_workspace).expanduser().resolve()
+    explicit_root = os.getenv("SHERPAMIND_ROOT")
+    if explicit_root:
+        root = Path(explicit_root).expanduser().resolve()
+        return root.parent if root.name == ".SherpaMind" else root
     repo = repo_root().resolve()
     if repo.parent.name == "skills":
         return repo.parent.parent.resolve()
-    return Path.cwd().resolve()
+    for parent in [repo, *repo.parents]:
+        if parent.name == "workspace" and parent.parent.name == ".openclaw":
+            return parent.resolve()
+    current = Path.cwd().resolve()
+    for parent in [current, *current.parents]:
+        if parent.name == "workspace" and parent.parent.name == ".openclaw":
+            return parent.resolve()
+    return current
+
+
+def sherpamind_root() -> Path:
+    explicit_root = os.getenv("SHERPAMIND_ROOT")
+    if explicit_root:
+        return Path(explicit_root).expanduser().resolve()
+    return workspace_root() / ".SherpaMind"
 
 
 def venv_python() -> Path:
-    return workspace_root() / ".SherpaMind" / "private" / "runtime" / "venv" / "bin" / "python"
+    return sherpamind_root() / "private" / "runtime" / "venv" / "bin" / "python"
 
 
 def ensure_bootstrap() -> Path:
@@ -37,6 +55,8 @@ def ensure_bootstrap() -> Path:
 def main() -> int:
     python = ensure_bootstrap()
     env = os.environ.copy()
+    if os.getenv("SHERPAMIND_ROOT"):
+        env.setdefault("SHERPAMIND_ROOT", str(sherpamind_root()))
     env.setdefault("SHERPAMIND_WORKSPACE_ROOT", str(workspace_root()))
     env["PYTHONPATH"] = str(repo_root() / "src") + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     cmd = [str(python), "-m", "sherpamind.cli", *sys.argv[1:]]

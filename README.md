@@ -538,9 +538,11 @@ python3 scripts/run.py bootstrap-audit
 python3 scripts/bootstrap.py
 ```
 
-When SherpaMind is installed under an OpenClaw `skills/` directory, the default runtime root auto-resolves to the parent workspace so `.SherpaMind/` lives at the workspace level instead of inside the repo checkout.
+When SherpaMind is installed under an OpenClaw `skills/` directory, the default runtime root auto-resolves to the parent workspace so `.SherpaMind/` lives at the workspace level instead of inside the repo checkout. If a reinstall or moved checkout needs to reuse an existing runtime tree, set `SHERPAMIND_ROOT=/path/to/.SherpaMind`; this direct runtime-root override takes precedence over workspace-relative discovery.
 
-This creates the main workspace-local layout:
+Always use `python3 scripts/run.py workspace-layout` to confirm the resolved `workspace_root`, `.SherpaMind` root, `docs_root`, `db_path`, and venv path before assuming where runtime data lives.
+
+This creates the main workspace-local layout by default:
 
 - `.SherpaMind/private/config/settings.env`
 - `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
@@ -574,13 +576,14 @@ python3 scripts/run.py install-service
 python3 scripts/run.py service-status
 ```
 
-Runtime control/environment overrides are documented in `.env.example`, but the normal live API-key path is OpenClaw skill configuration feeding `SHERPADESK_API_KEY`, while `.SherpaMind/` continues to hold non-secret runtime settings and local derived state.
+Runtime control/environment overrides are documented in `.env.example`, but the normal live API-key path is OpenClaw skill configuration feeding `SHERPADESK_API_KEY`, while `.SherpaMind/` continues to hold non-secret runtime settings and local derived state. Use `SHERPAMIND_WORKSPACE_ROOT` to choose the parent workspace for a normal install, or `SHERPAMIND_ROOT` to point directly at an existing `.SherpaMind` runtime directory.
 
 For OpenClaw alert delivery, SherpaMind uses the current hooks API: authenticated `POST /hooks/agent` with `Authorization: Bearer <hooks.token>` / `x-openclaw-token` and a payload containing `message`, `name`, `agentId`, `wakeMode`, `deliver`, `channel`, `to`, and `timeoutSeconds`. If SherpaMind runs on the same host as OpenClaw, the backend auto-defaults `SHERPAMIND_OPENCLAW_WEBHOOK_URL` and `SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN` from local `~/.openclaw/openclaw.json` hooks settings when they are not staged manually. Use `python3 scripts/run.py doctor` or `bootstrap-audit` to verify the alert hook shape before starting the alert-dispatch worker.
 
 Important controls include:
 
 - `SHERPAMIND_WORKSPACE_ROOT`
+- `SHERPAMIND_ROOT`
 - `SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS`
 - `SHERPAMIND_REQUEST_TIMEOUT_SECONDS`
 - `SHERPAMIND_SEED_PAGE_SIZE`

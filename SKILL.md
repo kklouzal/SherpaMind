@@ -16,7 +16,13 @@ Work from the repo root:
 cd {baseDir}
 ```
 
-When the repo is installed under an OpenClaw `skills/` directory, SherpaMind automatically uses the parent workspace as `SHERPAMIND_WORKSPACE_ROOT`, so runtime state stays in workspace-level `.SherpaMind/` rather than inside the skill checkout.
+When the repo is installed under an OpenClaw `skills/` directory, SherpaMind automatically uses the parent workspace as `SHERPAMIND_WORKSPACE_ROOT`, so runtime state stays in workspace-level `.SherpaMind/` rather than inside the skill checkout. If runtime data already exists somewhere else, set `SHERPAMIND_ROOT=/path/to/.SherpaMind` before running commands; it takes precedence over workspace-relative discovery.
+
+Before reading generated files directly, resolve the actual runtime paths instead of assuming they live under `{baseDir}`:
+
+```bash
+python3 scripts/run.py workspace-layout
+```
 
 Use the stable runner:
 
@@ -100,20 +106,20 @@ Default retrieval workflow:
 
 ### Quick factual context from generated artifacts
 
-Read these when a concise derived artifact is enough:
+Read these when a concise derived artifact is enough. First run `python3 scripts/run.py workspace-layout`, then use the returned `docs_root` instead of hard-coding `{baseDir}/.SherpaMind`:
 
-- `{baseDir}/.SherpaMind/public/docs/index.md`
-- `{baseDir}/.SherpaMind/public/docs/insight-snapshot.md`
-- `{baseDir}/.SherpaMind/public/docs/stale-open-tickets.md`
-- `{baseDir}/.SherpaMind/public/docs/recent-account-activity.md`
-- `{baseDir}/.SherpaMind/public/docs/recent-technician-load.md`
-- `{baseDir}/.SherpaMind/public/docs/runtime/status.md`
-- `{baseDir}/.SherpaMind/public/docs/accounts/index.md`
-- `{baseDir}/.SherpaMind/public/docs/technicians/index.md`
-- `{baseDir}/.SherpaMind/public/docs/tickets/index.md`
-- `{baseDir}/.SherpaMind/public/docs/accounts/*.md`
-- `{baseDir}/.SherpaMind/public/docs/technicians/*.md`
-- `{baseDir}/.SherpaMind/public/docs/tickets/ticket_*.md`
+- `{docs_root}/index.md`
+- `{docs_root}/insight-snapshot.md`
+- `{docs_root}/stale-open-tickets.md`
+- `{docs_root}/recent-account-activity.md`
+- `{docs_root}/recent-technician-load.md`
+- `{docs_root}/runtime/status.md`
+- `{docs_root}/accounts/index.md`
+- `{docs_root}/technicians/index.md`
+- `{docs_root}/tickets/index.md`
+- `{docs_root}/accounts/*.md`
+- `{docs_root}/technicians/*.md`
+- `{docs_root}/tickets/ticket_*.md`
 
 ## Preferred answer flow
 

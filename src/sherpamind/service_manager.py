@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -51,6 +52,8 @@ def _base_env_lines() -> list[str]:
     paths = ensure_path_layout()
     skill_entry = _read_openclaw_skill_entry()
     env_lines = [f"Environment=SHERPAMIND_WORKSPACE_ROOT={paths.workspace_root}"]
+    if os.getenv("SHERPAMIND_ROOT") or paths.root != paths.workspace_root / ".SherpaMind":
+        env_lines.append(f"Environment=SHERPAMIND_ROOT={paths.root}")
     api_key = skill_entry.get("apiKey")
     if isinstance(api_key, str) and api_key.strip():
         env_lines.append(f"Environment=SHERPADESK_API_KEY={api_key.strip()}")

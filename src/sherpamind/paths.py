@@ -7,13 +7,32 @@ import shutil
 
 
 def discover_workspace_root(*, repo_root: Path | None = None, cwd: Path | None = None) -> Path:
-    explicit = os.getenv("SHERPAMIND_WORKSPACE_ROOT")
-    if explicit:
-        return Path(explicit).resolve()
+    explicit_workspace = os.getenv("SHERPAMIND_WORKSPACE_ROOT")
+    if explicit_workspace:
+        return Path(explicit_workspace).expanduser().resolve()
+    explicit_root = os.getenv("SHERPAMIND_ROOT")
+    if explicit_root:
+        root = Path(explicit_root).expanduser().resolve()
+        return root.parent if root.name == ".SherpaMind" else root
     repo = (repo_root or Path(__file__).resolve().parents[2]).resolve()
     if repo.parent.name == "skills":
         return repo.parent.parent.resolve()
-    return (cwd or Path.cwd()).resolve()
+    for parent in [repo, *repo.parents]:
+        if parent.name == "workspace" and parent.parent.name == ".openclaw":
+            return parent.resolve()
+    current = (cwd or Path.cwd()).resolve()
+    for parent in [current, *current.parents]:
+        if parent.name == "workspace" and parent.parent.name == ".openclaw":
+            return parent.resolve()
+    return current
+
+
+def discover_sherpamind_root(*, workspace_root: Path | None = None) -> Path:
+    explicit_root = os.getenv("SHERPAMIND_ROOT")
+    if explicit_root:
+        return Path(explicit_root).expanduser().resolve()
+    root = (workspace_root or discover_workspace_root()) / ".SherpaMind"
+    return root.resolve()
 
 
 @dataclass(frozen=True)
@@ -57,7 +76,7 @@ SECRET_FILE_MODE = 0o600
 
 def resolve_paths() -> SherpaMindPaths:
     workspace_root = discover_workspace_root()
-    root = workspace_root / ".SherpaMind"
+    root = discover_sherpamind_root(workspace_root=workspace_root)
     private_root = root / "private"
     config_root = private_root / "config"
     secrets_root = private_root / "secrets"

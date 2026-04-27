@@ -6,7 +6,7 @@ Use this when SherpaMind is being installed, reviewed for portability, or prepar
 
 Turn this repo into a working SherpaMind installation without storing runtime state inside the skill tree.
 
-Default runtime layout lives under the workspace root:
+Default runtime layout lives under the resolved workspace root:
 - `.SherpaMind/private/config/`
 - `.SherpaMind/private/secrets/`
 - `.SherpaMind/private/data/`
@@ -15,7 +15,7 @@ Default runtime layout lives under the workspace root:
 - `.SherpaMind/private/runtime/`
 - `.SherpaMind/public/`
 
-Override only when the operator explicitly wants a different workspace root.
+Use `python3 scripts/run.py workspace-layout` to verify the real paths. Override with `SHERPAMIND_WORKSPACE_ROOT` when the operator wants a different workspace root, or `SHERPAMIND_ROOT=/path/to/.SherpaMind` when a moved/reinstalled skill must reuse pre-existing runtime data directly.
 
 ## First command
 

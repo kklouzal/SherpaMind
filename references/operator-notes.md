@@ -12,14 +12,16 @@ Before changing API logic, consult:
 ## Local environment
 
 Expected configuration comes from:
-- `.SherpaMind/private/config/settings.env` for staged non-secret connection/runtime settings
+- the runtime layout reported by `python3 scripts/run.py workspace-layout`; do not assume `.SherpaMind` lives under the skill checkout
+- `.SherpaMind/private/config/settings.env` under the resolved runtime root for staged non-secret connection/runtime settings
 - the OpenClaw `sherpamind` skill configuration for the live `SHERPADESK_API_KEY`
-- optionally `.SherpaMind/private/secrets/sherpadesk_api_user.txt` for a staged API user hint
+- optionally `.SherpaMind/private/secrets/sherpadesk_api_user.txt` under the resolved runtime root for a staged API user hint
 - process environment overrides only when needed
 - `.env.example` as the public reference template
 
 Important conservative controls:
 - `SHERPAMIND_WORKSPACE_ROOT`
+- `SHERPAMIND_ROOT`
 - `SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS`
 - `SHERPAMIND_REQUEST_TIMEOUT_SECONDS`
 
