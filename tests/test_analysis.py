@@ -156,6 +156,7 @@ def test_analysis_reports(tmp_path: Path) -> None:
         submission_category='Port',
         resolution_category='Progress',
         department='Managed',
+        max_text_chars=10,
     )
     search_chunks = search_ticket_document_chunks(
         db,
@@ -170,8 +171,13 @@ def test_analysis_reports(tmp_path: Path) -> None:
         submission_category='Port',
         resolution_category='Progress',
         department='Managed',
+        max_text_chars=10,
     )
 
+    assert search[0]["text"] == "Printer is…"
+    assert search[0]["text_truncated"] is True
+    assert search_chunks[0]["text"] == "Printer is…"
+    assert search_chunks[0]["text_truncated"] is True
     assert by_account[0]["account"] == "Acme"
     assert by_account[0]["ticket_count"] == 2
     assert {row["status"]: row["ticket_count"] for row in by_status}["Open"] == 2

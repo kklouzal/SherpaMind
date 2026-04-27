@@ -242,7 +242,7 @@ Manual commands remain available:
 Read these only when needed. Keep the action layer in this file lean; use the reference files for deeper architecture, retrieval, automation, and API details.
 
 - `{baseDir}/README.md` — current live project overview and command surface
-- `{baseDir}/references/openclaw-query-model.md` — query/retrieval model
+- `{baseDir}/references/openclaw-query-model.md` — query/retrieval model; prefer compact/default snippets first and use `--full` only after narrowing
 - `{baseDir}/references/architecture-doctrine.md` — backend vs skill-front boundary
 - `{baseDir}/references/retrieval-architecture.md` — retrieval and vector design
 - `{baseDir}/references/bootstrap-onboarding.md` — audit-first install/onboarding model

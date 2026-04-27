@@ -149,7 +149,7 @@ Possible future exception:
 
 ## Design rule
 
-Do not force the LLM to parse raw SherpaDesk JSON blobs unless necessary.
+Do not force the LLM to parse raw SherpaDesk JSON blobs unless necessary. Use compact/default command outputs first (`search-ticket-docs`, `search-ticket-chunks`, `ticket-summary`) and request `--full` only after narrowing to a specific ticket or when exact raw text is genuinely needed.
 Whenever a field becomes operationally useful more than once, promote it into:
 
 SherpaMind should also expose enough observability that OpenClaw can trust the retrieval layer before leaning on it heavily. In practice that means coverage/freshness/readiness outputs should make it easy to see:

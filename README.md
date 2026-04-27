@@ -461,9 +461,9 @@ Manual sweep commands remain available when useful:
 
 ### Search and export
 
-- `python3 scripts/run.py search-ticket-docs <query>`
+- `python3 scripts/run.py search-ticket-docs <query>` — compact text snippets by default; add `--full` only after narrowing
 - `python3 scripts/run.py search-ticket-docs <query> --account <account> --status Open --department <department>`
-- `python3 scripts/run.py search-ticket-chunks <query>`
+- `python3 scripts/run.py search-ticket-chunks <query>` — compact chunk snippets by default; add `--full` only when exact full text is needed
 - `python3 scripts/run.py search-ticket-chunks <query> --priority High --category <category> --class-name <class>`
 - `python3 scripts/run.py export-ticket-docs`
 - `python3 scripts/run.py export-ticket-chunks`

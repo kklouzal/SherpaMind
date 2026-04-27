@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 import json
+import sys
 from pathlib import Path
 
 import typer
@@ -74,6 +75,25 @@ def _json_ready(value):
     return value
 
 
+def _compact_for_cli(value, *, max_text_chars: int = 900):
+    if isinstance(value, dict):
+        return {key: _compact_for_cli(inner, max_text_chars=max_text_chars) for key, inner in value.items()}
+    if isinstance(value, list):
+        return [_compact_for_cli(inner, max_text_chars=max_text_chars) for inner in value]
+    if isinstance(value, str) and len(value) > max_text_chars:
+        return value[:max_text_chars].rstrip() + "…"
+    return value
+
+
+def _load_json_arg_or_stdin(payload_json: str) -> dict:
+    raw = payload_json.strip() if payload_json else sys.stdin.read().strip()
+    if not raw:
+        raise typer.BadParameter("JSON payload is required via argument or stdin")
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise typer.BadParameter("JSON payload must be an object")
+    return data
+
 def _build_client() -> SherpaDeskClient:
     settings = load_settings()
     if not settings.api_key:
@@ -130,6 +150,20 @@ def record_ticket_classification(event_id: int, class_id: str, confidence: str, 
     settings = load_settings()
     initialize_db(settings.db_path)
     print(json.dumps(record_classification(settings, event_id=event_id, class_id=class_id, confidence=confidence, rationale=rationale), indent=2))
+
+
+@app.command("record-ticket-classification-json")
+def record_ticket_classification_json(payload_json: str = "") -> None:
+    payload = _load_json_arg_or_stdin(payload_json)
+    settings = load_settings()
+    initialize_db(settings.db_path)
+    print(json.dumps(record_classification(
+        settings,
+        event_id=int(payload["event_id"]),
+        class_id=str(payload["class_id"]),
+        confidence=str(payload["confidence"]),
+        rationale=str(payload.get("rationale") or "No rationale provided."),
+    ), indent=2))
 
 
 @app.command("report-ticket-classifications")
@@ -710,9 +744,12 @@ def technician_summary(technician_query: str, limit_open: int = 10, limit_recent
 
 
 @app.command("ticket-summary")
-def ticket_summary(ticket_query: str, limit_logs: int = 10, limit_attachments: int = 10) -> None:
+def ticket_summary(ticket_query: str, limit_logs: int = 10, limit_attachments: int = 10, full: bool = False, max_text_chars: int = 900) -> None:
     settings = load_settings()
-    print(json.dumps(get_ticket_summary(settings.db_path, ticket_query, limit_logs=limit_logs, limit_attachments=limit_attachments), indent=2))
+    summary = get_ticket_summary(settings.db_path, ticket_query, limit_logs=limit_logs, limit_attachments=limit_attachments)
+    if not full:
+        summary = _compact_for_cli(summary, max_text_chars=max_text_chars)
+    print(json.dumps(summary, indent=2))
 
 
 @app.command("search-ticket-docs")
@@ -728,6 +765,8 @@ def search_docs(
     submission_category: str | None = None,
     resolution_category: str | None = None,
     department: str | None = None,
+    full: bool = False,
+    max_text_chars: int = 500,
 ) -> None:
     settings = load_settings()
     rows = search_ticket_documents(
@@ -743,6 +782,7 @@ def search_docs(
         submission_category=submission_category,
         resolution_category=resolution_category,
         department=department,
+        max_text_chars=None if full else max_text_chars,
     )
     print(json.dumps(rows, indent=2))
 
@@ -760,6 +800,8 @@ def search_chunks(
     submission_category: str | None = None,
     resolution_category: str | None = None,
     department: str | None = None,
+    full: bool = False,
+    max_text_chars: int = 500,
 ) -> None:
     settings = load_settings()
     rows = search_ticket_document_chunks(
@@ -775,6 +817,7 @@ def search_chunks(
         submission_category=submission_category,
         resolution_category=resolution_category,
         department=department,
+        max_text_chars=None if full else max_text_chars,
     )
     print(json.dumps(rows, indent=2))
 

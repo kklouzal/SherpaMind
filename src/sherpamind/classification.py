@@ -31,11 +31,17 @@ def _compact_text(value: Any, limit: int) -> str | None:
     return text[:limit]
 
 
-def _class_candidate_lines(settings: Settings) -> list[str]:
+def _class_candidates(settings: Settings) -> dict[str, Any]:
     rows = list_ticket_taxonomy_classes(settings.db_path, active_only=True, leaves_only=True)
     if not rows:
         rows = list_ticket_taxonomy_classes(settings.db_path, active_only=True, leaves_only=False)
-    return [f"{row['id']}:{row['path']}" for row in rows[:MAX_CLASS_CANDIDATES]]
+    included = rows[:MAX_CLASS_CANDIDATES]
+    return {
+        "total": len(rows),
+        "included": len(included),
+        "truncated": len(rows) > len(included),
+        "lines": [f"{row['id']}:{row['path']}" for row in included],
+    }
 
 
 def _ticket_brief(ticket: dict[str, Any]) -> dict[str, Any]:
@@ -157,7 +163,7 @@ def _build_context(settings: Settings, event: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_classification_prompt(settings: Settings, event: dict[str, Any]) -> dict[str, Any]:
-    candidate_lines = _class_candidate_lines(settings)
+    candidates = _class_candidates(settings)
     context = _build_context(settings, event)
     event_id = int(event["id"])
     payload = {
@@ -168,14 +174,21 @@ def build_classification_prompt(settings: Settings, event: dict[str, Any]) -> di
         "candidate_format": "Each candidate is class_id:path.",
         "accuracy_policy": "High accuracy first, but no chain-of-thought output. If uncertain, choose the closest allowed class and mark confidence low.",
         "token_policy": "Do not do retrieval or broad ticket searches. Do not inspect unrelated tickets. This classification is event-scoped and should use the compact context below.",
-        "record_command": f"cd /home/kklouzal/SherpaMind && python3 scripts/run.py record-ticket-classification --event-id {event_id} --class-id <CLASS_ID> --confidence <high|medium|low> --rationale '<240-char reason>'",
-        "candidate_classes": candidate_lines,
+        "record_command": (
+            "cd /home/kklouzal/SherpaMind && python3 scripts/run.py record-ticket-classification-json "
+            "\'{\"event_id\":" + str(event_id) + ",\"class_id\":\"<CLASS_ID>\",\"confidence\":\"<high|medium|low>\",\"rationale\":\"<240-char JSON-safe reason, no newlines>\"}\'"
+        ),
+        "candidate_count_total": candidates["total"],
+        "candidate_count_included": candidates["included"],
+        "candidate_truncated": candidates["truncated"],
+        "candidate_classes": candidates["lines"],
         "ticket_context": context,
     }
     message = (
         "SherpaMind needs one ticket class/sub-class classification.\n"
-        "Use the JSON payload below only; do not perform extra searches unless the payload is malformed.\n"
-        "Pick exactly one candidate class id. Then run the record_command with your chosen class id, confidence, and a concise reason.\n"
+        "Use the JSON payload below only. Do not perform extra searches or inspect unrelated tickets.\n"
+        "If the payload is malformed or all candidates are unusable, still choose the closest included class and mark confidence low.\n"
+        "Pick exactly one candidate class id. Then run the record_command with your chosen class id, confidence, and a concise JSON-safe reason.\n"
         "Do not send chat output to the user.\n\n"
         f"CLASSIFICATION_PAYLOAD_JSON:\n{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}"
     )

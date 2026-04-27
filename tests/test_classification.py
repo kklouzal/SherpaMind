@@ -56,7 +56,10 @@ def test_initial_classification_prompt_is_bounded_to_event_context(tmp_path: Pat
     message = prompt["message"]
     assert "Do not do retrieval or broad ticket searches" in message
     assert "Hardware / Printer" in message
-    assert "record-ticket-classification --event-id" in message
+    assert "record-ticket-classification-json" in message
+    assert "candidate_count_total" in message
+    assert "candidate_truncated" in message
+    assert "do not perform extra searches unless" not in message
     assert "Printer jam" in message
 
 

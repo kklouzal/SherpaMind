@@ -231,6 +231,15 @@ def list_ticket_attachment_summary(db_path: Path, limit: int = 20) -> list[dict]
     return [dict(row) for row in rows]
 
 
+def _bounded_text(value: str | None, max_chars: int | None) -> str | None:
+    if value is None or max_chars is None or max_chars <= 0:
+        return value
+    text = str(value)
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "…"
+
+
 def search_ticket_documents(
     db_path: Path,
     query: str,
@@ -244,6 +253,7 @@ def search_ticket_documents(
     submission_category: str | None = None,
     resolution_category: str | None = None,
     department: str | None = None,
+    max_text_chars: int | None = None,
 ) -> list[dict]:
     needle = f"%{query}%"
     clauses = [
@@ -282,6 +292,10 @@ def search_ticket_documents(
         rows = conn.execute(
             f"""
             SELECT d.doc_id, d.ticket_id, d.status, d.account, d.user_name, d.technician, d.updated_at, d.text,
+                   json_extract(d.raw_json, '$.metadata.ticket_number') AS ticket_number,
+                   json_extract(d.raw_json, '$.metadata.ticket_key') AS ticket_key,
+                   json_extract(d.raw_json, '$.metadata.cleaned_subject') AS cleaned_subject,
+                   json_extract(d.raw_json, '$.metadata.resolution_summary') AS resolution_summary,
                    json_extract(d.raw_json, '$.metadata.priority') AS priority,
                    json_extract(d.raw_json, '$.metadata.category') AS category,
                    json_extract(d.raw_json, '$.metadata.class_name') AS class_name,
@@ -295,7 +309,13 @@ def search_ticket_documents(
             """,
             (*params, limit),
         ).fetchall()
-    return [dict(row) for row in rows]
+    results = [dict(row) for row in rows]
+    if max_text_chars is not None:
+        for row in results:
+            original_text = row.get("text")
+            row["text"] = _bounded_text(original_text, max_text_chars)
+            row["text_truncated"] = original_text is not None and len(str(original_text)) > max_text_chars
+    return results
 
 
 def search_ticket_document_chunks(
@@ -311,6 +331,7 @@ def search_ticket_document_chunks(
     submission_category: str | None = None,
     resolution_category: str | None = None,
     department: str | None = None,
+    max_text_chars: int | None = None,
 ) -> list[dict]:
     needle = f"%{query}%"
     clauses = ["c.text LIKE ? COLLATE NOCASE"]
@@ -348,6 +369,10 @@ def search_ticket_document_chunks(
             f"""
             SELECT c.chunk_id, c.doc_id, c.ticket_id, c.chunk_index, c.text,
                    d.status, d.account, d.technician, d.updated_at,
+                   json_extract(d.raw_json, '$.metadata.ticket_number') AS ticket_number,
+                   json_extract(d.raw_json, '$.metadata.ticket_key') AS ticket_key,
+                   json_extract(d.raw_json, '$.metadata.cleaned_subject') AS cleaned_subject,
+                   json_extract(d.raw_json, '$.metadata.resolution_summary') AS resolution_summary,
                    json_extract(d.raw_json, '$.metadata.priority') AS priority,
                    json_extract(d.raw_json, '$.metadata.category') AS category,
                    json_extract(d.raw_json, '$.metadata.class_name') AS class_name,
@@ -362,7 +387,13 @@ def search_ticket_document_chunks(
             """,
             (*params, limit),
         ).fetchall()
-    return [dict(row) for row in rows]
+    results = [dict(row) for row in rows]
+    if max_text_chars is not None:
+        for row in results:
+            original_text = row.get("text")
+            row["text"] = _bounded_text(original_text, max_text_chars)
+            row["text_truncated"] = original_text is not None and len(str(original_text)) > max_text_chars
+    return results
 
 
 def _list_detail_gap_groups(conn, label_sql: str, *, min_tickets: int, limit: int = 10) -> list[dict]:

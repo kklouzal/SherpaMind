@@ -63,10 +63,16 @@ def _similar_ticket_evidence(settings: Settings, *, ticket_id: str, subject: Any
             seen.add(other_id)
             evidence.append({
                 "ticket_id": other_id,
+                "ticket_number": row.get("ticket_number"),
+                "ticket_key": row.get("ticket_key"),
+                "subject": row.get("cleaned_subject"),
+                "updated_at": row.get("updated_at"),
+                "match_scope": "same_account" if scoped_account else "global",
                 "status": row.get("status"),
                 "account": row.get("account"),
                 "class_name": row.get("class_name"),
                 "resolution_category": row.get("resolution_category"),
+                "resolution_summary": _compact_text(row.get("resolution_summary"), 220),
                 "snippet": _compact_text(row.get("text"), 260),
             })
             if len(evidence) >= MAX_SIMILAR_EVIDENCE:
@@ -78,7 +84,7 @@ def _similar_ticket_evidence(settings: Settings, *, ticket_id: str, subject: Any
         for term in terms[:4]:
             if len(evidence) >= MAX_SIMILAR_EVIDENCE:
                 return evidence
-            rows = search_ticket_document_chunks(settings.db_path, term, limit=8, account=scoped_account)
+            rows = search_ticket_document_chunks(settings.db_path, term, limit=8, account=scoped_account, max_text_chars=320)
             add_rows(rows)
     return evidence
 
