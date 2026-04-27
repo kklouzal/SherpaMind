@@ -17,6 +17,7 @@ from sherpamind.db import (
     mark_ticket_update_alert_sent,
     replace_ticket_document_chunks,
     replace_ticket_documents,
+    replace_ticket_taxonomy_classes,
     start_ingest_run,
     try_acquire_ingest_mode_lease,
     upsert_accounts,
@@ -46,6 +47,34 @@ def test_initialize_db_creates_core_tables(tmp_path: Path) -> None:
     assert 'api_request_events' in names
     assert 'ticket_detail_failures' in names
     assert 'ingest_mode_leases' in names
+    assert 'ticket_taxonomy_classes' in names
+
+
+def test_replace_ticket_taxonomy_classes_roundtrip(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+    replace_ticket_taxonomy_classes(
+        db,
+        [{
+            "id": "11",
+            "parent_id": "1",
+            "name": "Printer",
+            "path": "Hardware / Printer",
+            "hierarchy_level": 1,
+            "is_lastchild": True,
+            "is_active": True,
+            "raw_json": {"id": 11, "name": "Printer"},
+        }],
+        synced_at="2026-03-19T01:00:00Z",
+    )
+    with connect(db) as conn:
+        row = conn.execute("SELECT id, parent_id, name, path, is_lastchild, is_active, synced_at FROM ticket_taxonomy_classes").fetchone()
+    assert row["id"] == "11"
+    assert row["parent_id"] == "1"
+    assert row["path"] == "Hardware / Printer"
+    assert row["is_lastchild"] == 1
+    assert row["is_active"] == 1
+    assert row["synced_at"] == "2026-03-19T01:00:00Z"
 
 
 def test_upsert_seed_entities_roundtrip(tmp_path: Path) -> None:

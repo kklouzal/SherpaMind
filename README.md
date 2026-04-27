@@ -447,6 +447,8 @@ Manual sweep commands remain available when useful:
 - `python3 scripts/run.py report-technician-counts`
 - `python3 scripts/run.py report-ticket-log-types`
 - `python3 scripts/run.py report-attachment-summary`
+- `python3 scripts/run.py report-ticket-classes`
+- `python3 scripts/run.py report-ticket-class-coverage`
 - `python3 scripts/run.py recent-tickets`
 - `python3 scripts/run.py open-ticket-ages`
 - `python3 scripts/run.py recent-account-activity`
@@ -465,6 +467,7 @@ Manual sweep commands remain available when useful:
 - `python3 scripts/run.py export-ticket-chunks`
 - `python3 scripts/run.py export-embedding-chunks`
 - `python3 scripts/run.py export-embedding-manifest`
+- `python3 scripts/run.py sync-ticket-classes`
 - `python3 scripts/run.py build-vector-index`
 - `python3 scripts/run.py report-vector-index-status`
 - `python3 scripts/run.py report-retrieval-readiness`

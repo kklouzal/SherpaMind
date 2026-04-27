@@ -53,6 +53,7 @@ from .ingest import (
 )
 from .settings import load_settings, stage_connection_settings
 from .summaries import get_account_summary, get_technician_summary, get_ticket_summary
+from .taxonomy import get_ticket_class_coverage, get_ticket_class_report, sync_ticket_classes
 from .vector_exports import export_embedding_manifest, export_embedding_ready_chunks, get_retrieval_readiness_summary
 from .vector_index import build_vector_index, get_vector_index_status, search_vector_index
 from .watch import watch_new_tickets
@@ -114,6 +115,28 @@ def backfill_ticket_core_fields_command() -> None:
     settings = load_settings()
     initialize_db(settings.db_path)
     print(json.dumps(backfill_ticket_core_fields(settings.db_path), indent=2))
+
+
+@app.command("sync-ticket-classes")
+def sync_ticket_classes_command() -> None:
+    settings = load_settings()
+    initialize_db(settings.db_path)
+    client = _build_client()
+    print(json.dumps(sync_ticket_classes(client, settings.db_path), indent=2))
+
+
+@app.command("report-ticket-classes")
+def report_ticket_classes(active_only: bool = False, leaves_only: bool = False) -> None:
+    settings = load_settings()
+    initialize_db(settings.db_path)
+    print(json.dumps(get_ticket_class_report(settings.db_path, active_only=active_only, leaves_only=leaves_only), indent=2))
+
+
+@app.command("report-ticket-class-coverage")
+def report_ticket_class_coverage(limit: int = 25) -> None:
+    settings = load_settings()
+    initialize_db(settings.db_path)
+    print(json.dumps(get_ticket_class_coverage(settings.db_path, limit=limit), indent=2))
 
 
 @app.command("workspace-layout")

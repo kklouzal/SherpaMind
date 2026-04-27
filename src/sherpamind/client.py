@@ -189,6 +189,9 @@ class SherpaDeskClient:
     def discover_organizations(self) -> Any:
         return self.get("organizations/")
 
+    def list_ticket_classes(self) -> Any:
+        return self.get("classes/")
+
     def list_paginated(
         self,
         path: str,

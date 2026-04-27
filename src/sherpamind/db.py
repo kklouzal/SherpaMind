@@ -277,6 +277,22 @@ CREATE TABLE IF NOT EXISTS ticket_alert_state (
     last_updated_time TEXT,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ticket_taxonomy_classes (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT,
+    name TEXT NOT NULL,
+    path TEXT NOT NULL,
+    hierarchy_level INTEGER,
+    is_lastchild INTEGER,
+    is_restrict_to_techs INTEGER,
+    is_active INTEGER,
+    priority_id TEXT,
+    level_override INTEGER,
+    todo_templates TEXT,
+    raw_json TEXT NOT NULL,
+    synced_at TEXT NOT NULL
+);
 """
 
 DB_LOCK_RETRY_DELAY_SECONDS = 90
@@ -605,6 +621,67 @@ def upsert_technicians(db_path: Path, technicians: list[dict[str, Any]], synced_
             )
         conn.commit()
     return len(technicians)
+
+
+
+def _bool_to_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    return 1 if bool(value) else 0
+
+
+def replace_ticket_taxonomy_classes(db_path: Path, rows: list[dict[str, Any]], synced_at: str | None = None) -> int:
+    synced_at = synced_at or now_iso()
+    with connect(db_path) as conn:
+        conn.execute("DELETE FROM ticket_taxonomy_classes")
+        for row in rows:
+            conn.execute(
+                """
+                INSERT INTO ticket_taxonomy_classes(
+                    id, parent_id, name, path, hierarchy_level, is_lastchild, is_restrict_to_techs,
+                    is_active, priority_id, level_override, todo_templates, raw_json, synced_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(row["id"]),
+                    str(row["parent_id"]) if row.get("parent_id") not in (None, "") else None,
+                    row["name"],
+                    row["path"],
+                    row.get("hierarchy_level"),
+                    _bool_to_int(row.get("is_lastchild")),
+                    _bool_to_int(row.get("is_restrict_to_techs")),
+                    _bool_to_int(row.get("is_active")),
+                    str(row["priority_id"]) if row.get("priority_id") not in (None, "") else None,
+                    row.get("level_override"),
+                    row.get("todo_templates"),
+                    _json(row.get("raw_json") or row),
+                    synced_at,
+                ),
+            )
+        conn.commit()
+    return len(rows)
+
+
+def list_ticket_taxonomy_classes(db_path: Path, *, active_only: bool = False, leaves_only: bool = False) -> list[dict[str, Any]]:
+    clauses = []
+    params: list[Any] = []
+    if active_only:
+        clauses.append("COALESCE(is_active, 1) = 1")
+    if leaves_only:
+        clauses.append("COALESCE(is_lastchild, 0) = 1")
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, parent_id, name, path, hierarchy_level, is_lastchild, is_restrict_to_techs,
+                   is_active, priority_id, level_override, todo_templates, synced_at
+            FROM ticket_taxonomy_classes
+            {where}
+            ORDER BY path COLLATE NOCASE, id
+            """,
+            params,
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def upsert_tickets(db_path: Path, tickets: list[dict[str, Any]], synced_at: str | None = None) -> int:
