@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .classification import enqueue_final_ticket_classification, enqueue_initial_ticket_classification
 from .client import SherpaDeskClient
 from .db import (
     enqueue_alert,
@@ -188,6 +189,12 @@ def _watch_ticket_set(settings: Settings, *, path: str, extra_params: dict[str, 
         allow_new_ticket_alerts=(state_key == "watch.last_state"),
         baseline_only=baseline_only,
     )
+    classification_enqueues: list[dict[str, Any]] = []
+    if not baseline_only:
+        if state_key == "watch.last_state":
+            classification_enqueues.extend(enqueue_initial_ticket_classification(settings, ticket, trigger_source=state_key) for ticket in new_tickets)
+        elif state_key == "watch.warm_state":
+            classification_enqueues.extend(enqueue_final_ticket_classification(settings, ticket, trigger_source=state_key) for ticket in new_tickets)
 
     touched_tickets = [str(ticket.get("id")) for ticket in new_tickets + changed_tickets if ticket.get("id") is not None]
     derived_refresh_enqueues = [
@@ -212,6 +219,7 @@ def _watch_ticket_set(settings: Settings, *, path: str, extra_params: dict[str, 
         "removed_open_ticket_ids_last_run": removed_ids,
         "open_ticket_snapshot": current_snapshot,
         "derived_refresh_enqueues": derived_refresh_enqueues,
+        "classification_enqueues": classification_enqueues,
         **enqueue_results,
     }
     _save_watch_state(state_path, next_state)
@@ -230,6 +238,7 @@ def _watch_ticket_set(settings: Settings, *, path: str, extra_params: dict[str, 
             "removed_open_ticket_count": len(removed_ids),
             "new_tickets": [_ticket_event_snapshot(ticket) for ticket in new_tickets],
             "changed_tickets": changed_tickets,
+            "classification_enqueues": classification_enqueues,
             **enqueue_results,
         },
     )

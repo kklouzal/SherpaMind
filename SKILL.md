@@ -74,6 +74,8 @@ Start with structured commands:
 - `python3 scripts/run.py report-attachment-summary`
 - `python3 scripts/run.py report-ticket-classes`
 - `python3 scripts/run.py report-ticket-class-coverage`
+- `python3 scripts/run.py dispatch-ticket-classifications`
+- `python3 scripts/run.py report-ticket-classifications`
 - `python3 scripts/run.py recent-tickets`
 - `python3 scripts/run.py open-ticket-ages`
 - `python3 scripts/run.py recent-account-activity`
@@ -214,6 +216,8 @@ Use these for setup/maintenance, not routine user queries:
 - `python3 scripts/run.py sync-ticket-classes`
 - `python3 scripts/run.py report-ticket-classes`
 - `python3 scripts/run.py report-ticket-class-coverage`
+- `python3 scripts/run.py dispatch-ticket-classifications`
+- `python3 scripts/run.py report-ticket-classifications`
 
 ### Guarded write-backs
 

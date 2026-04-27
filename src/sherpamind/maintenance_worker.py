@@ -6,6 +6,7 @@ from dataclasses import asdict
 from typing import Any, Callable
 
 from .analysis import get_api_usage_summary
+from .classification import dispatch_ticket_classification_events
 from .db import (
     cleanup_stale_ingest_runs,
     cleanup_stale_worker_runs,
@@ -42,6 +43,7 @@ def _task_specs(settings: Settings) -> list[tuple[str, int, Callable[[Settings],
         ("warm_closed", settings.service_warm_closed_every_seconds, sync_warm_closed_tickets, "important"),
         ("cold_closed", settings.service_cold_closed_every_seconds, lambda s: sync_cold_closed_audit(s, pages_per_run=s.cold_closed_pages_per_run), "deferrable"),
         ("enrichment", settings.service_enrichment_every_seconds, lambda s: enrich_priority_ticket_details(s, limit=s.service_enrichment_limit, materialize_docs=True), "deferrable"),
+        ("classification_dispatch", settings.service_classification_dispatch_every_seconds, lambda s: dispatch_ticket_classification_events(s, limit=2), "lightweight"),
         ("retrieval_artifacts", settings.service_public_snapshot_every_seconds, lambda s: ensure_current_ticket_materialization(s.db_path), "lightweight"),
         ("public_snapshot", settings.service_public_snapshot_every_seconds, lambda s: generate_public_snapshot(s.db_path), "lightweight"),
         ("vector_refresh", settings.service_vector_refresh_every_seconds, lambda s: build_vector_index(s.db_path), "lightweight"),

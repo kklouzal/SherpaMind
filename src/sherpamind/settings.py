@@ -55,6 +55,9 @@ class Settings:
     api_budget_warn_ratio: float = 0.7
     api_budget_critical_ratio: float = 0.85
     api_request_log_retention_days: int = 14
+    classification_enabled: bool = True
+    classification_model: str | None = None
+    service_classification_dispatch_every_seconds: int = 120
 
 
 def _read_key_value_file(path: Path) -> dict[str, str]:
@@ -150,6 +153,12 @@ def _read_openclaw_skill_entry() -> dict[str, str]:
     ticket_update_alerts_enabled = entry_value("ticketUpdateAlertsEnabled")
     if isinstance(ticket_update_alerts_enabled, bool):
         values["SHERPAMIND_TICKET_UPDATE_ALERTS_ENABLED"] = "true" if ticket_update_alerts_enabled else "false"
+    classification_enabled = entry_value("classificationEnabled")
+    if isinstance(classification_enabled, bool):
+        values["SHERPAMIND_CLASSIFICATION_ENABLED"] = "true" if classification_enabled else "false"
+    classification_model = entry_value("classificationModel")
+    if isinstance(classification_model, str) and classification_model.strip():
+        values["SHERPAMIND_CLASSIFICATION_MODEL"] = classification_model.strip()
     return values
 
 
@@ -253,4 +262,7 @@ def load_settings() -> Settings:
         api_budget_warn_ratio=float(_env_or_file("SHERPAMIND_API_BUDGET_WARN_RATIO", file_values, "0.7") or "0.7"),
         api_budget_critical_ratio=float(_env_or_file("SHERPAMIND_API_BUDGET_CRITICAL_RATIO", file_values, "0.85") or "0.85"),
         api_request_log_retention_days=int(_env_or_file("SHERPAMIND_API_REQUEST_LOG_RETENTION_DAYS", file_values, "14") or "14"),
+        classification_enabled=str(_env_or_file("SHERPAMIND_CLASSIFICATION_ENABLED", file_values, openclaw_skill_values.get("SHERPAMIND_CLASSIFICATION_ENABLED") or "true") or "true").strip().lower() in {"1", "true", "yes", "on"},
+        classification_model=_env_or_file("SHERPAMIND_CLASSIFICATION_MODEL", file_values, openclaw_skill_values.get("SHERPAMIND_CLASSIFICATION_MODEL")),
+        service_classification_dispatch_every_seconds=int(_env_or_file("SHERPAMIND_SERVICE_CLASSIFICATION_DISPATCH_EVERY_SECONDS", file_values, "120") or "120"),
     )

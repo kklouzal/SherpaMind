@@ -293,6 +293,32 @@ CREATE TABLE IF NOT EXISTS ticket_taxonomy_classes (
     raw_json TEXT NOT NULL,
     synced_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ticket_classification_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    dedupe_key TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL,
+    trigger_source TEXT,
+    ticket_status TEXT,
+    ticket_updated_time TEXT,
+    current_class_id TEXT,
+    current_class_name TEXT,
+    payload_json TEXT NOT NULL,
+    prompt_json TEXT,
+    result_class_id TEXT,
+    result_class_path TEXT,
+    confidence TEXT,
+    rationale TEXT,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    dispatched_at TEXT,
+    completed_at TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(ticket_id) REFERENCES tickets(id)
+);
 """
 
 DB_LOCK_RETRY_DELAY_SECONDS = 90
@@ -1419,6 +1445,141 @@ def release_ingest_mode_lease(db_path: Path, mode: str, owner_id: str) -> None:
             conn.commit()
 
     run_with_db_lock_retries(_operation)
+
+
+
+def enqueue_ticket_classification_event(
+    db_path: Path,
+    *,
+    ticket_id: str,
+    event_type: str,
+    dedupe_key: str,
+    trigger_source: str,
+    payload: dict[str, Any],
+    ticket_status: str | None = None,
+    ticket_updated_time: str | None = None,
+    current_class_id: str | None = None,
+    current_class_name: str | None = None,
+) -> dict[str, Any]:
+    now = now_iso()
+    with connect(db_path) as conn:
+        existing = conn.execute("SELECT id, status FROM ticket_classification_events WHERE dedupe_key = ?", (dedupe_key,)).fetchone()
+        if existing:
+            return {"status": "exists", "id": existing["id"], "event_status": existing["status"], "dedupe_key": dedupe_key}
+        cursor = conn.execute(
+            """
+            INSERT INTO ticket_classification_events(
+                ticket_id, event_type, dedupe_key, status, trigger_source, ticket_status, ticket_updated_time,
+                current_class_id, current_class_name, payload_json, created_at, updated_at
+            ) VALUES(?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(ticket_id),
+                event_type,
+                dedupe_key,
+                trigger_source,
+                ticket_status,
+                ticket_updated_time,
+                current_class_id,
+                current_class_name,
+                _json(payload),
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+        return {"status": "enqueued", "id": int(cursor.lastrowid), "dedupe_key": dedupe_key}
+
+
+def lease_ticket_classification_events(db_path: Path, *, limit: int = 3) -> list[dict[str, Any]]:
+    now = now_iso()
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM ticket_classification_events
+            WHERE status IN ('pending', 'failed') AND attempt_count < 3
+            ORDER BY id ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        ids = [row["id"] for row in rows]
+        if ids:
+            conn.executemany(
+                "UPDATE ticket_classification_events SET status = 'dispatching', attempt_count = attempt_count + 1, updated_at = ? WHERE id = ?",
+                [(now, event_id) for event_id in ids],
+            )
+            conn.commit()
+        if not ids:
+            return []
+        refreshed = conn.execute(
+            f"SELECT * FROM ticket_classification_events WHERE id IN ({','.join('?' for _ in ids)}) ORDER BY id ASC",
+            ids,
+        ).fetchall()
+    return [dict(row) for row in refreshed]
+
+
+def mark_ticket_classification_dispatched(db_path: Path, event_id: int, *, prompt: dict[str, Any]) -> None:
+    now = now_iso()
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE ticket_classification_events SET status = 'awaiting_result', prompt_json = ?, dispatched_at = ?, updated_at = ?, last_error = NULL WHERE id = ?",
+            (_json(prompt), now, now, event_id),
+        )
+        conn.commit()
+
+
+def mark_ticket_classification_failed(db_path: Path, event_id: int, error_message: str) -> None:
+    now = now_iso()
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE ticket_classification_events SET status = 'failed', last_error = ?, updated_at = ? WHERE id = ?",
+            (error_message[:1000], now, event_id),
+        )
+        conn.commit()
+
+
+def record_ticket_classification_result(
+    db_path: Path,
+    *,
+    event_id: int,
+    class_id: str,
+    confidence: str,
+    rationale: str,
+) -> dict[str, Any]:
+    now = now_iso()
+    with connect(db_path) as conn:
+        taxonomy = conn.execute("SELECT id, path FROM ticket_taxonomy_classes WHERE id = ?", (str(class_id),)).fetchone()
+        if taxonomy is None:
+            raise ValueError(f"Unknown ticket class id: {class_id}")
+        event = conn.execute("SELECT id FROM ticket_classification_events WHERE id = ?", (event_id,)).fetchone()
+        if event is None:
+            raise ValueError(f"Unknown classification event id: {event_id}")
+        conn.execute(
+            """
+            UPDATE ticket_classification_events
+            SET status = 'completed', result_class_id = ?, result_class_path = ?, confidence = ?, rationale = ?, completed_at = ?, updated_at = ?, last_error = NULL
+            WHERE id = ?
+            """,
+            (str(class_id), taxonomy["path"], confidence, rationale[:1000], now, now, event_id),
+        )
+        conn.commit()
+        return {"status": "ok", "event_id": event_id, "class_id": str(class_id), "class_path": taxonomy["path"], "confidence": confidence}
+
+
+def get_ticket_classification_summary(db_path: Path) -> dict[str, Any]:
+    with connect(db_path) as conn:
+        by_status = [dict(row) for row in conn.execute("SELECT status, COUNT(*) AS count FROM ticket_classification_events GROUP BY status ORDER BY status").fetchall()]
+        by_type = [dict(row) for row in conn.execute("SELECT event_type, status, COUNT(*) AS count FROM ticket_classification_events GROUP BY event_type, status ORDER BY event_type, status").fetchall()]
+        recent = [dict(row) for row in conn.execute(
+            """
+            SELECT id, ticket_id, event_type, status, result_class_id, result_class_path, confidence, updated_at, last_error
+            FROM ticket_classification_events
+            ORDER BY id DESC
+            LIMIT 10
+            """
+        ).fetchall()]
+    return {"status": "ok", "by_status": by_status, "by_type": by_type, "recent": recent}
 
 
 def enqueue_alert(

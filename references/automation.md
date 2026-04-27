@@ -148,3 +148,21 @@ Keep issue content anonymized and public-safe.
 - any leftover legacy SherpaMind cron jobs that should be cleaned up
 
 When backend/runtime capabilities change, the skill-front/references should be reviewed in the same wave so the backend/skill/OpenClaw split remains coherent.
+
+## Event-scoped class/sub-class classification
+
+SherpaMind classification should stay event-scoped and token-conscious. It should not run broad periodic reclassification sweeps.
+
+Current intended flow:
+
+1. `watch_new_tickets` observes a genuinely new open ticket after watcher baseline exists and enqueues one `initial` classification event keyed as `classification:initial:<ticket_id>`.
+2. `watch_warm_tickets` observes a newly-seen closed ticket after watcher baseline exists and enqueues one `final` classification event keyed as `classification:final:<ticket_id>:<closed_or_updated_time>`.
+3. The maintenance worker runs `classification_dispatch` as a lightweight task, leasing only a tiny batch of pending classification events.
+4. Each classification hook payload includes only:
+   - compact event/ticket metadata
+   - bounded initial/final ticket context
+   - active leaf class/sub-class candidates from the local `ticket_taxonomy_classes` cache as `id: path`
+   - an explicit instruction not to do broad retrieval or unrelated ticket searches
+5. The OpenClaw classification agent records the result with `record-ticket-classification`, which validates the class id against cached taxonomy and stores confidence/rationale locally.
+
+This keeps LLM work to at most two intended invocations per observed ticket: once for initial intake and once at final closure. Result capture is local-first; SherpaDesk write-back should remain a separate guarded step after the PUT field contract is explicitly verified.

@@ -48,6 +48,7 @@ def test_initialize_db_creates_core_tables(tmp_path: Path) -> None:
     assert 'ticket_detail_failures' in names
     assert 'ingest_mode_leases' in names
     assert 'ticket_taxonomy_classes' in names
+    assert 'ticket_classification_events' in names
 
 
 def test_replace_ticket_taxonomy_classes_roundtrip(tmp_path: Path) -> None:

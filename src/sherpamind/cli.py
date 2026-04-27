@@ -25,6 +25,7 @@ from .analysis import (
     search_ticket_documents,
 )
 from .automation import doctor_automation, remove_managed_cron_jobs
+from .classification import dispatch_ticket_classification_events, record_classification
 from .client import SherpaDeskClient
 from .documents import export_ticket_chunks, export_ticket_documents, materialize_ticket_documents
 from .enrichment import enrich_priority_ticket_details
@@ -58,7 +59,7 @@ from .vector_exports import export_embedding_manifest, export_embedding_ready_ch
 from .vector_index import build_vector_index, get_vector_index_status, search_vector_index
 from .watch import watch_new_tickets
 from .writebacks import confirm_stale_unconfirmed_closed_tickets
-from .db import backfill_ticket_core_fields, backfill_ticket_entity_stubs, backfill_ticket_technician_stubs, initialize_db
+from .db import backfill_ticket_core_fields, backfill_ticket_entity_stubs, backfill_ticket_technician_stubs, get_ticket_classification_summary, initialize_db
 
 app = typer.Typer(help="SherpaMind CLI")
 
@@ -115,6 +116,27 @@ def backfill_ticket_core_fields_command() -> None:
     settings = load_settings()
     initialize_db(settings.db_path)
     print(json.dumps(backfill_ticket_core_fields(settings.db_path), indent=2))
+
+
+@app.command("dispatch-ticket-classifications")
+def dispatch_ticket_classifications(limit: int = 2) -> None:
+    settings = load_settings()
+    initialize_db(settings.db_path)
+    print(json.dumps(dispatch_ticket_classification_events(settings, limit=limit), indent=2))
+
+
+@app.command("record-ticket-classification")
+def record_ticket_classification(event_id: int, class_id: str, confidence: str, rationale: str) -> None:
+    settings = load_settings()
+    initialize_db(settings.db_path)
+    print(json.dumps(record_classification(settings, event_id=event_id, class_id=class_id, confidence=confidence, rationale=rationale), indent=2))
+
+
+@app.command("report-ticket-classifications")
+def report_ticket_classifications() -> None:
+    settings = load_settings()
+    initialize_db(settings.db_path)
+    print(json.dumps(get_ticket_classification_summary(settings.db_path), indent=2))
 
 
 @app.command("sync-ticket-classes")
