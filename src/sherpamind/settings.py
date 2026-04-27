@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 import json
 import os
 
@@ -109,7 +110,7 @@ def _env_or_file(key: str, file_values: dict[str, str], default: str | None = No
     return os.getenv(key) or file_values.get(key) or default
 
 
-def _read_openclaw_skill_entry() -> dict[str, str]:
+def _read_openclaw_config() -> dict[str, Any]:
     config_path = Path.home() / ".openclaw" / "openclaw.json"
     if not config_path.exists():
         return {}
@@ -117,6 +118,11 @@ def _read_openclaw_skill_entry() -> dict[str, str]:
         data = json.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _read_openclaw_skill_entry() -> dict[str, str]:
+    data = _read_openclaw_config()
     entry = (((data.get("skills") or {}).get("entries") or {}).get("sherpamind") or {})
     if not isinstance(entry, dict):
         return {}
@@ -137,6 +143,31 @@ def _read_openclaw_skill_entry() -> dict[str, str]:
     if isinstance(api_base_url, str) and api_base_url.strip():
         values["SHERPADESK_API_BASE_URL"] = api_base_url.strip()
     return values
+
+
+def _read_openclaw_hooks_defaults() -> dict[str, str]:
+    """Return local OpenClaw hook defaults for the alert dispatcher.
+
+    SherpaMind installs are usually local to the same OpenClaw instance that
+    should receive alerts. Reading the local hooks config here keeps reinstall /
+    rebootstrap flows from silently falling back to an unauthenticated or stale
+    webhook setup when `SHERPAMIND_OPENCLAW_*` values were not staged manually.
+    """
+    data = _read_openclaw_config()
+    hooks = data.get("hooks") if isinstance(data.get("hooks"), dict) else {}
+    if not hooks or hooks.get("enabled") is not True:
+        return {}
+    token = hooks.get("token")
+    if not isinstance(token, str) or not token.strip():
+        return {}
+    gateway = data.get("gateway") if isinstance(data.get("gateway"), dict) else {}
+    port = gateway.get("port") if isinstance(gateway.get("port"), int) else 18789
+    path = hooks.get("path") if isinstance(hooks.get("path"), str) and hooks.get("path", "").strip() else "/hooks"
+    path = "/" + path.strip().strip("/")
+    return {
+        "SHERPAMIND_OPENCLAW_WEBHOOK_URL": f"http://127.0.0.1:{port}{path}/agent",
+        "SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN": token.strip(),
+    }
 
 
 def stage_connection_settings(
@@ -177,6 +208,7 @@ def load_settings() -> Settings:
     paths = ensure_path_layout()
     file_values = _read_key_value_file(paths.settings_file)
     openclaw_skill_values = _read_openclaw_skill_entry()
+    openclaw_hook_values = _read_openclaw_hooks_defaults()
     seed_max_pages_raw = _env_or_file("SHERPAMIND_SEED_MAX_PAGES", file_values)
     return Settings(
         api_base_url=_env_or_file("SHERPADESK_API_BASE_URL", file_values, openclaw_skill_values.get("SHERPADESK_API_BASE_URL") or "https://api.sherpadesk.com") or "https://api.sherpadesk.com",
@@ -189,8 +221,8 @@ def load_settings() -> Settings:
         notify_channel=_env_or_file("SHERPAMIND_NOTIFY_CHANNEL", file_values),
         new_ticket_alerts_enabled=str(_env_or_file("SHERPAMIND_NEW_TICKET_ALERTS_ENABLED", file_values, "false") or "false").strip().lower() in {"1", "true", "yes", "on"},
         ticket_update_alerts_enabled=str(_env_or_file("SHERPAMIND_TICKET_UPDATE_ALERTS_ENABLED", file_values, "false") or "false").strip().lower() in {"1", "true", "yes", "on"},
-        openclaw_webhook_url=_env_or_file("SHERPAMIND_OPENCLAW_WEBHOOK_URL", file_values),
-        openclaw_webhook_token=_env_or_file("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN", file_values),
+        openclaw_webhook_url=_env_or_file("SHERPAMIND_OPENCLAW_WEBHOOK_URL", file_values, openclaw_hook_values.get("SHERPAMIND_OPENCLAW_WEBHOOK_URL")),
+        openclaw_webhook_token=_env_or_file("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN", file_values, openclaw_hook_values.get("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN")),
         new_ticket_alert_channel=_env_or_file("SHERPAMIND_NEW_TICKET_ALERT_CHANNEL", file_values),
         ticket_update_alert_channel=_env_or_file("SHERPAMIND_TICKET_UPDATE_ALERT_CHANNEL", file_values) or _env_or_file("SHERPAMIND_NEW_TICKET_ALERT_CHANNEL", file_values),
         request_min_interval_seconds=float(_env_or_file("SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS", file_values, "8.0") or "8.0"),

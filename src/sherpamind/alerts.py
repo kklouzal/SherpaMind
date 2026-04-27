@@ -108,7 +108,7 @@ def _build_hook_payload(settings: Settings, ticket_id: str, summary: dict[str, A
         "- Ticket: #<id> — <subject>\n"
         "Use short bullets, strong labels, and at-a-glance clarity. Keep it practical, not fluffy.\n\n"
         f"Alert destination: {alert_channel}\n"
-        "When you are done, send the final alert message to that Discord target using delivery announce to that channel.\n\n"
+        "Return only the final alert card; OpenClaw hook delivery will send it to the requested destination.\n\n"
         f"Ticket context JSON:\n{json.dumps(compact, ensure_ascii=False, indent=2)}"
     )
 
@@ -143,13 +143,14 @@ def _refresh_ticket_context(settings: Settings, ticket_id: str) -> None:
 def _post_hook_payload(settings: Settings, ticket_id: str, payload: dict[str, Any]) -> AlertDispatchResult:
     body = json.dumps(payload).encode("utf-8")
     webhook_url = settings.openclaw_webhook_url or DEFAULT_AGENT_HOOK_URL
+    headers = {"Content-Type": "application/json"}
+    if settings.openclaw_webhook_token:
+        headers["Authorization"] = f"Bearer {settings.openclaw_webhook_token}"
+        headers["x-openclaw-token"] = settings.openclaw_webhook_token
     req = request.Request(
         webhook_url,
         data=body,
-        headers={
-            "Content-Type": "application/json",
-            **({"Authorization": f"Bearer {settings.openclaw_webhook_token}"} if settings.openclaw_webhook_token else {}),
-        },
+        headers=headers,
         method="POST",
     )
     try:
@@ -209,7 +210,7 @@ def _build_ticket_update_payload(settings: Settings, ticket_id: str, summary: di
         "- Ticket: #<id> — <subject>\n"
         "Use short bullets, strong labels, and at-a-glance clarity. Keep it practical, not fluffy.\n\n"
         f"Alert destination: {alert_channel}\n"
-        "When you are done, send the final alert message to that Discord target using delivery announce to that channel.\n\n"
+        "Return only the final alert card; OpenClaw hook delivery will send it to the requested destination.\n\n"
         f"Ticket context JSON:\n{json.dumps(compact, ensure_ascii=False, indent=2)}"
     )
     return _hook_request_payload(

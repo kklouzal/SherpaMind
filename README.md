@@ -576,6 +576,8 @@ python3 scripts/run.py service-status
 
 Runtime control/environment overrides are documented in `.env.example`, but the normal live API-key path is OpenClaw skill configuration feeding `SHERPADESK_API_KEY`, while `.SherpaMind/` continues to hold non-secret runtime settings and local derived state.
 
+For OpenClaw alert delivery, SherpaMind uses the current hooks API: authenticated `POST /hooks/agent` with `Authorization: Bearer <hooks.token>` / `x-openclaw-token` and a payload containing `message`, `name`, `agentId`, `wakeMode`, `deliver`, `channel`, `to`, and `timeoutSeconds`. If SherpaMind runs on the same host as OpenClaw, the backend auto-defaults `SHERPAMIND_OPENCLAW_WEBHOOK_URL` and `SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN` from local `~/.openclaw/openclaw.json` hooks settings when they are not staged manually. Use `python3 scripts/run.py doctor` or `bootstrap-audit` to verify the alert hook shape before starting the alert-dispatch worker.
+
 Important controls include:
 
 - `SHERPAMIND_WORKSPACE_ROOT`
@@ -584,6 +586,12 @@ Important controls include:
 - `SHERPAMIND_SEED_PAGE_SIZE`
 - `SHERPAMIND_SEED_MAX_PAGES`
 - `SHERPAMIND_SERVICE_*`
+- `SHERPAMIND_NEW_TICKET_ALERTS_ENABLED`
+- `SHERPAMIND_TICKET_UPDATE_ALERTS_ENABLED`
+- `SHERPAMIND_OPENCLAW_WEBHOOK_URL`
+- `SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN`
+- `SHERPAMIND_NEW_TICKET_ALERT_CHANNEL`
+- `SHERPAMIND_TICKET_UPDATE_ALERT_CHANNEL`
 - `SHERPAMIND_API_HOURLY_LIMIT`
 - `SHERPAMIND_API_BUDGET_WARN_RATIO`
 - `SHERPAMIND_API_BUDGET_CRITICAL_RATIO`

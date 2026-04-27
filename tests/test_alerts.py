@@ -1,9 +1,10 @@
 from pathlib import Path
+from urllib import request
 
 from sherpamind.db import initialize_db, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
 from sherpamind.documents import materialize_ticket_documents
 from sherpamind.settings import Settings
-from sherpamind.alerts import _build_hook_payload, _build_ticket_update_payload
+from sherpamind.alerts import _build_hook_payload, _build_ticket_update_payload, _post_hook_payload
 from sherpamind.summaries import get_ticket_summary
 
 
@@ -72,6 +73,7 @@ def test_build_hook_payload_contains_ticket_triage_context(tmp_path: Path) -> No
     assert payload["channel"] == "discord"
     assert payload["to"] == "channel:1488924125736079492"
     assert payload["deliver"] is True
+    assert set(payload) == {"agentId", "name", "message", "wakeMode", "deliver", "channel", "to", "timeoutSeconds"}
     message = payload["message"]
     assert "new SherpaDesk ticket" in message
     assert "INITIAL POST / original user-submitted issue only" in message
@@ -87,6 +89,38 @@ def test_build_hook_payload_contains_ticket_triage_context(tmp_path: Path) -> No
     assert "next_step_context" not in message
 
 
+def test_post_hook_payload_uses_current_openclaw_hook_auth_headers(monkeypatch, tmp_path: Path) -> None:
+    settings = make_settings(tmp_path)
+    settings = Settings(**{**settings.__dict__, "openclaw_webhook_token": "hook-token"})
+    captured = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self) -> bytes:
+            return b"{}"
+
+    def fake_urlopen(req: request.Request, timeout: int):
+        captured["url"] = req.full_url
+        captured["timeout"] = timeout
+        captured["headers"] = dict(req.header_items())
+        captured["body"] = req.data
+        return Response()
+
+    monkeypatch.setattr(request, "urlopen", fake_urlopen)
+    result = _post_hook_payload(settings, "101", {"message": "hello"})
+
+    assert result.status == "ok"
+    assert captured["url"] == "http://127.0.0.1:18789/hooks/agent"
+    assert captured["headers"]["Authorization"] == "Bearer hook-token"
+    assert captured["headers"]["X-openclaw-token"] == "hook-token"
+    assert captured["body"] == b'{"message": "hello"}'
+
+
 def test_build_ticket_update_payload_allows_broader_history_context(tmp_path: Path) -> None:
     settings = make_settings(tmp_path)
     seed_fixture(settings.db_path)
@@ -96,6 +130,7 @@ def test_build_ticket_update_payload_allows_broader_history_context(tmp_path: Pa
     assert payload["agentId"] == "main"
     assert payload["channel"] == "discord"
     assert payload["to"] == "channel:1488924125736079492"
+    assert set(payload) == {"agentId", "name", "message", "wakeMode", "deliver", "channel", "to", "timeoutSeconds"}
     message = payload["message"]
     assert "new NON-TECH update" in message
     assert "broader ticket history" in message
@@ -104,5 +139,6 @@ def test_build_ticket_update_payload_allows_broader_history_context(tmp_path: Pa
     assert "3-5 short sentences or bullet-style lines" in message
     assert "Update synopsis:" in message
     assert "Recommended follow-up / next steps:" in message
+    assert "OpenClaw hook delivery will send it" in message
     assert "recent_logs" in message
     assert "retrieval_metadata" in message

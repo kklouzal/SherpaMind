@@ -130,3 +130,54 @@ def test_stage_connection_settings_persists_new_ticket_alert_options(monkeypatch
     assert settings.openclaw_webhook_token == "token123"
     assert settings.new_ticket_alert_channel == "channel:1488924125736079492"
     assert settings.ticket_update_alert_channel == "channel:1488924125736079492"
+
+
+def test_load_settings_defaults_openclaw_hook_from_local_config(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SHERPAMIND_OPENCLAW_WEBHOOK_URL", raising=False)
+    monkeypatch.delenv("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
+    monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_INSTANCE_KEY", raising=False)
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    (home / ".openclaw").mkdir(parents=True, exist_ok=True)
+    (home / ".openclaw" / "openclaw.json").write_text(json.dumps({
+        "gateway": {"port": 19999},
+        "hooks": {
+            "enabled": True,
+            "path": "/hooks",
+            "token": "hook-token",
+            "allowedAgentIds": ["main"],
+        },
+    }))
+
+    settings = load_settings()
+    assert settings.openclaw_webhook_url == "http://127.0.0.1:19999/hooks/agent"
+    assert settings.openclaw_webhook_token == "hook-token"
+
+
+def test_staged_openclaw_hook_settings_override_local_config(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SHERPAMIND_OPENCLAW_WEBHOOK_URL", raising=False)
+    monkeypatch.delenv("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
+    monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_INSTANCE_KEY", raising=False)
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    (home / ".openclaw").mkdir(parents=True, exist_ok=True)
+    (home / ".openclaw" / "openclaw.json").write_text(json.dumps({
+        "gateway": {"port": 19999},
+        "hooks": {"enabled": True, "path": "/hooks", "token": "auto-token"},
+    }))
+    stage_connection_settings(
+        openclaw_webhook_url="http://127.0.0.1:18789/custom/agent",
+        openclaw_webhook_token="staged-token",
+    )
+
+    settings = load_settings()
+    assert settings.openclaw_webhook_url == "http://127.0.0.1:18789/custom/agent"
+    assert settings.openclaw_webhook_token == "staged-token"

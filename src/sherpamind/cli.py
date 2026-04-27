@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import typer
-from rich import print
 
 from .analysis import (
     get_api_usage_summary,
@@ -150,12 +149,24 @@ def configure(
     instance_key: str | None = None,
     api_base_url: str | None = None,
     notify_channel: str | None = None,
+    new_ticket_alerts_enabled: str | None = None,
+    ticket_update_alerts_enabled: str | None = None,
+    openclaw_webhook_url: str | None = None,
+    openclaw_webhook_token: str | None = None,
+    new_ticket_alert_channel: str | None = None,
+    ticket_update_alert_channel: str | None = None,
 ) -> None:
     settings_file = stage_connection_settings(
         api_base_url=api_base_url,
         org_key=org_key,
         instance_key=instance_key,
         notify_channel=notify_channel,
+        new_ticket_alerts_enabled=new_ticket_alerts_enabled,
+        ticket_update_alerts_enabled=ticket_update_alerts_enabled,
+        openclaw_webhook_url=openclaw_webhook_url,
+        openclaw_webhook_token=openclaw_webhook_token,
+        new_ticket_alert_channel=new_ticket_alert_channel,
+        ticket_update_alert_channel=ticket_update_alert_channel,
     )
     print(json.dumps({
         "status": "ok",
@@ -166,6 +177,12 @@ def configure(
                 "SHERPADESK_ORG_KEY": org_key,
                 "SHERPAMIND_NOTIFY_CHANNEL": notify_channel,
                 "SHERPADESK_INSTANCE_KEY": instance_key,
+                "SHERPAMIND_NEW_TICKET_ALERTS_ENABLED": new_ticket_alerts_enabled,
+                "SHERPAMIND_TICKET_UPDATE_ALERTS_ENABLED": ticket_update_alerts_enabled,
+                "SHERPAMIND_OPENCLAW_WEBHOOK_URL": openclaw_webhook_url,
+                "SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN": "<redacted>" if openclaw_webhook_token is not None else None,
+                "SHERPAMIND_NEW_TICKET_ALERT_CHANNEL": new_ticket_alert_channel,
+                "SHERPAMIND_TICKET_UPDATE_ALERT_CHANNEL": ticket_update_alert_channel,
             }.items() if value is not None
         ],
         "note": "Non-secret settings were updated. Configure the OpenClaw `sherpamind` skill for the API key separately.",
@@ -190,6 +207,9 @@ def doctor() -> None:
         "api_key_present": bool(settings.api_key),
         "org_key_present": bool(settings.org_key),
         "instance_key_present": bool(settings.instance_key),
+        "openclaw_webhook_url_present": bool(settings.openclaw_webhook_url),
+        "openclaw_webhook_token_present": bool(settings.openclaw_webhook_token),
+        "openclaw_webhook_uses_hooks_agent_endpoint": bool(settings.openclaw_webhook_url and settings.openclaw_webhook_url.rstrip("/").endswith("/hooks/agent")),
     }
     print(json.dumps({
         "status": "ok",
@@ -295,9 +315,13 @@ def bootstrap_audit(summary: bool = False) -> None:
     settings = load_settings()
     paths = ensure_path_layout()
     service = doctor_service()
+    webhook_uses_hooks_agent = bool(settings.openclaw_webhook_url and settings.openclaw_webhook_url.rstrip("/").endswith("/hooks/agent"))
     checks = {
         "python3": True,
         "systemctl_user": service.get("systemctl_user_available", True),
+        "openclaw_webhook_url_present": bool(settings.openclaw_webhook_url),
+        "openclaw_webhook_token_present": bool(settings.openclaw_webhook_token),
+        "openclaw_webhook_uses_hooks_agent_endpoint": webhook_uses_hooks_agent,
     }
     onboarding_steps = []
 
@@ -317,6 +341,13 @@ def bootstrap_audit(summary: bool = False) -> None:
         add_step("discover-and-configure-org-instance", "Discover orgs/instances, then persist the chosen org/instance in non-secret settings.", "python3 scripts/run.py discover-orgs")
     if not settings.db_path.exists():
         add_step("initialize-db", "Initialize the local SQLite store and runtime scaffolding.", "python3 scripts/run.py setup")
+    if settings.new_ticket_alerts_enabled or settings.ticket_update_alerts_enabled:
+        if not settings.openclaw_webhook_url or not settings.openclaw_webhook_token or not webhook_uses_hooks_agent:
+            add_step(
+                "configure-openclaw-hook-alerts",
+                "Configure SherpaMind alerts to use OpenClaw's current authenticated POST /hooks/agent endpoint with the hooks.token, not the Gateway auth token or a legacy webhook shape.",
+                "python3 scripts/run.py configure --help",
+            )
     if not service.get("unit_exists"):
         add_step("install-service", "Optionally install the user-level background service after bootstrap and seeding are complete.", "python3 scripts/run.py install-service", user_action_required=False)
 
