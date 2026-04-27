@@ -11,7 +11,7 @@ from .settings import Settings
 from .summaries import get_ticket_summary
 
 DEFAULT_AGENT_HOOK_URL = "http://127.0.0.1:18789/hooks/agent"
-DEFAULT_ALERT_CHANNEL = "channel:1488924125736079492"
+DEFAULT_ALERT_TARGET: str | None = None
 DEFAULT_AGENT_ID = "main"
 DEFAULT_TIMEOUT_SECONDS = 30
 
@@ -43,22 +43,24 @@ def _normalize_ticket_summary(summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _hook_request_payload(*, alert_channel: str, name: str, prompt: str) -> dict[str, Any]:
-    return {
+def _hook_request_payload(*, alert_channel: str | None, name: str, prompt: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "agentId": DEFAULT_AGENT_ID,
         "name": name,
         "message": prompt,
         "wakeMode": "now",
         "deliver": True,
         "channel": "discord",
-        "to": alert_channel,
         "timeoutSeconds": 180,
     }
+    if alert_channel:
+        payload["to"] = alert_channel
+    return payload
 
 
 def _build_hook_payload(settings: Settings, ticket_id: str, summary: dict[str, Any]) -> dict[str, Any]:
     normalized = _normalize_ticket_summary(summary)
-    alert_channel = settings.new_ticket_alert_channel or DEFAULT_ALERT_CHANNEL
+    alert_channel = settings.new_ticket_alert_channel or DEFAULT_ALERT_TARGET
     compact = {
         "ticket_id": str(ticket_id),
         "ticket_number": normalized["ticket"].get("ticket_number"),
@@ -165,7 +167,7 @@ def _post_hook_payload(settings: Settings, ticket_id: str, payload: dict[str, An
 def _build_ticket_update_payload(settings: Settings, ticket_id: str, summary: dict[str, Any]) -> dict[str, Any]:
     ticket = summary.get("ticket") or {}
     metadata = summary.get("retrieval_metadata") or {}
-    alert_channel = settings.ticket_update_alert_channel or settings.new_ticket_alert_channel or DEFAULT_ALERT_CHANNEL
+    alert_channel = settings.ticket_update_alert_channel or settings.new_ticket_alert_channel or DEFAULT_ALERT_TARGET
     compact = {
         "ticket_id": str(ticket_id),
         "ticket_number": ticket.get("ticket_number"),
@@ -252,12 +254,23 @@ def dispatch_queued_alert(settings: Settings, alert_row: dict[str, Any]) -> Aler
     return AlertDispatchResult(status="error", ticket_id=ticket_id, message=f"unknown_alert_type:{alert_type}")
 
 
+def _alert_payload_json(alert_row: dict[str, Any]) -> dict[str, Any]:
+    raw = alert_row.get("payload_json")
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(str(raw))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def finalize_queued_alert(settings: Settings, alert_row: dict[str, Any], result: AlertDispatchResult, *, retry_after_seconds: int = 120) -> None:
     alert_id = int(alert_row["id"])
     if result.status == "ok":
         mark_alert_sent(settings.db_path, alert_id)
         if str(alert_row.get("alert_type") or "") == "ticket_update":
-            payload = json.loads(alert_row.get("payload_json") or "{}") if alert_row.get("payload_json") else {}
+            payload = _alert_payload_json(alert_row)
             event_key = payload.get("event_key") or str(alert_row.get("ticket_id"))
             mark_ticket_update_alert_sent(settings.db_path, str(alert_row.get("ticket_id")), str(event_key))
     else:

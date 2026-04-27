@@ -4,7 +4,7 @@ from urllib import request
 from sherpamind.db import initialize_db, upsert_accounts, upsert_ticket_details, upsert_tickets, upsert_technicians, upsert_users
 from sherpamind.documents import materialize_ticket_documents
 from sherpamind.settings import Settings
-from sherpamind.alerts import _build_hook_payload, _build_ticket_update_payload, _post_hook_payload
+from sherpamind.alerts import _alert_payload_json, _build_hook_payload, _build_ticket_update_payload, _post_hook_payload
 from sherpamind.summaries import get_ticket_summary
 
 
@@ -87,6 +87,23 @@ def test_build_hook_payload_contains_ticket_triage_context(tmp_path: Path) -> No
     assert "Acme Co" in message
     assert "recent_logs" not in message
     assert "next_step_context" not in message
+
+
+def test_build_hook_payload_omits_target_when_no_alert_channel_is_configured(tmp_path: Path) -> None:
+    settings = Settings(**{**make_settings(tmp_path).__dict__, "new_ticket_alert_channel": None, "ticket_update_alert_channel": None})
+    seed_fixture(settings.db_path)
+    summary = get_ticket_summary(settings.db_path, "101", limit_logs=5, limit_attachments=5)
+    payload = _build_hook_payload(settings, "101", summary)
+
+    assert payload["channel"] == "discord"
+    assert "to" not in payload
+
+
+def test_alert_payload_json_tolerates_bad_queue_payloads() -> None:
+    assert _alert_payload_json({"payload_json": '{"event_key":"abc"}'}) == {"event_key": "abc"}
+    assert _alert_payload_json({"payload_json": "not-json"}) == {}
+    assert _alert_payload_json({"payload_json": "[]"}) == {}
+    assert _alert_payload_json({}) == {}
 
 
 def test_post_hook_payload_uses_current_openclaw_hook_auth_headers(monkeypatch, tmp_path: Path) -> None:

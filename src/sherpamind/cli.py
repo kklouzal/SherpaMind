@@ -27,7 +27,6 @@ from .analysis import (
 from .automation import doctor_automation, remove_managed_cron_jobs
 from .client import SherpaDeskClient
 from .documents import export_ticket_chunks, export_ticket_documents, materialize_ticket_documents
-from .freshness import get_sync_freshness
 from .enrichment import enrich_priority_ticket_details
 from .migrate import archive_legacy_state, migrate_legacy_state
 from .paths import ensure_path_layout
@@ -42,7 +41,6 @@ from .service_manager import (
     stop_service,
     uninstall_service,
 )
-from .service_runtime import run_pending_tasks, run_service_loop
 from .hot_watch_worker import run_hot_watch_loop, run_hot_watch_once
 from .alert_dispatch_worker import run_alert_dispatch_loop, run_alert_dispatch_once
 from .maintenance_worker import run_maintenance_loop, run_maintenance_once

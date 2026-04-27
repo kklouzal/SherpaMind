@@ -150,7 +150,14 @@ def list_recent_account_activity(db_path: Path, days: int = 7, limit: int = 20) 
                    MAX(COALESCE(t.updated_at, t.created_at)) AS latest_activity_at
             FROM tickets t
             LEFT JOIN accounts a ON a.id = t.account_id
-            WHERE julianday(REPLACE(substr(COALESCE(t.updated_at, t.created_at), 1, 19), 'T', ' ')) >= julianday('now', ?)
+            WHERE julianday(REPLACE(substr(COALESCE(t.updated_at, t.created_at), 1, 19), 'T', ' ')) >= julianday(
+                COALESCE((
+                    SELECT MAX(REPLACE(substr(COALESCE(t2.updated_at, t2.created_at), 1, 19), 'T', ' '))
+                    FROM tickets t2
+                    WHERE COALESCE(t2.updated_at, t2.created_at) IS NOT NULL
+                ), 'now'),
+                ?
+            )
             GROUP BY COALESCE(a.name, t.account_id, 'unknown')
             ORDER BY ticket_count DESC, latest_activity_at DESC, account ASC
             LIMIT ?
@@ -171,7 +178,14 @@ def list_technician_recent_load(db_path: Path, days: int = 7, limit: int = 20) -
                    MAX(COALESCE(t.updated_at, t.created_at)) AS latest_activity_at
             FROM tickets t
             LEFT JOIN technicians te ON te.id = t.assigned_technician_id
-            WHERE julianday(REPLACE(substr(COALESCE(t.updated_at, t.created_at), 1, 19), 'T', ' ')) >= julianday('now', ?)
+            WHERE julianday(REPLACE(substr(COALESCE(t.updated_at, t.created_at), 1, 19), 'T', ' ')) >= julianday(
+                COALESCE((
+                    SELECT MAX(REPLACE(substr(COALESCE(t2.updated_at, t2.created_at), 1, 19), 'T', ' '))
+                    FROM tickets t2
+                    WHERE COALESCE(t2.updated_at, t2.created_at) IS NOT NULL
+                ), 'now'),
+                ?
+            )
             GROUP BY COALESCE(te.display_name, t.assigned_technician_id, 'unassigned')
             ORDER BY ticket_count DESC, latest_activity_at DESC, technician ASC
             LIMIT ?
