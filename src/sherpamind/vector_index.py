@@ -314,6 +314,21 @@ def get_vector_index_status(db_path: Path) -> dict[str, Any]:
     }
 
 
+def ensure_current_vector_index(db_path: Path, dims: int = DEFAULT_DIMS) -> dict[str, Any]:
+    status = get_vector_index_status(db_path)
+    needs_refresh = bool(
+        status["missing_index_rows"]
+        or status["dangling_index_rows"]
+        or status["outdated_content_rows"]
+        or (status["indexed_chunks"] and (status["distinct_dims"] != 1 or status["min_dims"] != dims or status["max_dims"] != dims))
+    )
+    if not needs_refresh:
+        return {"status": "ok", "refreshed": False, "vector_index": status}
+    refreshed = build_vector_index(db_path, dims=dims)
+    refreshed_status = get_vector_index_status(db_path)
+    return {"status": "ok", "refreshed": True, "reason": {"missing_index_rows": status["missing_index_rows"], "dangling_index_rows": status["dangling_index_rows"], "outdated_content_rows": status["outdated_content_rows"]}, "vector_index": refreshed_status, "refresh_result": refreshed}
+
+
 def search_vector_index(
     db_path: Path,
     query_text: str,

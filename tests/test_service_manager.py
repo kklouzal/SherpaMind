@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from sherpamind.service_manager import unit_contents
+from sherpamind.service_manager import SERVICE_ENV_FILE_NAME, unit_contents, write_unit_files
 
 
 def test_unit_contents_contains_worker_run(monkeypatch, tmp_path: Path) -> None:
@@ -23,8 +23,25 @@ def test_unit_contents_contains_worker_run(monkeypatch, tmp_path: Path) -> None:
     assert 'ExecStart=' in text
     assert 'hot-watch-run' in text
     assert 'SHERPAMIND_WORKSPACE_ROOT=' in text
-    assert 'EnvironmentFile=' not in text
-    assert 'Environment=SHERPADESK_API_KEY=ui-secret-key' in text
+    assert f'EnvironmentFile=-{tmp_path / ".SherpaMind" / "private" / "secrets" / SERVICE_ENV_FILE_NAME}' in text
+    assert 'Environment=SHERPADESK_API_KEY=' not in text
+    assert 'CPUQuota=25%' in text
+    assert 'CPUWeight=30' in text
+    assert 'IOWeight=30' in text
+    assert 'Nice=10' in text
+    assert 'TasksMax=128' in text
+    assert 'Restart=on-failure' in text
+    assert 'RestartSec=30' in text
+    assert 'StartLimitIntervalSec=300' in text
+    assert 'NoNewPrivileges=true' in text
+    assert 'PrivateTmp=true' in text
+
+    written = write_unit_files()
+    service_env = tmp_path / '.SherpaMind' / 'private' / 'secrets' / SERVICE_ENV_FILE_NAME
+    assert service_env in written
+    assert service_env.exists()
+    assert service_env.stat().st_mode & 0o777 == 0o600
+    assert 'SHERPADESK_API_KEY=ui-secret-key' in service_env.read_text()
 
 
 def test_unit_contents_preserves_direct_sherpamind_root(monkeypatch, tmp_path: Path) -> None:
@@ -38,3 +55,7 @@ def test_unit_contents_preserves_direct_sherpamind_root(monkeypatch, tmp_path: P
 
     assert f'Environment=SHERPAMIND_WORKSPACE_ROOT={workspace_root}' in text
     assert f'Environment=SHERPAMIND_ROOT={runtime_root}' in text
+    assert f'EnvironmentFile=-{runtime_root / "private" / "secrets" / SERVICE_ENV_FILE_NAME}' in text
+    assert 'CPUQuota=10%' in text
+    assert 'CPUWeight=20' in text
+    assert 'IOWeight=20' in text

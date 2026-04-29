@@ -521,6 +521,10 @@ python3 scripts/run.py service-status
 - `sherpamind-alert-dispatch.service`
 - `sherpamind-maintenance.service`
 
+Generated units include conservative resource governance so backend workers cannot freely consume the whole host: maintenance is capped to 50% CPU, hot-watch to 25% CPU, and alert-dispatch to 10% CPU, with low CPU/IO weights, `Nice=10`, `TasksMax=128`, `Restart=on-failure`, and basic service hardening. Local operator overrides can still be placed under `~/.config/systemd/user/sherpamind-*.service.d/*.conf`.
+
+Service-only secrets from the local OpenClaw skill entry are written to `.SherpaMind/private/secrets/service.env` with mode `0600`; generated systemd units reference that file with `EnvironmentFile=` instead of embedding API keys directly in unit text.
+
 `service-status` reports those workers as a set so unattended runtime health is evaluated against the split runtime rather than an old single-daemon mental model.
 
 On a normal Linux host, `python3 scripts/run.py setup` is expected to:
@@ -597,7 +601,7 @@ python3 scripts/run.py install-service
 python3 scripts/run.py service-status
 ```
 
-Runtime control/environment overrides are documented in `.env.example`; `.SherpaMind/` holds non-secret runtime settings and local derived state. Use `SHERPAMIND_WORKSPACE_ROOT` to choose the parent workspace for a normal install, or `SHERPAMIND_ROOT` to point directly at an existing `.SherpaMind` runtime directory.
+Runtime control/environment overrides are documented in `.env.example`; `.SherpaMind/` holds non-secret runtime settings and local derived state. Service/API secrets live under `.SherpaMind/private/secrets/`, including `service.env`, `sherpadesk_api_user.txt`, and `openclaw_webhook_token.txt`. Use `SHERPAMIND_WORKSPACE_ROOT` to choose the parent workspace for a normal install, or `SHERPAMIND_ROOT` to point directly at an existing `.SherpaMind` runtime directory.
 
 For OpenClaw alert delivery, SherpaMind uses authenticated `POST /hooks/agent` with `Authorization: Bearer <hooks.token>` / `x-openclaw-token` and a payload containing `message`, `name`, `agentId`, `wakeMode`, `deliver`, `channel`, optional `to`, and `timeoutSeconds`. On the same host as OpenClaw, hook URL/token default from local `~/.openclaw/openclaw.json` hooks settings. Enablement and destinations are first-class OpenClaw skill fields:
 

@@ -30,7 +30,7 @@ from .paths import ensure_path_layout
 from .public_artifacts import generate_public_snapshot
 from .service_runtime import _build_budget_plan, _detect_immediate_local_repair_needs, _effective_settings, _update_cold_bootstrap_status
 from .settings import Settings, load_settings
-from .vector_index import build_vector_index
+from .vector_index import build_vector_index, ensure_current_vector_index
 from .worker_common import aggregate_service_state, append_log, file_lock, load_state, now_iso, save_state, worker_loop_sleep
 
 WORKER_NAME = "maintenance"
@@ -48,7 +48,7 @@ def _task_specs(settings: Settings) -> list[tuple[str, int, Callable[[Settings],
         ("classification_writeback", settings.service_classification_writeback_every_seconds, lambda s: write_back_completed_ticket_classifications(s, limit=1, apply=True), "important"),
         ("retrieval_artifacts", settings.service_public_snapshot_every_seconds, lambda s: ensure_current_ticket_materialization(s.db_path), "lightweight"),
         ("public_snapshot", settings.service_public_snapshot_every_seconds, lambda s: generate_public_snapshot(s.db_path), "lightweight"),
-        ("vector_refresh", settings.service_vector_refresh_every_seconds, lambda s: build_vector_index(s.db_path), "lightweight"),
+        ("vector_refresh", settings.service_vector_refresh_every_seconds, lambda s: ensure_current_vector_index(s.db_path), "lightweight"),
         ("runtime_status", settings.service_doctor_every_seconds, lambda s: generate_runtime_status_artifacts(s.db_path), "lightweight"),
         ("doctor_marker", settings.service_doctor_every_seconds, lambda s: {"status": "ok", "checked_at": now_iso(), "freshness": get_sync_freshness(s.db_path)}, "lightweight"),
     ]

@@ -422,7 +422,8 @@ def enrich_priority_ticket_details(settings: Settings, limit: int = 50, material
         writeback = confirm_observed_stale_unconfirmed_tickets(client, details, source="enrich_priority_ticket_details")
         upsert_tickets(settings.db_path, details, synced_at=synced_at)
         upsert_ticket_details(settings.db_path, details, synced_at=synced_at)
-        doc_stats = materialize_ticket_documents(settings.db_path, limit=None) if materialize_docs else None
+        enriched_ticket_ids = [str(detail.get('id')) for detail in details if detail.get('id') is not None]
+        doc_stats = materialize_ticket_documents(settings.db_path, ticket_ids=enriched_ticket_ids) if materialize_docs and enriched_ticket_ids else None
         stats = {
             'candidate_ticket_count': len(ticket_ids),
             'enriched_ticket_count': len(details),

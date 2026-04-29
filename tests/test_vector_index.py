@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from sherpamind.db import initialize_db, replace_ticket_document_chunks, replace_ticket_documents
-from sherpamind.vector_index import build_vector_index, get_vector_index_status, search_vector_index, vectorize_text
+from sherpamind.vector_index import build_vector_index, ensure_current_vector_index, get_vector_index_status, search_vector_index, vectorize_text
 
 
 def seed(db: Path) -> None:
@@ -164,3 +164,32 @@ def test_vector_index_status_samples_missing_and_dangling_rows(tmp_path: Path) -
     assert dangling["index_synced_at"]
     assert status["drift_samples"]["outdated_chunks"] == []
     assert status["drift_samples"]["outdated_documents"] == []
+
+
+def test_ensure_current_vector_index_skips_clean_index_and_repairs_drift(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    seed(db)
+
+    first = ensure_current_vector_index(db, dims=32)
+    assert first["status"] == "ok"
+    assert first["refreshed"] is True
+    assert first["vector_index"]["missing_index_rows"] == 0
+
+    second = ensure_current_vector_index(db, dims=32)
+    assert second["status"] == "ok"
+    assert second["refreshed"] is False
+
+    replace_ticket_document_chunks(
+        db,
+        [
+            {"chunk_id": "ticket:101:chunk:0", "doc_id": "ticket:101", "ticket_id": 101, "chunk_index": 0, "text": "Printer issue changed", "content_hash": "changed"},
+            {"chunk_id": "ticket:102:chunk:0", "doc_id": "ticket:102", "ticket_id": 102, "chunk_index": 0, "text": "Outlook email sync issue", "content_hash": "b"},
+        ],
+        synced_at="2026-03-19T02:00:00Z",
+    )
+
+    repaired = ensure_current_vector_index(db, dims=32)
+    assert repaired["status"] == "ok"
+    assert repaired["refreshed"] is True
+    assert repaired["reason"]["outdated_content_rows"] == 1
+    assert repaired["vector_index"]["outdated_content_rows"] == 0

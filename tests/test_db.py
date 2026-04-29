@@ -51,6 +51,20 @@ def test_initialize_db_creates_core_tables(tmp_path: Path) -> None:
     assert 'ticket_classification_events' in names
 
 
+def test_initialize_db_creates_hot_path_indexes(tmp_path: Path) -> None:
+    db = tmp_path / "sherpamind.sqlite3"
+    initialize_db(db)
+    with connect(db) as conn:
+        rows = conn.execute("SELECT name FROM sqlite_master WHERE type='index'").fetchall()
+    names = {row['name'] for row in rows}
+    assert 'idx_ticket_logs_ticket_record_date' in names
+    assert 'idx_ticket_document_chunks_ticket' in names
+    assert 'idx_vector_chunk_index_ticket' in names
+    assert 'idx_alert_queue_dispatch' in names
+    assert 'idx_derived_refresh_queue_ready' in names
+    assert 'idx_ticket_classification_events_ready' in names
+
+
 def test_replace_ticket_taxonomy_classes_roundtrip(tmp_path: Path) -> None:
     db = tmp_path / "sherpamind.sqlite3"
     initialize_db(db)

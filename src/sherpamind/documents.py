@@ -910,8 +910,12 @@ def build_ticket_documents(
                        'recorded_at', ta.recorded_at,
                        'url', ta.url
                    ))
-                   FROM ticket_attachments ta
-                   WHERE ta.ticket_id = t.id
+                   FROM (
+                       SELECT id, name, size, recorded_at, url
+                       FROM ticket_attachments
+                       WHERE ticket_id = t.id
+                       ORDER BY recorded_at ASC, id ASC
+                   ) ta
                ) AS attachment_metadata_json,
                CASE WHEN td.ticket_id IS NOT NULL THEN 1 ELSE 0 END AS detail_row_present
         FROM tickets t

@@ -51,6 +51,7 @@ class SherpaMindPaths:
     docs_root: Path
     settings_file: Path
     api_user_file: Path
+    openclaw_webhook_token_file: Path
     db_path: Path
     watch_state_path: Path
     warm_watch_state_path: Path
@@ -101,6 +102,7 @@ def resolve_paths() -> SherpaMindPaths:
         docs_root=docs_root,
         settings_file=config_root / "settings.env",
         api_user_file=secrets_root / "sherpadesk_api_user.txt",
+        openclaw_webhook_token_file=secrets_root / "openclaw_webhook_token.txt",
         db_path=data_root / "sherpamind.sqlite3",
         watch_state_path=state_root / "watch_state.json",
         warm_watch_state_path=state_root / "warm_watch_state.json",

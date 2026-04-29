@@ -84,7 +84,6 @@ def _write_key_value_file(path: Path, values: dict[str, str]) -> None:
         "SHERPADESK_ORG_KEY",
         "SHERPADESK_INSTANCE_KEY",
         "SHERPAMIND_OPENCLAW_WEBHOOK_URL",
-        "SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN",
         "SHERPAMIND_SERVICE_HOT_OPEN_EVERY_SECONDS",
         "SHERPAMIND_SERVICE_WARM_WATCH_EVERY_SECONDS",
         "SHERPAMIND_SERVICE_ALERT_DISPATCH_EVERY_SECONDS",
@@ -173,6 +172,35 @@ def _read_openclaw_skill_entry() -> dict[str, str]:
     return values
 
 
+def _read_secret_text(path: Path) -> str | None:
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return value or None
+
+
+def _write_secret_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(value.strip() + "\n", encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+
+
+def _migrate_secret_out_of_settings(paths: Any, file_values: dict[str, str], key: str, secret_path: Path) -> dict[str, str]:
+    value = file_values.get(key)
+    if not value:
+        return file_values
+    if not _read_secret_text(secret_path):
+        _write_secret_text(secret_path, value)
+    cleaned = dict(file_values)
+    cleaned.pop(key, None)
+    _write_key_value_file(paths.settings_file, cleaned)
+    return cleaned
+
+
 def _read_openclaw_hooks_defaults() -> dict[str, str]:
     """Return local OpenClaw hook defaults for the alert dispatcher.
 
@@ -213,11 +241,13 @@ def stage_connection_settings(
         "SHERPADESK_ORG_KEY": org_key,
         "SHERPADESK_INSTANCE_KEY": instance_key,
         "SHERPAMIND_OPENCLAW_WEBHOOK_URL": openclaw_webhook_url,
-        "SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN": openclaw_webhook_token,
     }
+    current.pop("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN", None)
     for key, value in updates.items():
         if value is not None:
             current[key] = value
+    if openclaw_webhook_token is not None:
+        _write_secret_text(paths.openclaw_webhook_token_file, openclaw_webhook_token)
     _write_key_value_file(paths.settings_file, current)
     return paths.settings_file
 
@@ -225,13 +255,16 @@ def stage_connection_settings(
 def load_settings() -> Settings:
     paths = ensure_path_layout()
     file_values = _read_key_value_file(paths.settings_file)
+    file_values = _migrate_secret_out_of_settings(paths, file_values, "SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN", paths.openclaw_webhook_token_file)
     openclaw_skill_values = _read_openclaw_skill_entry()
     openclaw_hook_values = _read_openclaw_hooks_defaults()
+    staged_openclaw_token = _read_secret_text(paths.openclaw_webhook_token_file)
+    staged_api_user = _read_secret_text(paths.api_user_file)
     seed_max_pages_raw = _env_or_file("SHERPAMIND_SEED_MAX_PAGES", file_values)
     return Settings(
         api_base_url=_env_or_file("SHERPADESK_API_BASE_URL", file_values, openclaw_skill_values.get("SHERPADESK_API_BASE_URL") or "https://api.sherpadesk.com") or "https://api.sherpadesk.com",
         api_key=os.getenv("SHERPADESK_API_KEY"),
-        api_user=os.getenv("SHERPADESK_API_USER") or openclaw_skill_values.get("SHERPADESK_API_USER"),
+        api_user=os.getenv("SHERPADESK_API_USER") or openclaw_skill_values.get("SHERPADESK_API_USER") or staged_api_user,
         org_key=_env_or_file("SHERPADESK_ORG_KEY", file_values, openclaw_skill_values.get("SHERPADESK_ORG_KEY")),
         instance_key=_env_or_file("SHERPADESK_INSTANCE_KEY", file_values, openclaw_skill_values.get("SHERPADESK_INSTANCE_KEY")),
         db_path=paths.db_path,
@@ -239,7 +272,7 @@ def load_settings() -> Settings:
         new_ticket_alerts_enabled=str(openclaw_skill_values.get("SHERPAMIND_NEW_TICKET_ALERTS_ENABLED") or "false").strip().lower() in {"1", "true", "yes", "on"},
         ticket_update_alerts_enabled=str(openclaw_skill_values.get("SHERPAMIND_TICKET_UPDATE_ALERTS_ENABLED") or "false").strip().lower() in {"1", "true", "yes", "on"},
         openclaw_webhook_url=_env_or_file("SHERPAMIND_OPENCLAW_WEBHOOK_URL", file_values, openclaw_hook_values.get("SHERPAMIND_OPENCLAW_WEBHOOK_URL")),
-        openclaw_webhook_token=_env_or_file("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN", file_values, openclaw_hook_values.get("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN")),
+        openclaw_webhook_token=os.getenv("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN") or staged_openclaw_token or openclaw_hook_values.get("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN"),
         new_ticket_alert_channel=openclaw_skill_values.get("SHERPAMIND_NEW_TICKET_ALERT_CHANNEL"),
         ticket_update_alert_channel=openclaw_skill_values.get("SHERPAMIND_TICKET_UPDATE_ALERT_CHANNEL") or openclaw_skill_values.get("SHERPAMIND_NEW_TICKET_ALERT_CHANNEL"),
         request_min_interval_seconds=float(_env_or_file("SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS", file_values, "8.0") or "8.0"),

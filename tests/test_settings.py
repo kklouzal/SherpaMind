@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from sherpamind.paths import ensure_path_layout
 from sherpamind.settings import load_settings, stage_connection_settings
 
 
@@ -129,12 +130,17 @@ def test_load_settings_reads_alert_config_from_openclaw_skill_entry(monkeypatch,
             }
         }
     }))
-    stage_connection_settings(
+    settings_file = stage_connection_settings(
         org_key="org1",
         instance_key="inst1",
         openclaw_webhook_url="http://127.0.0.1:18789/hooks/agent",
         openclaw_webhook_token="token123",
     )
+
+    settings_text = settings_file.read_text()
+    paths = ensure_path_layout()
+    assert "SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN" not in settings_text
+    assert paths.openclaw_webhook_token_file.read_text().strip() == "token123"
 
     settings = load_settings()
     assert settings.new_ticket_alerts_enabled is True
@@ -194,3 +200,39 @@ def test_staged_openclaw_hook_settings_override_local_config(monkeypatch, tmp_pa
     settings = load_settings()
     assert settings.openclaw_webhook_url == "http://127.0.0.1:18789/custom/agent"
     assert settings.openclaw_webhook_token == "staged-token"
+    assert "SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN" not in ensure_path_layout().settings_file.read_text()
+
+
+def test_load_settings_migrates_legacy_webhook_token_to_secret_file(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
+    monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_INSTANCE_KEY", raising=False)
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    paths = ensure_path_layout()
+    paths.settings_file.parent.mkdir(parents=True, exist_ok=True)
+    paths.settings_file.write_text("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN=legacy-token\n")
+
+    settings = load_settings()
+
+    assert settings.openclaw_webhook_token == "legacy-token"
+    assert paths.openclaw_webhook_token_file.read_text().strip() == "legacy-token"
+    assert "SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN" not in paths.settings_file.read_text()
+
+
+def test_load_settings_reads_api_user_secret_file(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SHERPADESK_API_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_API_USER", raising=False)
+    monkeypatch.delenv("SHERPADESK_ORG_KEY", raising=False)
+    monkeypatch.delenv("SHERPADESK_INSTANCE_KEY", raising=False)
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    paths = ensure_path_layout()
+    paths.api_user_file.parent.mkdir(parents=True, exist_ok=True)
+    paths.api_user_file.write_text("api-user@example.com\n")
+
+    settings = load_settings()
+
+    assert settings.api_user == "api-user@example.com"

@@ -329,6 +329,37 @@ CREATE TABLE IF NOT EXISTS ticket_classification_events (
     updated_at TEXT NOT NULL,
     FOREIGN KEY(ticket_id) REFERENCES tickets(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_users_account_id ON users(account_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_status_updated ON tickets(status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tickets_account_updated ON tickets(account_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tickets_technician_updated ON tickets(assigned_technician_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tickets_closed_at ON tickets(closed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ticket_details_synced ON ticket_details(synced_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket_recorded ON ticket_attachments(ticket_id, recorded_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_ticket_logs_ticket_record_date ON ticket_logs(ticket_id, record_date DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_ticket_logs_type_date ON ticket_logs(log_type, record_date DESC);
+CREATE INDEX IF NOT EXISTS idx_ticket_time_logs_ticket_record_date ON ticket_time_logs(ticket_id, record_date DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_ticket_comments_ticket_created ON ticket_comments(ticket_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_ticket_documents_ticket ON ticket_documents(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_documents_status_updated ON ticket_documents(status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ticket_document_chunks_ticket ON ticket_document_chunks(ticket_id, chunk_index);
+CREATE INDEX IF NOT EXISTS idx_ticket_document_chunks_doc ON ticket_document_chunks(doc_id, chunk_index);
+CREATE INDEX IF NOT EXISTS idx_vector_chunk_index_ticket ON vector_chunk_index(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_vector_chunk_index_doc ON vector_chunk_index(doc_id);
+CREATE INDEX IF NOT EXISTS idx_alert_queue_dispatch ON alert_queue(status, available_at, priority, id);
+CREATE INDEX IF NOT EXISTS idx_alert_queue_ticket_status ON alert_queue(ticket_id, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_worker_runs_worker_status ON worker_runs(worker_name, status, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ingest_runs_mode_status ON ingest_runs(mode, status, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_request_events_recorded ON api_request_events(recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_request_events_outcome ON api_request_events(outcome, status_code, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_detail_failures_retry ON ticket_detail_failures(permanent_failure, next_retry_at, failure_count);
+CREATE INDEX IF NOT EXISTS idx_derived_refresh_queue_ready ON derived_refresh_queue(completed_at, lease_expires_at, priority, requested_at);
+CREATE INDEX IF NOT EXISTS idx_ticket_alert_state_monitored ON ticket_alert_state(is_currently_monitored_open, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ticket_class_taxonomy_active_leaf ON ticket_taxonomy_classes(is_active, is_lastchild, path);
+CREATE INDEX IF NOT EXISTS idx_ticket_classification_events_ready ON ticket_classification_events(status, attempt_count, updated_at);
+CREATE INDEX IF NOT EXISTS idx_ticket_classification_events_ticket ON ticket_classification_events(ticket_id, event_type, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ticket_classification_events_writeback ON ticket_classification_events(writeback_status, confidence, completed_at);
 """
 
 DB_LOCK_RETRY_DELAY_SECONDS = 90

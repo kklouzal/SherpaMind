@@ -22,6 +22,14 @@ The worker entrypoints are:
 - `-m sherpamind.cli alert-dispatch-run`
 - `-m sherpamind.cli maintenance-run`
 
+Generated units include conservative resource governance by default:
+- hot-watch: `CPUQuota=25%`, lower CPU/IO weight, `Nice=10`
+- alert-dispatch: `CPUQuota=10%`, lower CPU/IO weight, `Nice=10`
+- maintenance: `CPUQuota=50%`, lower CPU/IO weight, `Nice=10`
+- all workers: `TasksMax=128`, `Restart=on-failure`, restart-rate limits, `TimeoutStopSec=45`, `UMask=0077`, `NoNewPrivileges=true`, and `PrivateTmp=true`
+
+Service-only secrets are staged in `.SherpaMind/private/secrets/service.env` with mode `0600`; systemd units reference that file via `EnvironmentFile=` rather than embedding API keys directly. Operator-specific overrides may be added as normal user-systemd drop-ins under `~/.config/systemd/user/sherpamind-*.service.d/*.conf`.
+
 ## Internal periodic lanes
 
 The backend runtime no longer treats all work as one serialized service pass.
