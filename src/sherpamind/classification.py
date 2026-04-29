@@ -210,6 +210,64 @@ def enqueue_initial_ticket_classification(settings: Settings, ticket: dict[str, 
     )
 
 
+def _current_ticket_class_id(ticket: dict[str, Any]) -> str | None:
+    value = ticket.get("class_id")
+    if value is None:
+        value = ticket.get("ticket_class_id")
+    text = str(value).strip() if value is not None else ""
+    return text or None
+
+
+def _has_active_classification_attempt(settings: Settings, ticket_id: str) -> bool:
+    with connect(settings.db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT id FROM ticket_classification_events
+            WHERE ticket_id = ?
+              AND (
+                status IN ('pending', 'dispatching', 'awaiting_result')
+                OR (status = 'failed' AND attempt_count < 3)
+                OR (
+                    status = 'completed'
+                    AND result_class_id IS NOT NULL
+                    AND COALESCE(writeback_status, 'pending') IN ('pending', 'retry')
+                    AND writeback_attempt_count < 3
+                )
+              )
+            LIMIT 1
+            """,
+            (ticket_id,),
+        ).fetchone()
+    return row is not None
+
+
+def enqueue_update_ticket_classification_if_unclassified(settings: Settings, ticket: dict[str, Any], *, trigger_source: str) -> dict[str, Any]:
+    if not settings.classification_enabled:
+        return {"status": "disabled"}
+    ticket_id = str(ticket.get("id"))
+    if not ticket_id or ticket_id == "None":
+        return {"status": "skipped", "reason": "missing_ticket_id"}
+    current_class_id = _current_ticket_class_id(ticket)
+    if current_class_id is not None:
+        return {"status": "skipped", "reason": "already_classified", "ticket_id": ticket_id, "current_class_id": current_class_id}
+    if _has_active_classification_attempt(settings, ticket_id):
+        return {"status": "skipped", "reason": "active_classification_exists", "ticket_id": ticket_id}
+    update_key = ticket.get("updated_time") or "unknown"
+    dedupe_key = f"classification:update:{ticket_id}:{update_key}"
+    return enqueue_ticket_classification_event(
+        settings.db_path,
+        ticket_id=ticket_id,
+        event_type="update",
+        dedupe_key=dedupe_key,
+        trigger_source=trigger_source,
+        payload=_event_payload(ticket, "update", trigger_source),
+        ticket_status=ticket.get("status"),
+        ticket_updated_time=ticket.get("updated_time"),
+        current_class_id=current_class_id,
+        current_class_name=ticket.get("class_name"),
+    )
+
+
 def enqueue_final_ticket_classification(settings: Settings, ticket: dict[str, Any], *, trigger_source: str) -> dict[str, Any]:
     if not settings.classification_enabled:
         return {"status": "disabled"}
@@ -227,7 +285,7 @@ def enqueue_final_ticket_classification(settings: Settings, ticket: dict[str, An
         payload=_event_payload(ticket, "final", trigger_source),
         ticket_status=ticket.get("status"),
         ticket_updated_time=ticket.get("updated_time"),
-        current_class_id=str(ticket.get("class_id")) if ticket.get("class_id") is not None else None,
+        current_class_id=_current_ticket_class_id(ticket),
         current_class_name=ticket.get("class_name"),
     )
 

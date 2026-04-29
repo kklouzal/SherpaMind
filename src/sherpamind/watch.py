@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .classification import enqueue_final_ticket_classification, enqueue_initial_ticket_classification
+from .classification import enqueue_final_ticket_classification, enqueue_initial_ticket_classification, enqueue_update_ticket_classification_if_unclassified
 from .client import SherpaDeskClient
 from .db import (
     enqueue_alert,
@@ -82,6 +82,9 @@ def _ticket_event_snapshot(ticket: dict[str, Any]) -> dict[str, Any]:
         "created_time": ticket.get("created_time"),
         "status": ticket.get("status"),
         "priority_name": ticket.get("priority_name") or ticket.get("priority"),
+        "class_id": ticket.get("class_id"),
+        "class_name": ticket.get("class_name"),
+        "closed_time": ticket.get("closed_time"),
         "is_new_user_post": ticket.get("is_new_user_post"),
         "is_new_tech_post": ticket.get("is_new_tech_post"),
         "next_step_date": ticket.get("next_step_date"),
@@ -193,6 +196,7 @@ def _watch_ticket_set(settings: Settings, *, path: str, extra_params: dict[str, 
     if not baseline_only:
         if state_key == "watch.last_state":
             classification_enqueues.extend(enqueue_initial_ticket_classification(settings, ticket, trigger_source=state_key) for ticket in new_tickets)
+            classification_enqueues.extend(enqueue_update_ticket_classification_if_unclassified(settings, ticket, trigger_source=state_key) for ticket in changed_tickets)
         elif state_key == "watch.warm_state":
             classification_enqueues.extend(enqueue_final_ticket_classification(settings, ticket, trigger_source=state_key) for ticket in new_tickets)
 

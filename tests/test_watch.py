@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from sherpamind.settings import Settings
-from sherpamind.watch import watch_new_tickets
+from sherpamind.watch import watch_new_tickets, watch_warm_tickets
 
 
 class FakeClient:
@@ -106,3 +106,47 @@ def test_watch_new_tickets_enqueues_user_update_alert_only_for_non_tech_updates(
     result2 = watch_new_tickets(settings)
     assert result2.status == "ok"
     assert result2.stats["ticket_update_alert_enqueues"] == []
+
+
+def test_watch_new_tickets_enqueues_update_classification_when_ticket_unclassified(tmp_path: Path, monkeypatch) -> None:
+    settings = make_settings(tmp_path)
+    settings.watch_state_path.write_text(json.dumps({"known_open_ticket_ids": [2, 3], "last_watch_at": None, "open_ticket_snapshot": {"2": {"updated_time": "old"}, "3": {"updated_time": "old"}}}))
+    rows = [
+        {"id": 2, "subject": "User followup adds detail", "account_name": "Acme", "created_time": "2026-03-19T09:00:00", "updated_time": "2026-03-19T09:10:00", "priority_name": "Low", "status": "Open", "class_id": None, "class_name": None, "is_new_user_post": True, "is_new_tech_post": False, "next_step_date": None},
+        {"id": 3, "subject": "Already classified", "account_name": "Acme", "created_time": "2026-03-19T09:00:00", "updated_time": "2026-03-19T09:11:00", "priority_name": "Low", "status": "Open", "class_id": 11, "class_name": "Hardware / Printer", "is_new_user_post": True, "is_new_tech_post": False, "next_step_date": None},
+    ]
+    monkeypatch.setattr("sherpamind.watch._build_client", lambda settings: FakeClient(rows))
+
+    result = watch_new_tickets(settings)
+
+    assert result.status == "ok"
+    enqueues = result.stats["classification_enqueues"]
+    assert len(enqueues) == 2
+    assert enqueues[0]["status"] == "enqueued"
+    assert "classification:update:2:2026-03-19T09:10:00" in enqueues[0]["dedupe_key"]
+    assert enqueues[1] == {"status": "skipped", "reason": "already_classified", "ticket_id": "3", "current_class_id": "11"}
+
+    result2 = watch_new_tickets(settings)
+    assert result2.status == "ok"
+    assert result2.stats["classification_enqueues"] == []
+
+
+def test_watch_warm_tickets_always_enqueues_final_classification_on_new_closed_observation(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
+    from sherpamind.paths import ensure_path_layout
+
+    settings = make_settings(tmp_path)
+    warm_state_path = ensure_path_layout().warm_watch_state_path
+    warm_state_path.write_text(json.dumps({"known_open_ticket_ids": [6], "last_watch_at": "baseline", "open_ticket_snapshot": {"6": {"updated_time": "old"}}}))
+    rows = [
+        {"id": 7, "subject": "Closed printer ticket", "account_name": "Acme", "created_time": "2026-03-18T09:00:00", "updated_time": "2026-03-19T09:10:00", "closed_time": "2026-03-19T09:12:00", "priority_name": "Low", "status": "Closed", "class_id": 12, "class_name": "Hardware / Desktop", "is_new_user_post": False, "is_new_tech_post": False, "next_step_date": None},
+    ]
+    monkeypatch.setattr("sherpamind.watch._build_client", lambda settings: FakeClient(rows))
+
+    result = watch_warm_tickets(settings)
+
+    assert result.status == "ok"
+    enqueues = result.stats["classification_enqueues"]
+    assert len(enqueues) == 1
+    assert enqueues[0]["status"] == "enqueued"
+    assert "classification:final:7:2026-03-19T09:12:00" in enqueues[0]["dedupe_key"]
