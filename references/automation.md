@@ -98,7 +98,7 @@ Individual ingest lanes should also be **single-flight**. If `sync_hot_open`, `s
 
 ### Update / re-bootstrap
 - rerun bootstrap safely
-- preserve `.SherpaMind/{config,secrets,data,state,logs,runtime}` and `.SherpaMind/public`
+- preserve `.SherpaMind/{config,data,state,logs,runtime}` and `.SherpaMind/public`
 - archive old repo-local `state/` leftovers once migrated
 - reinstall/rewrite the systemd user unit idempotently
 - restart the service safely
@@ -150,7 +150,7 @@ Keep issue content anonymized and public-safe.
 
 `doctor` should verify:
 - runtime venv exists
-- staged settings/secrets paths exist
+- staged settings paths exist
 - DB exists
 - watch state exists
 - systemd user service file exists

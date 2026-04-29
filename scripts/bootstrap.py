@@ -9,7 +9,7 @@ import venv
 
 DEFAULT_SETTINGS_TEMPLATE = """# SherpaMind staged non-secret settings
 # Runtime state lives under .SherpaMind/private/ outside the skill tree.
-# Secrets are stored separately under .SherpaMind/private/secrets/.
+# Secrets are expected from environment variables or OpenClaw-managed config.
 SHERPADESK_API_BASE_URL=https://api.sherpadesk.com
 SHERPADESK_ORG_KEY=
 SHERPADESK_INSTANCE_KEY=
@@ -57,10 +57,6 @@ def config_root() -> Path:
     return private_root() / "config"
 
 
-def secrets_root() -> Path:
-    return private_root() / "secrets"
-
-
 def data_root() -> Path:
     return private_root() / "data"
 
@@ -85,10 +81,6 @@ def settings_file() -> Path:
     return config_root() / "settings.env"
 
 
-def api_user_file() -> Path:
-    return secrets_root() / "sherpadesk_api_user.txt"
-
-
 def venv_python(venv_root: Path) -> Path:
     return venv_root / "bin" / "python"
 
@@ -98,7 +90,6 @@ def ensure_layout() -> None:
         sherpamind_root(),
         private_root(),
         config_root(),
-        secrets_root(),
         data_root(),
         state_root(),
         logs_root(),
@@ -110,13 +101,6 @@ def ensure_layout() -> None:
         path.mkdir(parents=True, exist_ok=True)
     if not settings_file().exists():
         settings_file().write_text(DEFAULT_SETTINGS_TEMPLATE, encoding="utf-8")
-    path = api_user_file()
-    if not path.exists():
-        path.write_text("", encoding="utf-8")
-        try:
-            path.chmod(0o600)
-        except OSError:
-            pass
 
 
 def ensure_venv(venv_root: Path) -> None:

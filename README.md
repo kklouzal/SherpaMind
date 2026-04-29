@@ -218,8 +218,6 @@ SherpaMind uses a workspace-local split storage model:
 
 - `.SherpaMind/private/config/`
   - staged non-secret connection/runtime settings
-- `.SherpaMind/private/secrets/`
-  - optional staged SherpaDesk API user hint and other non-key local secret-side artifacts
 - `.SherpaMind/private/data/`
   - canonical SQLite database
 - `.SherpaMind/private/state/`
@@ -709,7 +707,7 @@ One current live-state nuance matters:
 
 On update or re-bootstrap:
 
-- preserve `.SherpaMind/{config,secrets,data,state,logs,runtime}`
+- preserve `.SherpaMind/{config,data,state,logs,runtime}`
 - preserve `.SherpaMind/public`
 - rerun bootstrap safely to refresh the runtime venv if needed
 - rerun `doctor`

@@ -41,7 +41,6 @@ class SherpaMindPaths:
     root: Path
     private_root: Path
     config_root: Path
-    secrets_root: Path
     data_root: Path
     state_root: Path
     logs_root: Path
@@ -50,7 +49,6 @@ class SherpaMindPaths:
     exports_root: Path
     docs_root: Path
     settings_file: Path
-    api_user_file: Path
     db_path: Path
     watch_state_path: Path
     warm_watch_state_path: Path
@@ -70,15 +68,11 @@ class SherpaMindPaths:
     legacy_env_file: Path
 
 
-SECRET_FILE_MODE = 0o600
-
-
 def resolve_paths() -> SherpaMindPaths:
     workspace_root = discover_workspace_root()
     root = discover_sherpamind_root(workspace_root=workspace_root)
     private_root = root / "private"
     config_root = private_root / "config"
-    secrets_root = private_root / "secrets"
     data_root = private_root / "data"
     state_root = private_root / "state"
     logs_root = private_root / "logs"
@@ -91,7 +85,6 @@ def resolve_paths() -> SherpaMindPaths:
         root=root,
         private_root=private_root,
         config_root=config_root,
-        secrets_root=secrets_root,
         data_root=data_root,
         state_root=state_root,
         logs_root=logs_root,
@@ -100,7 +93,6 @@ def resolve_paths() -> SherpaMindPaths:
         exports_root=exports_root,
         docs_root=docs_root,
         settings_file=config_root / "settings.env",
-        api_user_file=secrets_root / "sherpadesk_api_user.txt",
         db_path=data_root / "sherpamind.sqlite3",
         watch_state_path=state_root / "watch_state.json",
         warm_watch_state_path=state_root / "warm_watch_state.json",
@@ -244,7 +236,6 @@ def _move_children_if_target_empty(source_dir: Path, target_dir: Path) -> None:
 def _migrate_flat_layout_into_private(paths: SherpaMindPaths) -> None:
     flat_to_private = [
         (paths.root / "config", paths.config_root),
-        (paths.root / "secrets", paths.secrets_root),
         (paths.root / "data", paths.data_root),
         (paths.root / "state", paths.state_root),
         (paths.root / "logs", paths.logs_root),

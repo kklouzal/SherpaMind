@@ -39,12 +39,12 @@ SherpaMind is not an instruction-only skill.
 
 When installed and configured for live use, it can:
 - create workspace-local runtime state under `.SherpaMind/`
-- create staged runtime dirs under `.SherpaMind/private/config/`, `.SherpaMind/private/secrets/`, `.SherpaMind/private/data/`, `.SherpaMind/private/state/`, `.SherpaMind/private/logs/`, `.SherpaMind/private/runtime/`, and `.SherpaMind/public/`
+- create staged runtime dirs under `.SherpaMind/private/config/`, `.SherpaMind/private/data/`, `.SherpaMind/private/state/`, `.SherpaMind/private/logs/`, `.SherpaMind/private/runtime/`, and `.SherpaMind/public/`
 - create a local SQLite database and generated public artifacts
 - create a Python runtime venv under `.SherpaMind/private/runtime/venv`
 - install Python dependencies from PyPI during bootstrap
 - require the SherpaDesk API key to be provided via the OpenClaw-managed `SHERPADESK_API_KEY` environment surface (the daemon mirrors this from the OpenClaw skill config into its own service env)
-- optionally store a SherpaDesk API user hint in `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
+- receive optional SherpaDesk API user hints from environment variables or OpenClaw-managed config
 - store non-secret connection/runtime settings in `.SherpaMind/private/config/settings.env`
 - read alert enablement and alert destinations from first-class OpenClaw `sherpamind` skill fields
 - optionally install and run a **user-level** `systemd` background service

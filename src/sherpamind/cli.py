@@ -216,7 +216,6 @@ def workspace_layout() -> None:
         "workspace_root": str(paths.workspace_root),
         "root": str(paths.root),
         "config_root": str(paths.config_root),
-        "secrets_root": str(paths.secrets_root),
         "data_root": str(paths.data_root),
         "state_root": str(paths.state_root),
         "logs_root": str(paths.logs_root),
@@ -228,7 +227,6 @@ def workspace_layout() -> None:
         "exports_root": str(paths.exports_root),
         "docs_root": str(paths.docs_root),
         "settings_file": str(paths.settings_file),
-        "api_user_file": str(paths.api_user_file),
         "service_log": str(paths.service_log),
         "service_state_file": str(paths.service_state_file),
     }, indent=2))
@@ -273,7 +271,6 @@ def doctor() -> None:
     legacy_watch = paths.workspace_root / "state" / "watch_state.json"
     checks = {
         "settings_file_exists": paths.settings_file.exists(),
-        "api_user_file_exists": paths.api_user_file.exists(),
         "runtime_venv_exists": paths.runtime_venv.exists(),
         "db_exists": settings.db_path.exists(),
         "watch_state_exists": settings.watch_state_path.exists(),
@@ -295,14 +292,12 @@ def doctor() -> None:
         "paths": {
             "root": str(paths.root),
             "config_root": str(paths.config_root),
-            "secrets_root": str(paths.secrets_root),
-            "data_root": str(paths.data_root),
+                "data_root": str(paths.data_root),
             "state_root": str(paths.state_root),
             "logs_root": str(paths.logs_root),
             "public_root": str(paths.public_root),
             "settings_file": str(paths.settings_file),
-            "api_user_file": str(paths.api_user_file),
-            "runtime_venv": str(paths.runtime_venv),
+                "runtime_venv": str(paths.runtime_venv),
             "db_path": str(settings.db_path),
             "service_log": str(paths.service_log),
             "service_state_file": str(paths.service_state_file),
@@ -445,15 +440,13 @@ def bootstrap_audit(summary: bool = False) -> None:
         "runtime_root": str(paths.root),
         "runtime_paths": {
             "config_root": str(paths.config_root),
-            "secrets_root": str(paths.secrets_root),
-            "data_root": str(paths.data_root),
+                "data_root": str(paths.data_root),
             "state_root": str(paths.state_root),
             "logs_root": str(paths.logs_root),
             "runtime_root": str(paths.runtime_root),
             "public_root": str(paths.public_root),
             "settings_file": str(paths.settings_file),
-            "api_user_file": str(paths.api_user_file),
-            "db_path": str(paths.db_path),
+                "db_path": str(paths.db_path),
         },
         "credentials": {
             "api_key_present": bool(settings.api_key),

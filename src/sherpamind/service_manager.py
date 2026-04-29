@@ -186,9 +186,6 @@ WantedBy=default.target
 def write_unit_files() -> list[Path]:
     written: list[Path] = []
     _set_service_manager_environment()
-    stale_env_file = ensure_path_layout().secrets_root / "service.env"
-    if stale_env_file.exists():
-        stale_env_file.unlink()
     for service_key, service_name in SERVICE_NAMES.items():
         path = _unit_path(service_name)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -279,7 +276,6 @@ def doctor_service() -> dict[str, Any]:
         **status,
         "runtime_python_exists": (paths.runtime_venv / "bin" / "python").exists(),
         "settings_file_exists": paths.settings_file.exists(),
-        "api_user_file_exists": paths.api_user_file.exists(),
         "service_log_exists": paths.service_log.exists(),
         "hot_watch_log_exists": paths.hot_watch_log.exists(),
         "alert_dispatch_log_exists": paths.alert_dispatch_log.exists(),

@@ -41,9 +41,6 @@ def test_unit_contents_contains_worker_run(monkeypatch, tmp_path: Path) -> None:
     calls = []
     monkeypatch.setattr(service_manager, '_run', lambda args, check=True: calls.append(args))
     written = write_unit_files()
-    service_env = tmp_path / '.SherpaMind' / 'private' / 'secrets' / 'service.env'
-    assert service_env not in written
-    assert not service_env.exists()
     assert any(call[:3] == ['systemctl', '--user', 'set-environment'] for call in calls)
     set_env_call = next(call for call in calls if call[:3] == ['systemctl', '--user', 'set-environment'])
     assert 'SHERPADESK_API_KEY=ui-secret-key' in set_env_call

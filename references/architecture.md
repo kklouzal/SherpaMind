@@ -48,7 +48,6 @@ SherpaMind needs all three behaviors, so the durable design is **SQLite + retrie
 - `.SherpaMind/private/config/settings.env`
 - OpenClaw-managed `SHERPADESK_API_KEY` for live API auth
 - OpenClaw `sherpamind` skill fields for alert enablement and alert destinations
-- `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
 - `.SherpaMind/private/state/watch_state.json`
 - `.SherpaMind/private/runtime/venv`
 - `.SherpaMind/public/exports/`

@@ -8,7 +8,6 @@ Turn this repo into a working SherpaMind installation without storing runtime st
 
 Default runtime layout lives under the resolved workspace root:
 - `.SherpaMind/private/config/`
-- `.SherpaMind/private/secrets/`
 - `.SherpaMind/private/data/`
 - `.SherpaMind/private/state/`
 - `.SherpaMind/private/logs/`

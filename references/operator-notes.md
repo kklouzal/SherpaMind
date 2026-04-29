@@ -15,7 +15,7 @@ Expected configuration comes from:
 - the runtime layout reported by `python3 scripts/run.py workspace-layout`; do not assume `.SherpaMind` lives under the skill checkout
 - `.SherpaMind/private/config/settings.env` under the resolved runtime root for staged non-secret connection/runtime settings
 - the OpenClaw `sherpamind` skill configuration for live `SHERPADESK_API_KEY`, alert enablement, and alert destinations
-- optionally `.SherpaMind/private/secrets/sherpadesk_api_user.txt` under the resolved runtime root for a staged API user hint
+- optional API-user hints from environment variables or OpenClaw-managed config
 - process environment overrides only when needed
 - `.env.example` as the public reference template
 
