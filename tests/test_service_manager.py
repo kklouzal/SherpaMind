@@ -1,7 +1,8 @@
 import json
 from pathlib import Path
 
-from sherpamind.service_manager import SERVICE_ENV_FILE_NAME, unit_contents, write_unit_files
+from sherpamind import service_manager
+from sherpamind.service_manager import unit_contents, write_unit_files
 
 
 def test_unit_contents_contains_worker_run(monkeypatch, tmp_path: Path) -> None:
@@ -23,8 +24,9 @@ def test_unit_contents_contains_worker_run(monkeypatch, tmp_path: Path) -> None:
     assert 'ExecStart=' in text
     assert 'hot-watch-run' in text
     assert 'SHERPAMIND_WORKSPACE_ROOT=' in text
-    assert f'EnvironmentFile=-{tmp_path / ".SherpaMind" / "private" / "secrets" / SERVICE_ENV_FILE_NAME}' in text
+    assert 'EnvironmentFile=' not in text
     assert 'Environment=SHERPADESK_API_KEY=' not in text
+    assert 'PassEnvironment=SHERPADESK_API_KEY' in text
     assert 'CPUQuota=25%' in text
     assert 'CPUWeight=30' in text
     assert 'IOWeight=30' in text
@@ -36,12 +38,15 @@ def test_unit_contents_contains_worker_run(monkeypatch, tmp_path: Path) -> None:
     assert 'NoNewPrivileges=true' in text
     assert 'PrivateTmp=true' in text
 
+    calls = []
+    monkeypatch.setattr(service_manager, '_run', lambda args, check=True: calls.append(args))
     written = write_unit_files()
-    service_env = tmp_path / '.SherpaMind' / 'private' / 'secrets' / SERVICE_ENV_FILE_NAME
-    assert service_env in written
-    assert service_env.exists()
-    assert service_env.stat().st_mode & 0o777 == 0o600
-    assert 'SHERPADESK_API_KEY=ui-secret-key' in service_env.read_text()
+    service_env = tmp_path / '.SherpaMind' / 'private' / 'secrets' / 'service.env'
+    assert service_env not in written
+    assert not service_env.exists()
+    assert any(call[:3] == ['systemctl', '--user', 'set-environment'] for call in calls)
+    set_env_call = next(call for call in calls if call[:3] == ['systemctl', '--user', 'set-environment'])
+    assert 'SHERPADESK_API_KEY=ui-secret-key' in set_env_call
 
 
 def test_unit_contents_preserves_direct_sherpamind_root(monkeypatch, tmp_path: Path) -> None:
@@ -55,7 +60,8 @@ def test_unit_contents_preserves_direct_sherpamind_root(monkeypatch, tmp_path: P
 
     assert f'Environment=SHERPAMIND_WORKSPACE_ROOT={workspace_root}' in text
     assert f'Environment=SHERPAMIND_ROOT={runtime_root}' in text
-    assert f'EnvironmentFile=-{runtime_root / "private" / "secrets" / SERVICE_ENV_FILE_NAME}' in text
+    assert 'EnvironmentFile=' not in text
+    assert 'PassEnvironment=SHERPADESK_API_KEY' in text
     assert 'CPUQuota=10%' in text
     assert 'CPUWeight=20' in text
     assert 'IOWeight=20' in text

@@ -51,7 +51,6 @@ class SherpaMindPaths:
     docs_root: Path
     settings_file: Path
     api_user_file: Path
-    openclaw_webhook_token_file: Path
     db_path: Path
     watch_state_path: Path
     warm_watch_state_path: Path
@@ -102,7 +101,6 @@ def resolve_paths() -> SherpaMindPaths:
         docs_root=docs_root,
         settings_file=config_root / "settings.env",
         api_user_file=secrets_root / "sherpadesk_api_user.txt",
-        openclaw_webhook_token_file=secrets_root / "openclaw_webhook_token.txt",
         db_path=data_root / "sherpamind.sqlite3",
         watch_state_path=state_root / "watch_state.json",
         warm_watch_state_path=state_root / "warm_watch_state.json",
@@ -121,15 +119,6 @@ def resolve_paths() -> SherpaMindPaths:
         runtime_venv=runtime_root / "venv",
         legacy_env_file=private_root / "config.env",
     )
-
-
-def _write_secret_file(path: Path, value: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(value.strip() + "\n", encoding="utf-8")
-    try:
-        path.chmod(SECRET_FILE_MODE)
-    except OSError:
-        pass
 
 
 def _read_env_file(path: Path) -> dict[str, str]:
@@ -179,7 +168,7 @@ def _write_settings_file(path: Path, values: dict[str, str]) -> None:
     lines = [
         "# SherpaMind staged non-secret settings",
         "# Runtime state lives under .SherpaMind/private/ outside the skill tree.",
-        "# Secrets are stored separately under .SherpaMind/private/secrets/.",
+        "# Secrets are expected from environment variables or OpenClaw-managed config.",
     ]
     for key in ordered_keys:
         if key in values:
@@ -229,8 +218,7 @@ def _merge_legacy_settings_into_current(paths: SherpaMindPaths) -> None:
             changed_settings = True
     if changed_settings or (legacy_values and not paths.settings_file.exists()):
         _write_settings_file(paths.settings_file, current_settings)
-    if not paths.api_user_file.exists() and legacy_values.get("SHERPADESK_API_USER"):
-        _write_secret_file(paths.api_user_file, legacy_values["SHERPADESK_API_USER"])
+    # Deliberately do not migrate legacy secrets into files; credentials are expected from environment variables or OpenClaw-managed config.
 
 
 def _move_if_missing(source: Path, target: Path) -> None:
@@ -288,7 +276,6 @@ def ensure_path_layout() -> SherpaMindPaths:
         paths.root,
         paths.private_root,
         paths.config_root,
-        paths.secrets_root,
         paths.data_root,
         paths.state_root,
         paths.logs_root,

@@ -20,7 +20,7 @@ def test_ensure_path_layout_creates_directories(monkeypatch, tmp_path: Path) -> 
     monkeypatch.setenv("SHERPAMIND_WORKSPACE_ROOT", str(tmp_path))
     paths = ensure_path_layout()
     assert paths.config_root.exists()
-    assert paths.secrets_root.exists()
+    assert not paths.secrets_root.exists()
     assert paths.data_root.exists()
     assert paths.state_root.exists()
     assert paths.public_root.exists()

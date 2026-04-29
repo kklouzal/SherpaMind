@@ -14,11 +14,11 @@ For live use it can:
 - authenticate to the SherpaDesk API
 - create workspace-local runtime state under `.SherpaMind/`
 - create and maintain a local SQLite database plus generated public artifacts
-- create staged runtime dirs under `.SherpaMind/private/config/`, `.SherpaMind/private/secrets/`, `.SherpaMind/private/data/`, `.SherpaMind/private/state/`, `.SherpaMind/private/logs/`, `.SherpaMind/private/runtime/`, and `.SherpaMind/public/`
+- create staged runtime dirs under `.SherpaMind/private/config/`, `.SherpaMind/private/data/`, `.SherpaMind/private/state/`, `.SherpaMind/private/logs/`, `.SherpaMind/private/runtime/`, and `.SherpaMind/public/`
 - create a Python runtime venv under `.SherpaMind/private/runtime/venv`
 - install Python packages from PyPI during bootstrap
 - require the SherpaDesk API key to be configured through the OpenClaw `sherpamind` skill so runtime receives `SHERPADESK_API_KEY`
-- optionally store a SherpaDesk API user hint in `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
+- receive optional SherpaDesk API user hints from environment variables or OpenClaw-managed config
 - store non-secret connection/runtime settings in `.SherpaMind/private/config/settings.env`
 - read alert enablement and destination from first-class OpenClaw `sherpamind` skill fields
 - optionally install and run a **user-level** `systemd` background service for ongoing sync/enrichment
@@ -523,7 +523,7 @@ python3 scripts/run.py service-status
 
 Generated units include conservative resource governance so backend workers cannot freely consume the whole host: maintenance is capped to 50% CPU, hot-watch to 25% CPU, and alert-dispatch to 10% CPU, with low CPU/IO weights, `Nice=10`, `TasksMax=128`, `Restart=on-failure`, and basic service hardening. Local operator overrides can still be placed under `~/.config/systemd/user/sherpamind-*.service.d/*.conf`.
 
-Service-only secrets from the local OpenClaw skill entry are written to `.SherpaMind/private/secrets/service.env` with mode `0600`; generated systemd units reference that file with `EnvironmentFile=` instead of embedding API keys directly in unit text. Those secrets remain normal environment variables for the worker process (`SHERPADESK_API_KEY`, optional `SHERPADESK_API_USER`, and OpenClaw webhook env vars when available).
+Service-only secrets are not written into SherpaMind files. `install-service` imports OpenClaw-managed SherpaDesk/OpenClaw hook secrets into the user systemd manager environment with `systemctl --user set-environment`; generated units use `PassEnvironment=` so workers receive them as normal environment variables without `EnvironmentFile=` secret storage.
 
 `service-status` reports those workers as a set so unattended runtime health is evaluated against the split runtime rather than an old single-daemon mental model.
 
@@ -570,7 +570,6 @@ Always use `python3 scripts/run.py workspace-layout` to confirm the resolved `wo
 This creates the main workspace-local layout by default:
 
 - `.SherpaMind/private/config/settings.env`
-- `.SherpaMind/private/secrets/sherpadesk_api_user.txt`
 - `.SherpaMind/private/data/sherpamind.sqlite3`
 - `.SherpaMind/private/state/watch_state.json`
 - `.SherpaMind/private/state/warm_watch_state.json`
@@ -601,7 +600,7 @@ python3 scripts/run.py install-service
 python3 scripts/run.py service-status
 ```
 
-Runtime control/environment overrides are documented in `.env.example`; `.SherpaMind/` holds non-secret runtime settings and local derived state. Service/API secrets live under `.SherpaMind/private/secrets/`, including `service.env`, `sherpadesk_api_user.txt`, and `openclaw_webhook_token.txt`; workers receive service secrets through environment variables via `EnvironmentFile=`. Use `SHERPAMIND_WORKSPACE_ROOT` to choose the parent workspace for a normal install, or `SHERPAMIND_ROOT` to point directly at an existing `.SherpaMind` runtime directory.
+Runtime control/environment overrides are documented in `.env.example`; `.SherpaMind/` holds non-secret runtime settings and local derived state. Service/API secrets should come from environment variables or OpenClaw-managed config, not SherpaMind secret files. Use `SHERPAMIND_WORKSPACE_ROOT` to choose the parent workspace for a normal install, or `SHERPAMIND_ROOT` to point directly at an existing `.SherpaMind` runtime directory.
 
 For OpenClaw alert delivery, SherpaMind uses authenticated `POST /hooks/agent` with `Authorization: Bearer <hooks.token>` / `x-openclaw-token` and a payload containing `message`, `name`, `agentId`, `wakeMode`, `deliver`, `channel`, optional `to`, and `timeoutSeconds`. On the same host as OpenClaw, hook URL/token default from local `~/.openclaw/openclaw.json` hooks settings. Enablement and destinations are first-class OpenClaw skill fields:
 

@@ -28,7 +28,7 @@ Generated units include conservative resource governance by default:
 - maintenance: `CPUQuota=50%`, lower CPU/IO weight, `Nice=10`
 - all workers: `TasksMax=128`, `Restart=on-failure`, restart-rate limits, `TimeoutStopSec=45`, `UMask=0077`, `NoNewPrivileges=true`, and `PrivateTmp=true`
 
-Service-only secrets are staged in `.SherpaMind/private/secrets/service.env` with mode `0600`; systemd units reference that file via `EnvironmentFile=` rather than embedding API keys directly. They remain environment variables inside worker processes. Operator-specific overrides may be added as normal user-systemd drop-ins under `~/.config/systemd/user/sherpamind-*.service.d/*.conf`.
+Service-only secrets are not staged into SherpaMind files. `install-service` imports OpenClaw-managed SherpaDesk/OpenClaw hook secrets into the user systemd manager environment with `systemctl --user set-environment`; units use `PassEnvironment=` so workers receive them as normal environment variables. Operator-specific overrides may be added as normal user-systemd drop-ins under `~/.config/systemd/user/sherpamind-*.service.d/*.conf`.
 
 ## Internal periodic lanes
 
