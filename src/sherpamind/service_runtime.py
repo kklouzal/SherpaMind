@@ -45,6 +45,7 @@ class TaskRunEvaluation:
 @dataclass(frozen=True)
 class BudgetPlan:
     mode: str
+    remaining_requests: int
     reserve_requests: int
     spare_requests: int
     open_ticket_count: int
@@ -256,6 +257,7 @@ def _build_budget_plan(settings: Settings, usage: dict[str, Any], bootstrap: Col
     allow_important = remaining > max(20, reserve // 3)
     return BudgetPlan(
         mode=mode,
+        remaining_requests=remaining,
         reserve_requests=reserve,
         spare_requests=spare,
         open_ticket_count=open_count,
@@ -297,6 +299,8 @@ def _task_specs(settings: Settings) -> list[TaskSpec]:
 
 
 def _budget_gate(plan: BudgetPlan, spec: TaskSpec) -> tuple[bool, str | None]:
+    if spec.requires_remote_api and plan.remaining_requests <= 0:
+        return False, f"budget_exhausted mode={plan.mode} remaining={plan.remaining_requests}"
     if spec.budget_class == "important" and not plan.allow_important:
         return False, f"budget_protected mode={plan.mode} reserve={plan.reserve_requests} spare={plan.spare_requests}"
     if spec.budget_class == "deferrable" and not plan.allow_deferrable:
@@ -367,7 +371,7 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
             pruned = prune_api_request_events(settings.db_path, settings.api_request_log_retention_days)
             if pruned:
                 _append_log(f"api_request_events pruned={pruned}")
-            usage = get_api_usage_summary(settings.db_path)
+            usage = get_api_usage_summary(settings.db_path, hourly_limit=settings.api_hourly_limit)
             bootstrap = _update_cold_bootstrap_status(settings)
             plan = _build_budget_plan(settings, usage, bootstrap)
             effective_settings = _effective_settings(settings, plan)
@@ -423,7 +427,7 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
                         task_state["last_error"] = evaluated.error_message or str(evaluated.detail)
                         results.append({"task": spec.name, "status": evaluated.status, "result": getattr(result, '__dict__', result), "error": evaluated.error_message, "forced": bool(force_reason), "force_reason": force_reason})
                         _append_log(f"task={spec.name} status={evaluated.status} detail={evaluated.error_message or evaluated.detail}")
-                    usage = get_api_usage_summary(settings.db_path)
+                    usage = get_api_usage_summary(settings.db_path, hourly_limit=settings.api_hourly_limit)
                     bootstrap = _update_cold_bootstrap_status(settings)
                     plan = _build_budget_plan(settings, usage, bootstrap)
                     effective_settings = _effective_settings(settings, plan)
@@ -444,7 +448,7 @@ def run_pending_tasks(settings: Settings | None = None) -> dict[str, Any]:
                     state["last_loop_progress_at"] = _now_iso()
                     results.append({"task": spec.name, "status": "error", "error": f"{type(exc).__name__}: {exc}", "forced": bool(force_reason), "force_reason": force_reason})
                     _append_log(f"task={spec.name} status=error error={type(exc).__name__}: {exc}")
-                    usage = get_api_usage_summary(settings.db_path)
+                    usage = get_api_usage_summary(settings.db_path, hourly_limit=settings.api_hourly_limit)
                     bootstrap = _update_cold_bootstrap_status(settings)
                     plan = _build_budget_plan(settings, usage, bootstrap)
                     state["api_usage_last_seen"] = usage

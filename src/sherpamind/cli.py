@@ -648,7 +648,7 @@ def dataset_summary() -> None:
 @app.command("report-api-usage")
 def report_api_usage() -> None:
     settings = load_settings()
-    usage = get_api_usage_summary(settings.db_path)
+    usage = get_api_usage_summary(settings.db_path, hourly_limit=settings.api_hourly_limit)
     usage["configured_hourly_limit"] = settings.api_hourly_limit
     usage["configured_warn_ratio"] = settings.api_budget_warn_ratio
     usage["configured_critical_ratio"] = settings.api_budget_critical_ratio

@@ -143,7 +143,7 @@ def run_maintenance_once(settings: Settings | None = None) -> dict[str, Any]:
             run_id = start_worker_run(settings.db_path, WORKER_NAME, "maintenance_loop")
             results: list[dict[str, Any]] = []
             try:
-                usage = get_api_usage_summary(settings.db_path)
+                usage = get_api_usage_summary(settings.db_path, hourly_limit=settings.api_hourly_limit)
                 bootstrap = _update_cold_bootstrap_status(settings)
                 plan = _build_budget_plan(settings, usage, bootstrap)
                 effective_settings = _effective_settings(settings, plan)

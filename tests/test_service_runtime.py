@@ -416,3 +416,30 @@ def test_run_pending_tasks_forces_vector_repair_when_index_drifts(monkeypatch, t
     vector_status = get_vector_index_status(settings.db_path)
     assert vector_status['missing_index_rows'] == 0
     assert vector_status['outdated_content_rows'] == 0
+
+
+def test_run_pending_tasks_uses_configured_hourly_budget_for_remote_gates(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv('SHERPAMIND_WORKSPACE_ROOT', str(tmp_path))
+    settings = make_settings(tmp_path)
+    settings = Settings(
+        **{
+            **settings.__dict__,
+            'api_hourly_limit': 200,
+            'service_hot_open_every_seconds': 0,
+            'service_vector_refresh_every_seconds': 0,
+            'service_doctor_every_seconds': 0,
+        }
+    )
+    initialize_db(settings.db_path)
+    for _ in range(200):
+        record_api_request_event(settings.db_path, method='GET', path='tickets', status_code=200, outcome='http_response')
+
+    result = run_pending_tasks(settings)
+
+    assert result['api_usage']['remaining_hourly_budget'] == 0
+    assert result['budget_plan']['remaining_requests'] == 0
+    by_task = {item['task']: item for item in result['results']}
+    assert by_task['hot_open']['status'] == 'skipped'
+    assert by_task['hot_open']['reason'].startswith('budget_exhausted')
+    assert by_task['vector_refresh']['status'] == 'ok'
+    assert by_task['runtime_status']['status'] == 'ok'
