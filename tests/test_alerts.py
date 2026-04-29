@@ -161,7 +161,7 @@ def test_build_ticket_update_payload_allows_broader_history_context(tmp_path: Pa
     assert "3-5 short sentences or bullet-style lines" in message
     assert "Update synopsis:" in message
     assert "Recommended follow-up / next steps:" in message
-    assert "OpenClaw hook delivery will send it" in message
+    assert "OpenClaw hook delivery will announce it to the requested chat destination" in message
     assert "recent_logs" in message
     assert "retrieval_metadata" not in message
 

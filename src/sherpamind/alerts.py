@@ -168,7 +168,7 @@ def _build_hook_payload(settings: Settings, ticket_id: str, summary: dict[str, A
 
     prompt = (
         "A new SherpaDesk ticket was detected by SherpaMind. "
-        "Write a concise triage alert optimized for quick scanning in chat channels like Discord or Slack. "
+        "Write a concise triage alert optimized for quick scanning in team chat tools such as Discord or Slack. "
         "For this new-ticket synopsis, use the INITIAL POST / original user-submitted issue only as the issue narrative. "
         "Do not incorporate later technician updates, follow-up notes, resolution thinking, later log history, or inferred post-resolution context into the issue summary. "
         "You may still use requester/client/priority/category metadata, but the problem description should reflect only the initial user-reported issue. "
@@ -179,7 +179,7 @@ def _build_hook_payload(settings: Settings, ticket_id: str, summary: dict[str, A
         "If the provided evidence contains a strong match, fold the learned pattern into the recommended next steps in a concrete way. "
         "Only claim 'seen before' when confidence is high based on provided evidence; if confidence is weak or absent, say no high-confidence match was found instead of bluffing. "
         "If you do find a high-confidence similar prior issue, include a line like '- Seen before: yes — similar to #<ticket-number> (<very short reason>)'. If not, include '- Seen before: no high-confidence match found'. "
-        "Format it like a compact plain-text card, not a prose paragraph and not a markdown table. Prefer this structure exactly when possible: \n"
+        "Format it like a compact Discord/Slack-compatible plain-text card, not a prose paragraph and not a markdown table. Prefer this structure exactly when possible: \n"
         "**NEW TICKET** <priority if useful>\n"
         "- Client: ...\n"
         "- From: ...\n"
@@ -195,7 +195,7 @@ def _build_hook_payload(settings: Settings, ticket_id: str, summary: dict[str, A
         "- Ticket: #<id> — <subject>\n"
         "Use short bullets, strong labels, and at-a-glance clarity. Keep it practical, not fluffy.\n\n"
         f"Alert destination: {alert_channel}\n"
-        "Return only the final alert card; OpenClaw hook delivery will send it to the requested destination.\n\n"
+        "Return only the final alert card; OpenClaw hook delivery will announce it to the requested chat destination.\n\n"
         f"Ticket context JSON:\n{json.dumps(compact, ensure_ascii=False, separators=(',', ':'))}"
     )
 
@@ -296,7 +296,7 @@ def _build_ticket_update_payload(settings: Settings, ticket_id: str, summary: di
     }
     prompt = (
         "A SherpaDesk ticket received a new NON-TECH update from the requester/customer side. "
-        "Write a concise update synopsis optimized for quick scanning in chat channels like Discord or Slack. "
+        "Write a concise update synopsis optimized for quick scanning in team chat tools such as Discord or Slack. "
         "For this update synopsis, you may use the broader ticket history and recent log context to explain what changed and what the new user-side update means. "
         "Expand the update synopsis enough to preserve the real meaning of the thread: write 3-5 short sentences or bullet-style lines, not a one-line over-compression. "
         "The synopsis should explain what the requester just added, the relevant context from prior ticket history, and what this update changes about the likely state of the issue. "
@@ -305,7 +305,7 @@ def _build_ticket_update_payload(settings: Settings, ticket_id: str, summary: di
         "If the provided evidence contains a strong match, fold the learned pattern into the next-step bullets in a concrete way. "
         "Only claim 'seen before' when confidence is high based on provided evidence; if confidence is weak or absent, state that no high-confidence match was found. "
         "If you do find a high-confidence similar prior issue, include a line like '- Seen before: yes — similar to #<ticket-number> (<very short reason>)'. Otherwise include '- Seen before: no high-confidence match found'. "
-        "Format it like a compact plain-text card, not a prose paragraph and not a markdown table. Prefer this structure exactly when possible: \n"
+        "Format it like a compact Discord/Slack-compatible plain-text card, not a prose paragraph and not a markdown table. Prefer this structure exactly when possible: \n"
         "**USER UPDATE** <priority/status if useful>\n"
         "- Client: ...\n"
         "- From: ...\n"
@@ -322,7 +322,7 @@ def _build_ticket_update_payload(settings: Settings, ticket_id: str, summary: di
         "- Ticket: #<id> — <subject>\n"
         "Use short bullets, strong labels, and at-a-glance clarity. Keep it practical, not fluffy.\n\n"
         f"Alert destination: {alert_channel}\n"
-        "Return only the final alert card; OpenClaw hook delivery will send it to the requested destination.\n\n"
+        "Return only the final alert card; OpenClaw hook delivery will announce it to the requested chat destination.\n\n"
         f"Ticket context JSON:\n{json.dumps(compact, ensure_ascii=False, separators=(',', ':'))}"
     )
     return _hook_request_payload(
