@@ -28,7 +28,7 @@ Generated units include conservative resource governance by default:
 - maintenance: `CPUQuota=50%`, lower CPU/IO weight, `Nice=10`
 - all workers: `TasksMax=128`, `Restart=on-failure`, restart-rate limits, `TimeoutStopSec=45`, `UMask=0077`, `NoNewPrivileges=true`, and `PrivateTmp=true`
 
-Service-only secrets are staged in `.SherpaMind/private/secrets/service.env` with mode `0600`; systemd units reference that file via `EnvironmentFile=` rather than embedding API keys directly. Operator-specific overrides may be added as normal user-systemd drop-ins under `~/.config/systemd/user/sherpamind-*.service.d/*.conf`.
+Service-only secrets are staged in `.SherpaMind/private/secrets/service.env` with mode `0600`; systemd units reference that file via `EnvironmentFile=` rather than embedding API keys directly. They remain environment variables inside worker processes. Operator-specific overrides may be added as normal user-systemd drop-ins under `~/.config/systemd/user/sherpamind-*.service.d/*.conf`.
 
 ## Internal periodic lanes
 
@@ -75,6 +75,10 @@ Cold-history work should run in two phases:
 That first full-pass completion should be durable state, not guesswork.
 
 The service should also repair stale derived retrieval artifacts when the current document materializer version no longer matches what is stored in `ticket_documents`. That keeps metadata/chunking improvements from depending on a human remembering to force a rematerialization pass.
+
+Vector search maintains a sparse term index in SQLite alongside compatibility JSON vectors. Query-time search uses the sparse term index to score only chunks sharing query dimensions instead of decoding and scoring every indexed chunk in Python.
+
+Public docs generation keeps `.SherpaMind/public/docs/.artifact-manifest.json` so unchanged account, technician, and ticket entity pages can be skipped on steady-state snapshot runs instead of repeating expensive per-entity summary queries and rewrites.
 
 Individual ingest lanes should also be **single-flight**. If `sync_hot_open`, `sync_warm_closed`, or especially `sync_cold_closed_audit` is already running, a second caller should skip cleanly behind an active ingest lease instead of starting a duplicate run and merely abandoning the older `running` row afterward.
 

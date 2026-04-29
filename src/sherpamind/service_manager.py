@@ -83,9 +83,51 @@ def _service_env_file_path() -> Path:
     return ensure_path_layout().secrets_root / SERVICE_ENV_FILE_NAME
 
 
+def _read_key_value_file(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        values[key.strip()] = value.strip().strip("'\"")
+    return values
+
+
+def _read_secret_file(path: Path) -> str | None:
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return value or None
+
+
+def _openclaw_hook_env_values() -> dict[str, str]:
+    config_path = Path.home() / ".openclaw" / "openclaw.json"
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    hooks = data.get("hooks") if isinstance(data.get("hooks"), dict) else {}
+    token = hooks.get("token") if isinstance(hooks.get("token"), str) else None
+    if hooks.get("enabled") is not True or not token or not token.strip():
+        return {}
+    gateway = data.get("gateway") if isinstance(data.get("gateway"), dict) else {}
+    port = gateway.get("port") if isinstance(gateway.get("port"), int) else 18789
+    path = hooks.get("path") if isinstance(hooks.get("path"), str) and hooks.get("path", "").strip() else "/hooks"
+    path = "/" + path.strip().strip("/")
+    return {
+        "SHERPAMIND_OPENCLAW_WEBHOOK_URL": f"http://127.0.0.1:{port}{path}/agent",
+        "SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN": token.strip(),
+    }
+
+
 def _write_service_env_file() -> Path | None:
     paths = ensure_path_layout()
     skill_entry = _read_openclaw_skill_entry()
+    staged_settings = _read_key_value_file(paths.settings_file)
     values: dict[str, str] = {}
     api_key = skill_entry.get("apiKey")
     if isinstance(api_key, str) and api_key.strip():
@@ -93,6 +135,13 @@ def _write_service_env_file() -> Path | None:
     api_user = skill_entry.get("apiUser")
     if isinstance(api_user, str) and api_user.strip():
         values["SHERPADESK_API_USER"] = api_user.strip()
+    values.update({key: value for key, value in _openclaw_hook_env_values().items() if value})
+    staged_url = staged_settings.get("SHERPAMIND_OPENCLAW_WEBHOOK_URL")
+    if staged_url:
+        values["SHERPAMIND_OPENCLAW_WEBHOOK_URL"] = staged_url
+    staged_token = _read_secret_file(paths.openclaw_webhook_token_file)
+    if staged_token:
+        values["SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN"] = staged_token
     env_file = paths.secrets_root / SERVICE_ENV_FILE_NAME
     if not values:
         return env_file if env_file.exists() else None

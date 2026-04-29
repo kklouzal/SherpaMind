@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,53 @@ from .summaries import (
 from .vector_exports import get_retrieval_readiness_summary
 from .vector_index import get_vector_index_status
 
+
+
+
+def _stable_json_hash(value: Any) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _load_artifact_manifest(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {"entities": {}}
+    if not isinstance(data, dict):
+        return {"entities": {}}
+    entities = data.get("entities")
+    if not isinstance(entities, dict):
+        data["entities"] = {}
+    return data
+
+
+def _entity_artifact_current(manifest: dict[str, Any], key: str, source_hash: str, path: Path) -> bool:
+    if not path.exists():
+        return False
+    entities = manifest.get("entities") if isinstance(manifest.get("entities"), dict) else {}
+    entry = entities.get(key) if isinstance(entities.get(key), dict) else None
+    if entry is None:
+        # Existing installs may have thousands of already-generated entity docs
+        # from before the manifest existed. Bootstrap them as current so the
+        # next snapshot does not immediately perform an expensive N+1 rewrite.
+        return True
+    return entry.get("source_hash") == source_hash and entry.get("path") == str(path)
+
+
+def _record_entity_artifact(manifest: dict[str, Any], key: str, source_hash: str, path: Path, *, generated_at: str) -> None:
+    entities = manifest.setdefault("entities", {})
+    entities[key] = {"source_hash": source_hash, "path": str(path), "generated_at": generated_at}
+
+
+def _write_text_if_changed(path: Path, text: str) -> bool:
+    try:
+        if path.exists() and path.read_text(encoding="utf-8") == text:
+            return False
+    except OSError:
+        pass
+    path.write_text(text, encoding="utf-8")
+    return True
 
 def _markdown_table(rows: list[dict], columns: list[tuple[str, str]]) -> str:
     if not rows:
@@ -436,6 +484,8 @@ def generate_public_snapshot(db_path: Path) -> dict:
     account_dir.mkdir(parents=True, exist_ok=True)
     technician_dir.mkdir(parents=True, exist_ok=True)
     ticket_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = paths.docs_root / ".artifact-manifest.json"
+    artifact_manifest = _load_artifact_manifest(manifest_path)
 
     snapshot_path = paths.docs_root / "insight-snapshot.md"
     snapshot_md = [
@@ -1183,10 +1233,18 @@ def generate_public_snapshot(db_path: Path) -> dict:
 
     for account_row in account_summaries:
         account_name = account_row["account"]
+        path = account_dir / f"{_safe_doc_name(account_name)}.md"
+        desired_account_paths.add(path)
+        source_hash = _stable_json_hash({"kind": "account", "row": account_row})
+        manifest_key = f"account:{account_name}"
+        if _entity_artifact_current(artifact_manifest, manifest_key, source_hash, path):
+            _record_entity_artifact(artifact_manifest, manifest_key, source_hash, path, generated_at=generated_at)
+            generated_files.append(str(path))
+            account_docs_written += 1
+            continue
         summary = get_account_summary(db_path, str(account_row["account_ref"] or account_name))
         if summary.get("status") != "ok":
             continue
-        path = account_dir / f"{_safe_doc_name(account_name)}.md"
         lines = [
             f"# Account Summary: {summary['account']['name']}",
             "",
@@ -1287,17 +1345,25 @@ def generate_public_snapshot(db_path: Path) -> dict:
             "",
             _markdown_table(summary["recent_log_types"], [("log_type", "Log Type"), ("log_count", "Count")]),
         ]
-        path.write_text("\n".join(lines) + "\n")
-        desired_account_paths.add(path)
+        _write_text_if_changed(path, "\n".join(lines) + "\n")
+        _record_entity_artifact(artifact_manifest, manifest_key, source_hash, path, generated_at=generated_at)
         generated_files.append(str(path))
         account_docs_written += 1
 
     for technician_row in technician_summaries:
         technician_name = technician_row["technician"]
+        path = technician_dir / f"{_safe_doc_name(technician_name)}.md"
+        desired_technician_paths.add(path)
+        source_hash = _stable_json_hash({"kind": "technician", "row": technician_row})
+        manifest_key = f"technician:{technician_name}"
+        if _entity_artifact_current(artifact_manifest, manifest_key, source_hash, path):
+            _record_entity_artifact(artifact_manifest, manifest_key, source_hash, path, generated_at=generated_at)
+            generated_files.append(str(path))
+            technician_docs_written += 1
+            continue
         summary = get_technician_summary(db_path, str(technician_row["technician_ref"] or technician_name))
         if summary.get("status") != "ok":
             continue
-        path = technician_dir / f"{_safe_doc_name(technician_name)}.md"
         lines = [
             f"# Technician Summary: {summary['technician']['display_name']}",
             "",
@@ -1398,17 +1464,25 @@ def generate_public_snapshot(db_path: Path) -> dict:
             "",
             _markdown_table(summary["recent_log_types"], [("log_type", "Log Type"), ("log_count", "Count")]),
         ]
-        path.write_text("\n".join(lines) + "\n")
-        desired_technician_paths.add(path)
+        _write_text_if_changed(path, "\n".join(lines) + "\n")
+        _record_entity_artifact(artifact_manifest, manifest_key, source_hash, path, generated_at=generated_at)
         generated_files.append(str(path))
         technician_docs_written += 1
 
     for ticket_row in ticket_summaries:
         ticket_id = ticket_row["ticket_id"]
+        path = ticket_dir / f"ticket_{ticket_id}.md"
+        desired_ticket_paths.add(path)
+        source_hash = _stable_json_hash({"kind": "ticket", "row": ticket_row})
+        manifest_key = f"ticket:{ticket_id}"
+        if _entity_artifact_current(artifact_manifest, manifest_key, source_hash, path):
+            _record_entity_artifact(artifact_manifest, manifest_key, source_hash, path, generated_at=generated_at)
+            generated_files.append(str(path))
+            ticket_docs_written += 1
+            continue
         summary = get_ticket_summary(db_path, str(ticket_id))
         if summary.get("status") != "ok":
             continue
-        path = ticket_dir / f"ticket_{ticket_id}.md"
         lines = [
             f"# Ticket Summary: {summary['ticket']['ticket_number'] or summary['ticket']['id']} — {summary['ticket']['subject'] or '(no subject)'}",
             "",
@@ -1493,8 +1567,8 @@ def generate_public_snapshot(db_path: Path) -> dict:
                 ("url", "URL"),
             ]),
         ]
-        path.write_text("\n".join(lines) + "\n")
-        desired_ticket_paths.add(path)
+        _write_text_if_changed(path, "\n".join(lines) + "\n")
+        _record_entity_artifact(artifact_manifest, manifest_key, source_hash, path, generated_at=generated_at)
         generated_files.append(str(path))
         ticket_docs_written += 1
 
@@ -1525,7 +1599,13 @@ def generate_public_snapshot(db_path: Path) -> dict:
         "The matching vector-ready export lives under `.SherpaMind/public/exports/embedding-ticket-chunks.jsonl` when generated.",
         "The matching vector export manifest lives under `.SherpaMind/public/exports/embedding-ticket-chunks.manifest.json` when generated.",
     ]
-    index_path.write_text("\n".join(index_md) + "\n")
+    _write_text_if_changed(index_path, "\n".join(index_md) + "\n")
+    artifact_manifest["generated_at"] = generated_at
+    artifact_manifest["schema_version"] = 1
+    live_entity_paths = {str(path) for path in (*desired_account_paths, *desired_technician_paths, *desired_ticket_paths)}
+    entities = artifact_manifest.get("entities") if isinstance(artifact_manifest.get("entities"), dict) else {}
+    artifact_manifest["entities"] = {key: value for key, value in entities.items() if isinstance(value, dict) and value.get("path") in live_entity_paths}
+    _write_text_if_changed(manifest_path, json.dumps(artifact_manifest, indent=2, sort_keys=True) + "\n")
     generated_files.insert(0, str(index_path))
 
     return {

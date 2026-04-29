@@ -214,6 +214,17 @@ CREATE TABLE IF NOT EXISTS vector_chunk_index (
     synced_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS vector_chunk_terms (
+    chunk_id TEXT NOT NULL,
+    doc_id TEXT NOT NULL,
+    ticket_id TEXT NOT NULL,
+    dim INTEGER NOT NULL,
+    weight REAL NOT NULL,
+    synced_at TEXT NOT NULL,
+    PRIMARY KEY(chunk_id, dim),
+    FOREIGN KEY(chunk_id) REFERENCES ticket_document_chunks(chunk_id)
+);
+
 CREATE TABLE IF NOT EXISTS alert_queue (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     alert_type TEXT NOT NULL,
@@ -347,6 +358,18 @@ CREATE INDEX IF NOT EXISTS idx_ticket_document_chunks_ticket ON ticket_document_
 CREATE INDEX IF NOT EXISTS idx_ticket_document_chunks_doc ON ticket_document_chunks(doc_id, chunk_index);
 CREATE INDEX IF NOT EXISTS idx_vector_chunk_index_ticket ON vector_chunk_index(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_vector_chunk_index_doc ON vector_chunk_index(doc_id);
+CREATE INDEX IF NOT EXISTS idx_vector_chunk_terms_dim ON vector_chunk_terms(dim, ticket_id, chunk_id);
+CREATE INDEX IF NOT EXISTS idx_vector_chunk_terms_ticket ON vector_chunk_terms(ticket_id, chunk_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_documents_meta_priority ON ticket_documents(json_extract(raw_json, '$.metadata.priority'));
+CREATE INDEX IF NOT EXISTS idx_ticket_documents_meta_category ON ticket_documents(json_extract(raw_json, '$.metadata.category'));
+CREATE INDEX IF NOT EXISTS idx_ticket_documents_meta_class ON ticket_documents(json_extract(raw_json, '$.metadata.class_name'));
+CREATE INDEX IF NOT EXISTS idx_ticket_documents_meta_submission ON ticket_documents(json_extract(raw_json, '$.metadata.submission_category'));
+CREATE INDEX IF NOT EXISTS idx_ticket_documents_meta_resolution ON ticket_documents(json_extract(raw_json, '$.metadata.resolution_category'));
+CREATE INDEX IF NOT EXISTS idx_ticket_documents_meta_department ON ticket_documents(json_extract(raw_json, '$.metadata.department_label'));
+CREATE INDEX IF NOT EXISTS idx_ticket_documents_meta_materialization ON ticket_documents(COALESCE(json_extract(raw_json, '$.materialization_version'), json_extract(raw_json, '$.metadata.materialization_version')));
+CREATE INDEX IF NOT EXISTS idx_tickets_raw_number ON tickets(CAST(json_extract(raw_json, '$.number') AS TEXT));
+CREATE INDEX IF NOT EXISTS idx_tickets_raw_key ON tickets(json_extract(raw_json, '$.key'));
+CREATE INDEX IF NOT EXISTS idx_tickets_raw_class_id ON tickets(CAST(json_extract(raw_json, '$.class_id') AS TEXT));
 CREATE INDEX IF NOT EXISTS idx_alert_queue_dispatch ON alert_queue(status, available_at, priority, id);
 CREATE INDEX IF NOT EXISTS idx_alert_queue_ticket_status ON alert_queue(ticket_id, status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_worker_runs_worker_status ON worker_runs(worker_name, status, started_at DESC);

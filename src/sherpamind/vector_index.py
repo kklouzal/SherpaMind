@@ -23,16 +23,24 @@ def _hash_index(token: str, dims: int) -> int:
     return int.from_bytes(digest, "big") % dims
 
 
-def vectorize_text(text: str, dims: int = DEFAULT_DIMS) -> list[float]:
-    vec = [0.0] * dims
+def _sparse_vectorize_text(text: str, dims: int = DEFAULT_DIMS) -> dict[int, float]:
+    weights: dict[int, float] = {}
     tokens = _tokenize(text)
     if not tokens:
-        return vec
+        return weights
     for token in tokens:
-        vec[_hash_index(token, dims)] += 1.0
-    norm = math.sqrt(sum(v * v for v in vec))
+        idx = _hash_index(token, dims)
+        weights[idx] = weights.get(idx, 0.0) + 1.0
+    norm = math.sqrt(sum(v * v for v in weights.values()))
     if norm > 0:
-        vec = [v / norm for v in vec]
+        weights = {idx: value / norm for idx, value in weights.items()}
+    return weights
+
+
+def vectorize_text(text: str, dims: int = DEFAULT_DIMS) -> list[float]:
+    vec = [0.0] * dims
+    for idx, weight in _sparse_vectorize_text(text, dims=dims).items():
+        vec[idx] = weight
     return vec
 
 
@@ -81,19 +89,36 @@ def build_vector_index(
         if scoped_ticket_ids:
             placeholders = ",".join("?" for _ in scoped_ticket_ids)
             existing_rows = conn.execute(
-                f"SELECT chunk_id, content_hash, dims FROM vector_chunk_index WHERE ticket_id IN ({placeholders})",
+                f"""
+                SELECT v.chunk_id, v.content_hash, v.dims, COUNT(vt.dim) AS term_count
+                FROM vector_chunk_index v
+                LEFT JOIN vector_chunk_terms vt ON vt.chunk_id = v.chunk_id
+                WHERE v.ticket_id IN ({placeholders})
+                GROUP BY v.chunk_id, v.content_hash, v.dims
+                """,
                 tuple(scoped_ticket_ids),
             ).fetchall()
         else:
-            existing_rows = conn.execute("SELECT chunk_id, content_hash, dims FROM vector_chunk_index").fetchall()
+            existing_rows = conn.execute(
+                """
+                SELECT v.chunk_id, v.content_hash, v.dims, COUNT(vt.dim) AS term_count
+                FROM vector_chunk_index v
+                LEFT JOIN vector_chunk_terms vt ON vt.chunk_id = v.chunk_id
+                GROUP BY v.chunk_id, v.content_hash, v.dims
+                """
+            ).fetchall()
         existing = {row["chunk_id"]: dict(row) for row in existing_rows}
         synced_at = now_iso()
         for row in rows:
             current = existing.get(row["chunk_id"])
-            if current and current.get("content_hash") == row.get("content_hash") and int(current.get("dims") or 0) == dims:
+            is_current = current and current.get("content_hash") == row.get("content_hash") and int(current.get("dims") or 0) == dims
+            if is_current and int(current.get("term_count") or 0) > 0:
                 skipped_unchanged += 1
                 continue
-            vector = vectorize_text(row["text"], dims=dims)
+            sparse_vector = _sparse_vectorize_text(row["text"], dims=dims)
+            vector = [0.0] * dims
+            for idx, weight in sparse_vector.items():
+                vector[idx] = weight
             conn.execute(
                 """
                 INSERT INTO vector_chunk_index(chunk_id, doc_id, ticket_id, vector_json, dims, content_hash, synced_at)
@@ -116,10 +141,19 @@ def build_vector_index(
                     synced_at,
                 ),
             )
+            conn.execute("DELETE FROM vector_chunk_terms WHERE chunk_id = ?", (row["chunk_id"],))
+            conn.executemany(
+                """
+                INSERT INTO vector_chunk_terms(chunk_id, doc_id, ticket_id, dim, weight, synced_at)
+                VALUES(?, ?, ?, ?, ?, ?)
+                """,
+                [(row["chunk_id"], row["doc_id"], row["ticket_id"], idx, weight, synced_at) for idx, weight in sparse_vector.items()],
+            )
             inserted_or_updated += 1
         stale_ids = [chunk_id for chunk_id in existing if chunk_id not in current_ids]
         if stale_ids:
             placeholders = ",".join("?" for _ in stale_ids)
+            conn.execute(f"DELETE FROM vector_chunk_terms WHERE chunk_id IN ({placeholders})", stale_ids)
             conn.execute(f"DELETE FROM vector_chunk_index WHERE chunk_id IN ({placeholders})", stale_ids)
         conn.commit()
     return {
@@ -268,6 +302,17 @@ def get_vector_index_status(db_path: Path) -> dict[str, Any]:
             SELECT
                 (SELECT COUNT(*) FROM ticket_document_chunks) AS total_chunk_rows,
                 (SELECT COUNT(*) FROM vector_chunk_index) AS indexed_chunks,
+                (SELECT COUNT(*) FROM vector_chunk_terms) AS indexed_terms,
+                (
+                    SELECT COUNT(*)
+                    FROM (
+                        SELECT v.chunk_id
+                        FROM vector_chunk_index v
+                        LEFT JOIN vector_chunk_terms vt ON vt.chunk_id = v.chunk_id
+                        GROUP BY v.chunk_id
+                        HAVING COUNT(vt.dim) = 0
+                    ) missing_terms
+                ) AS missing_term_rows,
                 (SELECT MIN(synced_at) FROM vector_chunk_index) AS earliest_sync_at,
                 (SELECT MAX(synced_at) FROM vector_chunk_index) AS latest_sync_at,
                 (SELECT COUNT(DISTINCT dims) FROM vector_chunk_index) AS distinct_dims,
@@ -299,6 +344,8 @@ def get_vector_index_status(db_path: Path) -> dict[str, Any]:
     ready_ratio = round(indexed_chunks / total_chunk_rows, 6) if total_chunk_rows else 0.0
     return {
         "indexed_chunks": indexed_chunks,
+        "indexed_terms": int(totals["indexed_terms"] or 0),
+        "missing_term_rows": int(totals["missing_term_rows"] or 0),
         "total_chunk_rows": total_chunk_rows,
         "ready_ratio": ready_ratio,
         "earliest_sync_at": totals["earliest_sync_at"],
@@ -318,6 +365,7 @@ def ensure_current_vector_index(db_path: Path, dims: int = DEFAULT_DIMS) -> dict
     status = get_vector_index_status(db_path)
     needs_refresh = bool(
         status["missing_index_rows"]
+        or status["missing_term_rows"]
         or status["dangling_index_rows"]
         or status["outdated_content_rows"]
         or (status["indexed_chunks"] and (status["distinct_dims"] != 1 or status["min_dims"] != dims or status["max_dims"] != dims))
@@ -326,7 +374,7 @@ def ensure_current_vector_index(db_path: Path, dims: int = DEFAULT_DIMS) -> dict
         return {"status": "ok", "refreshed": False, "vector_index": status}
     refreshed = build_vector_index(db_path, dims=dims)
     refreshed_status = get_vector_index_status(db_path)
-    return {"status": "ok", "refreshed": True, "reason": {"missing_index_rows": status["missing_index_rows"], "dangling_index_rows": status["dangling_index_rows"], "outdated_content_rows": status["outdated_content_rows"]}, "vector_index": refreshed_status, "refresh_result": refreshed}
+    return {"status": "ok", "refreshed": True, "reason": {"missing_index_rows": status["missing_index_rows"], "missing_term_rows": status["missing_term_rows"], "dangling_index_rows": status["dangling_index_rows"], "outdated_content_rows": status["outdated_content_rows"]}, "vector_index": refreshed_status, "refresh_result": refreshed}
 
 
 def search_vector_index(
@@ -349,40 +397,64 @@ def search_vector_index(
         if not dim_row:
             return []
         dims = int(dim_row["dims"])
-        query_vec = vectorize_text(query_text, dims=dims)
-        clauses = []
-        params: list[Any] = []
-        if account:
-            clauses.append("d.account LIKE ? COLLATE NOCASE")
-            params.append(f"%{account}%")
-        if status:
-            clauses.append("d.status = ?")
-            params.append(status)
-        if technician:
-            clauses.append("d.technician LIKE ? COLLATE NOCASE")
-            params.append(f"%{technician}%")
-        if priority:
-            clauses.append("json_extract(d.raw_json, '$.metadata.priority') = ?")
-            params.append(priority)
-        if category:
-            clauses.append("json_extract(d.raw_json, '$.metadata.category') LIKE ? COLLATE NOCASE")
-            params.append(f"%{category}%")
-        if class_name:
-            clauses.append("json_extract(d.raw_json, '$.metadata.class_name') LIKE ? COLLATE NOCASE")
-            params.append(f"%{class_name}%")
-        if submission_category:
-            clauses.append("json_extract(d.raw_json, '$.metadata.submission_category') LIKE ? COLLATE NOCASE")
-            params.append(f"%{submission_category}%")
-        if resolution_category:
-            clauses.append("json_extract(d.raw_json, '$.metadata.resolution_category') LIKE ? COLLATE NOCASE")
-            params.append(f"%{resolution_category}%")
-        if department:
-            clauses.append("json_extract(d.raw_json, '$.metadata.department_label') LIKE ? COLLATE NOCASE")
-            params.append(f"%{department}%")
-        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        query_sparse = _sparse_vectorize_text(query_text, dims=dims)
+        if not query_sparse:
+            return []
+        term_count = conn.execute("SELECT COUNT(*) AS c FROM vector_chunk_terms").fetchone()["c"]
+        indexed_count = conn.execute("SELECT COUNT(*) AS c FROM vector_chunk_index").fetchone()["c"]
+    if indexed_count and not term_count:
+        build_vector_index(db_path, dims=dims)
+
+    values_sql = ", ".join("(?, ?)" for _ in query_sparse)
+    query_params: list[Any] = []
+    for dim, weight in query_sparse.items():
+        query_params.extend([dim, weight])
+
+    clauses = []
+    params: list[Any] = []
+    if account:
+        clauses.append("d.account LIKE ? COLLATE NOCASE")
+        params.append(f"%{account}%")
+    if status:
+        clauses.append("d.status = ?")
+        params.append(status)
+    if technician:
+        clauses.append("d.technician LIKE ? COLLATE NOCASE")
+        params.append(f"%{technician}%")
+    if priority:
+        clauses.append("json_extract(d.raw_json, '$.metadata.priority') = ?")
+        params.append(priority)
+    if category:
+        clauses.append("json_extract(d.raw_json, '$.metadata.category') LIKE ? COLLATE NOCASE")
+        params.append(f"%{category}%")
+    if class_name:
+        clauses.append("json_extract(d.raw_json, '$.metadata.class_name') LIKE ? COLLATE NOCASE")
+        params.append(f"%{class_name}%")
+    if submission_category:
+        clauses.append("json_extract(d.raw_json, '$.metadata.submission_category') LIKE ? COLLATE NOCASE")
+        params.append(f"%{submission_category}%")
+    if resolution_category:
+        clauses.append("json_extract(d.raw_json, '$.metadata.resolution_category') LIKE ? COLLATE NOCASE")
+        params.append(f"%{resolution_category}%")
+    if department:
+        clauses.append("json_extract(d.raw_json, '$.metadata.department_label') LIKE ? COLLATE NOCASE")
+        params.append(f"%{department}%")
+    all_clauses = ["candidates.score > 0", *clauses]
+    where = f"WHERE {' AND '.join(all_clauses)}"
+
+    with connect(db_path) as conn:
         rows = conn.execute(
             f"""
-            SELECT v.chunk_id, v.doc_id, v.ticket_id, v.vector_json, v.content_hash,
+            WITH query_terms(dim, q_weight) AS (VALUES {values_sql}),
+            candidates AS (
+                SELECT
+                    vt.chunk_id,
+                    SUM(q.q_weight * vt.weight) AS score
+                FROM query_terms q
+                JOIN vector_chunk_terms vt ON vt.dim = q.dim
+                GROUP BY vt.chunk_id
+            )
+            SELECT v.chunk_id, v.doc_id, v.ticket_id, v.content_hash,
                    c.chunk_index, c.text,
                    d.account, d.status, d.technician, d.updated_at,
                    json_extract(d.raw_json, '$.metadata.priority') AS priority,
@@ -390,40 +462,37 @@ def search_vector_index(
                    json_extract(d.raw_json, '$.metadata.class_name') AS class_name,
                    json_extract(d.raw_json, '$.metadata.submission_category') AS submission_category,
                    json_extract(d.raw_json, '$.metadata.resolution_category') AS resolution_category,
-                   json_extract(d.raw_json, '$.metadata.department_label') AS department_label
-            FROM vector_chunk_index v
+                   json_extract(d.raw_json, '$.metadata.department_label') AS department_label,
+                   candidates.score AS score
+            FROM candidates
+            JOIN vector_chunk_index v ON v.chunk_id = candidates.chunk_id
             JOIN ticket_document_chunks c ON c.chunk_id = v.chunk_id
             JOIN ticket_documents d ON d.doc_id = v.doc_id
             {where}
+            ORDER BY candidates.score DESC, v.ticket_id ASC, c.chunk_index ASC
+            LIMIT ?
             """,
-            tuple(params),
+            tuple(query_params + params + [limit]),
         ).fetchall()
-    scored = []
-    for row in rows:
-        vector = json.loads(row["vector_json"])
-        score = _cosine(query_vec, vector)
-        if score <= 0:
-            continue
-        scored.append(
-            {
-                "chunk_id": row["chunk_id"],
-                "doc_id": row["doc_id"],
-                "ticket_id": row["ticket_id"],
-                "chunk_index": row["chunk_index"],
-                "account": row["account"],
-                "status": row["status"],
-                "technician": row["technician"],
-                "priority": row["priority"],
-                "category": row["category"],
-                "class_name": row["class_name"],
-                "submission_category": row["submission_category"],
-                "resolution_category": row["resolution_category"],
-                "department_label": row["department_label"],
-                "updated_at": row["updated_at"],
-                "content_hash": row["content_hash"],
-                "score": round(score, 6),
-                "text": row["text"],
-            }
-        )
-    scored.sort(key=lambda item: (-item["score"], item["ticket_id"], item["chunk_index"]))
-    return scored[:limit]
+    return [
+        {
+            "chunk_id": row["chunk_id"],
+            "doc_id": row["doc_id"],
+            "ticket_id": row["ticket_id"],
+            "chunk_index": row["chunk_index"],
+            "account": row["account"],
+            "status": row["status"],
+            "technician": row["technician"],
+            "priority": row["priority"],
+            "category": row["category"],
+            "class_name": row["class_name"],
+            "submission_category": row["submission_category"],
+            "resolution_category": row["resolution_category"],
+            "department_label": row["department_label"],
+            "updated_at": row["updated_at"],
+            "content_hash": row["content_hash"],
+            "score": round(float(row["score"] or 0.0), 6),
+            "text": row["text"],
+        }
+        for row in rows
+    ]
