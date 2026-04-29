@@ -600,7 +600,7 @@ python3 scripts/run.py service-status
 
 Runtime control/environment overrides are documented in `.env.example`; `.SherpaMind/` holds non-secret runtime settings and local derived state. Service/API secrets should come from environment variables or OpenClaw-managed config, not SherpaMind secret files. Use `SHERPAMIND_WORKSPACE_ROOT` to choose the parent workspace for a normal install, or `SHERPAMIND_ROOT` to point directly at an existing `.SherpaMind` runtime directory.
 
-For OpenClaw alert delivery, SherpaMind uses authenticated `POST /hooks/agent` with `Authorization: Bearer <hooks.token>` / `x-openclaw-token` and a payload containing `message`, `name`, `agentId`, `wakeMode`, `deliver`, `channel`, optional `to`, and `timeoutSeconds`. On the same host as OpenClaw, hook URL/token default from local `~/.openclaw/openclaw.json` hooks settings. Enablement and destinations are first-class OpenClaw skill fields:
+For OpenClaw alert delivery, SherpaMind uses authenticated `POST /hooks/agent` with `Authorization: Bearer <hooks.token>` / `x-openclaw-token` and a payload containing `message`, `name`, `agentId`, `wakeMode`, `deliver`, `channel`, optional `to`, optional `model`, optional `thinking`, and `timeoutSeconds`. On the same host as OpenClaw, hook URL/token default from local `~/.openclaw/openclaw.json` hooks settings. Enablement and destinations are first-class OpenClaw skill fields:
 
 ```json
 {
@@ -612,7 +612,9 @@ For OpenClaw alert delivery, SherpaMind uses authenticated `POST /hooks/agent` w
           "newTicketAlertsEnabled": true,
           "ticketUpdateAlertsEnabled": true,
           "newTicketAlertChannel": "channel:<discord-channel-id>",
-          "ticketUpdateAlertChannel": "channel:<discord-channel-id>"
+          "ticketUpdateAlertChannel": "channel:<discord-channel-id>",
+          "alertModel": "openai-codex/gpt-5.4-mini",
+          "alertThinking": "off"
         }
       }
     }
@@ -633,6 +635,8 @@ Important controls include:
 - `SHERPAMIND_SERVICE_*`
 - `SHERPAMIND_OPENCLAW_WEBHOOK_URL`
 - `SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN`
+- `SHERPAMIND_ALERT_MODEL` / `skills.entries.sherpamind.config.alertModel`
+- `SHERPAMIND_ALERT_THINKING` / `skills.entries.sherpamind.config.alertThinking`
 - `SHERPAMIND_API_HOURLY_LIMIT`
 - `SHERPAMIND_API_BUDGET_WARN_RATIO`
 - `SHERPAMIND_API_BUDGET_CRITICAL_RATIO`

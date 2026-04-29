@@ -31,6 +31,8 @@ def make_settings(tmp_path: Path) -> Settings:
         warm_closed_pages=10,
         warm_closed_days=7,
         cold_closed_pages_per_run=2,
+        alert_model="openai-codex/gpt-5.4-mini",
+        alert_thinking="off",
     )
 
 
@@ -72,7 +74,9 @@ def test_build_hook_payload_contains_ticket_triage_context(tmp_path: Path) -> No
     assert payload["channel"] == "discord"
     assert payload["to"] == "channel:1488924125736079492"
     assert payload["deliver"] is True
-    assert set(payload) == {"agentId", "name", "message", "wakeMode", "deliver", "channel", "to", "timeoutSeconds"}
+    assert payload["model"] == "openai-codex/gpt-5.4-mini"
+    assert payload["thinking"] == "off"
+    assert set(payload) == {"agentId", "name", "message", "wakeMode", "deliver", "channel", "to", "timeoutSeconds", "model", "thinking"}
     message = payload["message"]
     assert "new SherpaDesk ticket" in message
     assert "INITIAL POST / original user-submitted issue only" in message
@@ -146,7 +150,9 @@ def test_build_ticket_update_payload_allows_broader_history_context(tmp_path: Pa
     assert payload["agentId"] == "main"
     assert payload["channel"] == "discord"
     assert payload["to"] == "channel:1488924125736079492"
-    assert set(payload) == {"agentId", "name", "message", "wakeMode", "deliver", "channel", "to", "timeoutSeconds"}
+    assert payload["model"] == "openai-codex/gpt-5.4-mini"
+    assert payload["thinking"] == "off"
+    assert set(payload) == {"agentId", "name", "message", "wakeMode", "deliver", "channel", "to", "timeoutSeconds", "model", "thinking"}
     message = payload["message"]
     assert "new NON-TECH update" in message
     assert "broader ticket history" in message

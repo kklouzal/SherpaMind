@@ -168,6 +168,8 @@ Then use this flow from the installed skill bundle root:
    - `config.ticketUpdateAlertsEnabled`
    - `config.newTicketAlertChannel`
    - `config.ticketUpdateAlertChannel`
+   - `config.alertModel`
+   - `config.alertThinking`
 6. discover organizations/instances
    - `python3 scripts/run.py discover-orgs`
 7. write the chosen org/instance into non-secret settings

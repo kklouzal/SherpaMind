@@ -32,6 +32,8 @@ class Settings:
     warm_closed_pages: int
     warm_closed_days: int
     cold_closed_pages_per_run: int
+    alert_model: str | None = None
+    alert_thinking: str | None = None
     service_hot_open_every_seconds: int = 300
     service_warm_watch_every_seconds: int = 900
     service_alert_dispatch_every_seconds: int = 30
@@ -157,6 +159,12 @@ def _read_openclaw_skill_entry() -> dict[str, str]:
     ticket_update_alerts_enabled = entry_value("ticketUpdateAlertsEnabled")
     if isinstance(ticket_update_alerts_enabled, bool):
         values["SHERPAMIND_TICKET_UPDATE_ALERTS_ENABLED"] = "true" if ticket_update_alerts_enabled else "false"
+    alert_model = entry_value("alertModel")
+    if isinstance(alert_model, str) and alert_model.strip():
+        values["SHERPAMIND_ALERT_MODEL"] = alert_model.strip()
+    alert_thinking = entry_value("alertThinking")
+    if isinstance(alert_thinking, str) and alert_thinking.strip():
+        values["SHERPAMIND_ALERT_THINKING"] = alert_thinking.strip()
     classification_enabled = entry_value("classificationEnabled")
     if isinstance(classification_enabled, bool):
         values["SHERPAMIND_CLASSIFICATION_ENABLED"] = "true" if classification_enabled else "false"
@@ -247,6 +255,8 @@ def load_settings() -> Settings:
         openclaw_webhook_token=os.getenv("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN") or openclaw_hook_values.get("SHERPAMIND_OPENCLAW_WEBHOOK_TOKEN"),
         new_ticket_alert_channel=openclaw_skill_values.get("SHERPAMIND_NEW_TICKET_ALERT_CHANNEL"),
         ticket_update_alert_channel=openclaw_skill_values.get("SHERPAMIND_TICKET_UPDATE_ALERT_CHANNEL") or openclaw_skill_values.get("SHERPAMIND_NEW_TICKET_ALERT_CHANNEL"),
+        alert_model=_env_or_file("SHERPAMIND_ALERT_MODEL", file_values, openclaw_skill_values.get("SHERPAMIND_ALERT_MODEL")),
+        alert_thinking=_env_or_file("SHERPAMIND_ALERT_THINKING", file_values, openclaw_skill_values.get("SHERPAMIND_ALERT_THINKING")),
         request_min_interval_seconds=float(_env_or_file("SHERPAMIND_REQUEST_MIN_INTERVAL_SECONDS", file_values, "8.0") or "8.0"),
         request_timeout_seconds=float(_env_or_file("SHERPAMIND_REQUEST_TIMEOUT_SECONDS", file_values, "30.0") or "30.0"),
         seed_page_size=int(_env_or_file("SHERPAMIND_SEED_PAGE_SIZE", file_values, "100") or "100"),

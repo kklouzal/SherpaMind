@@ -286,6 +286,8 @@ def doctor() -> None:
         "ticket_update_alerts_enabled": settings.ticket_update_alerts_enabled,
         "new_ticket_alert_channel_present": bool(settings.new_ticket_alert_channel),
         "ticket_update_alert_channel_present": bool(settings.ticket_update_alert_channel),
+        "alert_model": settings.alert_model,
+        "alert_thinking": settings.alert_thinking,
     }
     print(json.dumps({
         "status": "ok",
@@ -395,6 +397,8 @@ def bootstrap_audit(summary: bool = False) -> None:
         "openclaw_webhook_url_present": bool(settings.openclaw_webhook_url),
         "openclaw_webhook_token_present": bool(settings.openclaw_webhook_token),
         "openclaw_webhook_uses_hooks_agent_endpoint": webhook_uses_hooks_agent,
+        "alert_model": settings.alert_model,
+        "alert_thinking": settings.alert_thinking,
     }
     onboarding_steps = []
 

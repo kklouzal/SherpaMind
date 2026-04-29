@@ -125,6 +125,8 @@ def test_load_settings_reads_alert_config_from_openclaw_skill_entry(monkeypatch,
                         "ticketUpdateAlertsEnabled": True,
                         "newTicketAlertChannel": "channel:1488924125736079492",
                         "ticketUpdateAlertChannel": "channel:1488924125736079492",
+                        "alertModel": "openai-codex/gpt-5.4-mini",
+                        "alertThinking": "off",
                     }
                 }
             }
@@ -147,6 +149,8 @@ def test_load_settings_reads_alert_config_from_openclaw_skill_entry(monkeypatch,
     assert settings.openclaw_webhook_token == "token123"
     assert settings.new_ticket_alert_channel == "channel:1488924125736079492"
     assert settings.ticket_update_alert_channel == "channel:1488924125736079492"
+    assert settings.alert_model == "openai-codex/gpt-5.4-mini"
+    assert settings.alert_thinking == "off"
 
 
 def test_load_settings_defaults_openclaw_hook_from_local_config(monkeypatch, tmp_path: Path) -> None:

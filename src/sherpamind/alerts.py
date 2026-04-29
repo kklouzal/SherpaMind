@@ -117,7 +117,7 @@ def _normalize_ticket_summary(summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _hook_request_payload(*, alert_channel: str | None, name: str, prompt: str) -> dict[str, Any]:
+def _hook_request_payload(settings: Settings, *, alert_channel: str | None, name: str, prompt: str) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "agentId": DEFAULT_AGENT_ID,
         "name": name,
@@ -127,6 +127,10 @@ def _hook_request_payload(*, alert_channel: str | None, name: str, prompt: str) 
         "channel": "discord",
         "timeoutSeconds": 180,
     }
+    if settings.alert_model:
+        payload["model"] = settings.alert_model
+    if settings.alert_thinking:
+        payload["thinking"] = settings.alert_thinking
     if alert_channel:
         payload["to"] = alert_channel
     return payload
@@ -196,6 +200,7 @@ def _build_hook_payload(settings: Settings, ticket_id: str, summary: dict[str, A
     )
 
     return _hook_request_payload(
+        settings,
         alert_channel=alert_channel,
         name="SherpaMind New Ticket",
         prompt=prompt,
@@ -321,6 +326,7 @@ def _build_ticket_update_payload(settings: Settings, ticket_id: str, summary: di
         f"Ticket context JSON:\n{json.dumps(compact, ensure_ascii=False, separators=(',', ':'))}"
     )
     return _hook_request_payload(
+        settings,
         alert_channel=alert_channel,
         name="SherpaMind Ticket Update",
         prompt=prompt,
